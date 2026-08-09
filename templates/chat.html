@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Chat — Heartlink{% endblock %}
+{% block content %}
+{% set left = profiles[0] %}
+{% set right = profiles[1] %}
+<div class="card">
+  <h1 style="font-size: 1.25rem;">
+    &#10084; {{ left['name'] }} &amp; {{ right['name'] }}
+  </h1>
+  <p class="subtitle">
+    Matched chatroom &middot;
+    <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">@{{ left['username'] }}</a>
+    and
+    <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">@{{ right['username'] }}</a>
+  </p>
+
+  <div class="chat-log">
+    {% if messages %}
+      {% for msg in messages %}
+        <div class="bubble {{ 'left' if msg['sender_id'] == left['user_id'] else 'right' }}">
+          <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="muted" style="margin: 0;">No messages yet — break the ice!</p>
+    {% endif %}
+  </div>
+
+  <form class="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
+    <select name="sender_id" aria-label="Send as">
+      <option value="{{ left['user_id'] }}">{{ left['name'] }}</option>
+      <option value="{{ right['user_id'] }}" {% if me_id == right['user_id'] %}selected{% endif %}>{{ right['name'] }}</option>
+    </select>
+    <input type="text" name="body" placeholder="Type a message..." autofocus required>
+    <button class="btn" type="submit">Send</button>
+  </form>
+  <p class="hint" style="margin-top: 0.5rem;">
+    While login is bypassed, pick which of the two matched profiles is speaking.
+  </p>
+</div>
+{% endblock %}

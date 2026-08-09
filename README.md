@@ -71,6 +71,12 @@ preferences must accept each other, then candidates are ranked by shared
 interests/hobbies, matching relationship goals, age proximity, and same
 location — with the top match highlighted and the reasons listed.
 
+Hitting **Match & chat** on a match stores the pairing and opens a shared
+**chatroom** for the two profiles, with message bubbles per side and full
+history kept in the database. All rooms are listed under **Chats**. While
+login is bypassed, the chat form lets you pick which of the two matched
+profiles is speaking, so you can play both sides from one browser.
+
 **Login is currently bypassed:** every visitor is signed in automatically
 as the seeded `admin` account and lands straight on the browse page. The
 `/login` and `/register` pages just forward into the site. (The account

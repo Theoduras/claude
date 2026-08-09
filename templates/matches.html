@@ -24,7 +24,12 @@
       </ul>
     {% endif %}
     {% if p['bio'] %}<p class="bio" style="margin-top: 0;">{{ p['bio'] }}</p>{% endif %}
-    <a class="btn" href="{{ url_for('view_profile', user_id=p['user_id']) }}">View profile</a>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+      <form method="post" action="{{ url_for('create_match', other_id=p['user_id']) }}">
+        <button class="btn" type="submit">&#10084; Match &amp; chat</button>
+      </form>
+      <a class="btn btn-secondary" href="{{ url_for('view_profile', user_id=p['user_id']) }}">View profile</a>
+    </div>
   </div>
 
   {% if others %}
@@ -43,7 +48,10 @@
           {% if m.reasons %}
             <div class="bio">{{ m.reasons | join(" · ") }}</div>
           {% endif %}
-          <div style="margin-top: auto;">
+          <div style="margin-top: auto; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <form method="post" action="{{ url_for('create_match', other_id=p['user_id']) }}">
+              <button class="btn" type="submit">&#10084; Match</button>
+            </form>
             <a class="btn btn-secondary" href="{{ url_for('view_profile', user_id=p['user_id']) }}">View profile</a>
           </div>
         </div>

@@ -164,6 +164,50 @@
       padding: 0.15rem 0.55rem;
       border-radius: 999px;
     }
+    .chat-log {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      max-height: 55vh;
+      overflow-y: auto;
+      padding: 0.25rem;
+    }
+    .bubble {
+      max-width: 75%;
+      padding: 0.55rem 0.8rem;
+      border-radius: 1rem;
+      font-size: 0.95rem;
+      white-space: pre-line;
+    }
+    .bubble .sender {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      opacity: 0.75;
+      margin-bottom: 0.15rem;
+    }
+    .bubble.left {
+      align-self: flex-start;
+      background: var(--accent-soft);
+      border-bottom-left-radius: 0.25rem;
+    }
+    .bubble.right {
+      align-self: flex-end;
+      background: var(--accent);
+      color: #fff;
+      border-bottom-right-radius: 0.25rem;
+    }
+    .chat-form { display: flex; gap: 0.5rem; align-items: flex-start; flex-wrap: wrap; }
+    .chat-form select { width: auto; margin-bottom: 0; }
+    .chat-form input[type="text"] { flex: 1; min-width: 10rem; margin-bottom: 0; }
+    .room-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
     dl { margin: 0; }
     dt {
       font-size: 0.8rem;
@@ -183,6 +227,7 @@
       {% if current_user['is_admin'] %}<span class="tag">Admin</span>{% endif %}
       <a href="{{ url_for('browse') }}">Browse</a>
       <a href="{{ url_for('matches') }}">Matches</a>
+      <a href="{{ url_for('chats') }}">Chats</a>
       <a href="{{ url_for('view_profile', user_id=current_user['id']) }}">My profile</a>
       <a href="{{ url_for('edit_profile') }}">Edit profile</a>
       {% if current_user['is_admin'] %}

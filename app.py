@@ -120,6 +120,23 @@ def init_db():
             relationship_type TEXT NOT NULL DEFAULT '',
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS matches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_a INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            user_b INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (user_a, user_b),
+            CHECK (user_a < user_b)
+        );
+
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+            sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
         """
     )
     # Migrate databases created before later columns existed.
@@ -476,6 +493,136 @@ def matches():
         top=scored[0] if scored else None,
         others=scored[1:],
     )
+
+
+def get_match_participants(match_id):
+    """Return (match_row, [profile_a, profile_b]) or (None, None)."""
+    db = get_db()
+    match = db.execute(
+        "SELECT * FROM matches WHERE id = ?", (match_id,)
+    ).fetchone()
+    if match is None:
+        return None, None
+    profiles = [
+        db.execute(
+            """
+            SELECT p.*, u.username FROM profiles p
+            JOIN users u ON u.id = p.user_id
+            WHERE p.user_id = ?
+            """,
+            (uid,),
+        ).fetchone()
+        for uid in (match["user_a"], match["user_b"])
+    ]
+    return match, profiles
+
+
+@app.route("/match/<int:other_id>", methods=["POST"])
+@login_required
+def create_match(other_id):
+    db = get_db()
+    me_id = session["user_id"]
+
+    if other_id == me_id:
+        flash("You can't match with yourself.")
+        return redirect(url_for("matches"))
+
+    other = db.execute(
+        "SELECT user_id, name FROM profiles WHERE user_id = ?", (other_id,)
+    ).fetchone()
+    if other is None:
+        flash("That profile does not exist.")
+        return redirect(url_for("matches"))
+
+    a, b = sorted((me_id, other_id))
+    existing = db.execute(
+        "SELECT id FROM matches WHERE user_a = ? AND user_b = ?", (a, b)
+    ).fetchone()
+    if existing:
+        return redirect(url_for("chat", match_id=existing["id"]))
+
+    cur = db.execute(
+        "INSERT INTO matches (user_a, user_b) VALUES (?, ?)", (a, b)
+    )
+    db.commit()
+    flash(f"It's a match! You and {other['name']} can chat now.")
+    return redirect(url_for("chat", match_id=cur.lastrowid))
+
+
+@app.route("/chats")
+@login_required
+def chats():
+    # Login is bypassed and everyone is admin, so list every chatroom.
+    rows = get_db().execute(
+        """
+        SELECT m.id, m.created_at,
+               pa.name AS name_a, pb.name AS name_b,
+               (SELECT body FROM messages WHERE match_id = m.id
+                ORDER BY id DESC LIMIT 1) AS last_message
+        FROM matches m
+        JOIN profiles pa ON pa.user_id = m.user_a
+        JOIN profiles pb ON pb.user_id = m.user_b
+        ORDER BY m.id DESC
+        """
+    ).fetchall()
+    return render_template("chats.html", rooms=rows)
+
+
+@app.route("/chat/<int:match_id>")
+@login_required
+def chat(match_id):
+    match, profiles = get_match_participants(match_id)
+    if match is None:
+        flash("That chatroom does not exist.")
+        return redirect(url_for("chats"))
+
+    messages = get_db().execute(
+        """
+        SELECT msg.*, p.name AS sender_name FROM messages msg
+        JOIN profiles p ON p.user_id = msg.sender_id
+        WHERE msg.match_id = ?
+        ORDER BY msg.id
+        """,
+        (match_id,),
+    ).fetchall()
+
+    return render_template(
+        "chat.html",
+        match=match,
+        profiles=profiles,
+        messages=messages,
+        me_id=session["user_id"],
+    )
+
+
+@app.route("/chat/<int:match_id>/send", methods=["POST"])
+@login_required
+def send_message(match_id):
+    match, _ = get_match_participants(match_id)
+    if match is None:
+        flash("That chatroom does not exist.")
+        return redirect(url_for("chats"))
+
+    body = request.form.get("body", "").strip()
+    # While login is bypassed, the form says which of the two matched
+    # profiles is speaking; only participants are accepted.
+    try:
+        sender_id = int(request.form.get("sender_id", ""))
+    except ValueError:
+        sender_id = None
+    if sender_id not in (match["user_a"], match["user_b"]):
+        flash("Pick which profile is sending the message.")
+    elif not body:
+        flash("Message can't be empty.")
+    else:
+        db = get_db()
+        db.execute(
+            "INSERT INTO messages (match_id, sender_id, body) VALUES (?, ?, ?)",
+            (match_id, sender_id, body),
+        )
+        db.commit()
+
+    return redirect(url_for("chat", match_id=match_id))
 
 
 @app.route("/browse")
