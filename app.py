@@ -846,6 +846,52 @@ def search_criteria():
     )
 
 
+def search_blockers(user_id):
+    """Explain why a waiting search hasn't matched: what each rule rejects.
+
+    Returns counts of pool members that would match if a single filter were
+    relaxed, so the waiting page can suggest a concrete fix.
+    """
+    db = get_db()
+    mine = db.execute(
+        """
+        SELECT s.*, p.gender, p.age FROM searches s
+        JOIN profiles p ON p.user_id = s.user_id
+        WHERE s.user_id = ?
+        """,
+        (user_id,),
+    ).fetchone()
+    if mine is None:
+        return {}
+
+    others = db.execute(
+        """
+        SELECT s.*, p.gender, p.age FROM searches s
+        JOIN profiles p ON p.user_id = s.user_id
+        WHERE s.status = 'waiting' AND s.user_id != ?
+        """,
+        (user_id,),
+    ).fetchall()
+
+    def relaxed(**overrides):
+        loosened = dict(mine)
+        loosened.update(overrides)
+        return sum(1 for o in others if searches_compatible(loosened, o))
+
+    return {
+        "pool": len(others),
+        "if_any_distance": relaxed(radius_km=RADIUS_MAX_KM),
+        "if_any_age": relaxed(age_min=18, age_max=120),
+        "if_any_connection": relaxed(relationship_type=""),
+        "if_any_gender": relaxed(seeking=""),
+        # When no single change is enough, say what dropping every filter
+        # except gender would give.
+        "if_all_relaxed": relaxed(
+            radius_km=RADIUS_MAX_KM, age_min=18, age_max=120, relationship_type=""
+        ),
+    }
+
+
 @app.route("/search/waiting")
 @login_required
 def search_waiting():
@@ -867,6 +913,7 @@ def search_waiting():
         search=row,
         waiting=waiting_count,
         radius_max=RADIUS_MAX_KM,
+        blockers=search_blockers(session["user_id"]),
     )
 
 

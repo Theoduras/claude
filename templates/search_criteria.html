@@ -42,7 +42,7 @@
 
     <label for="radius_km">Search radius <span class="slider-value" id="radius-value"></span></label>
     <input type="range" id="radius_km" name="radius_km" min="5" max="{{ radius_max }}" step="5"
-           value="{{ existing['radius_km'] if existing else 50 }}">
+           value="{{ existing['radius_km'] if existing else radius_max }}">
     <p class="hint" id="radius-hint"></p>
 
     <label for="interests">Interests (optional)</label>

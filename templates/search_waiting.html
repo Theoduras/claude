@@ -30,6 +30,39 @@
     {{ waiting }} {{ 'person' if waiting == 1 else 'people' }} searching right now.
   </p>
 
+  {% set hints = [] %}
+  {% if blockers.if_any_distance %}
+    {% set _ = hints.append(('widen your radius', blockers.if_any_distance)) %}
+  {% endif %}
+  {% if blockers.if_any_age %}
+    {% set _ = hints.append(('widen your age range', blockers.if_any_age)) %}
+  {% endif %}
+  {% if blockers.if_any_connection %}
+    {% set _ = hints.append(('accept another kind of connection', blockers.if_any_connection)) %}
+  {% endif %}
+  {% if blockers.if_any_gender %}
+    {% set _ = hints.append(('broaden who you are looking for', blockers.if_any_gender)) %}
+  {% endif %}
+
+  {% if hints or blockers.if_all_relaxed %}
+    <div class="flash" style="text-align: left;">
+      Nobody fits every filter yet.
+      {% if hints %}
+        You would match:
+        <ul style="margin: 0.4rem 0 0; padding-left: 1.2rem;">
+          {% for label, count in hints %}
+            <li>{{ count }} {{ 'person' if count == 1 else 'people' }} if you {{ label }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        Your filters are quite narrow — {{ blockers.if_all_relaxed }}
+        {{ 'person' if blockers.if_all_relaxed == 1 else 'people' }} would fit if you
+        opened up the distance, age range and connection type.
+      {% endif %}
+      <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Adjust your filters</a>
+    </div>
+  {% endif %}
+
   <form method="post" action="{{ url_for('search_cancel') }}">
     <button class="btn btn-secondary" type="submit">Stop searching</button>
   </form>
