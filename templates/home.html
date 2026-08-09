@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Home</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .card {
+      background: #fff;
+      width: 100%;
+      max-width: 24rem;
+      padding: 2rem;
+      border-radius: 0.75rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+      text-align: center;
+    }
+    h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+    p { color: #6b7280; margin: 0 0 1.5rem; }
+    button {
+      padding: 0.6rem 1.25rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      background: #2563eb;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+    }
+    button:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Welcome, {{ user }}!</h1>
+    <p>You are signed in.</p>
+    <form method="post" action="{{ url_for('logout') }}">
+      <button type="submit">Log out</button>
+    </form>
+  </main>
+</body>
+</html>

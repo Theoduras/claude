@@ -40,6 +40,20 @@ client = VastClient()          # reads VAST_API_KEY
 offers = client.search_offers(max_price=0.5)
 ```
 
+## Local web app with login
+
+A minimal Flask app with a basic login screen is included:
+
+```bash
+pip install -r requirements.txt
+python app.py
+```
+
+Then open <http://localhost:5000>. Demo credentials are `admin` / `password`;
+override them with the `APP_USERNAME`, `APP_PASSWORD`, and `APP_SECRET_KEY`
+environment variables. This is a demo login for local use only — don't expose
+it to the internet as-is.
+
 ## Notes
 
 - Endpoints target the Vast.ai v0 API (`https://console.vast.ai/api/v0`).
