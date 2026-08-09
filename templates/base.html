@@ -201,6 +201,56 @@
     .chat-form { display: flex; gap: 0.5rem; align-items: flex-start; flex-wrap: wrap; }
     .chat-form select { width: auto; margin-bottom: 0; }
     .chat-form input[type="text"] { flex: 1; min-width: 10rem; margin-bottom: 0; }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 1.6rem;
+      margin: 0 0 0.35rem;
+      padding: 0;
+      background: transparent;
+      border: none;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 0.4rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+    }
+    input[type="range"]::-moz-range-track {
+      height: 0.4rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 1.15rem;
+      height: 1.15rem;
+      margin-top: -0.38rem;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+      cursor: pointer;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 1.15rem;
+      height: 1.15rem;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+      cursor: pointer;
+    }
+    input[type="range"]:focus { outline: none; }
+    input[type="range"]:focus::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+    input[type="range"]:focus::-moz-range-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .slider-pair { margin-bottom: 0.75rem; }
+    .slider-value {
+      float: right;
+      font-weight: 700;
+      color: var(--accent);
+    }
     .pulse-heart {
       font-size: 3rem;
       color: var(--accent);

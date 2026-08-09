@@ -66,14 +66,25 @@ Then open <http://localhost:5000>. Fill in your profile (name, age, gender,
 who you're looking for, location, bio, interests, hobbies, wants, needs,
 relationship type) and browse other members' profiles.
 
-**Live search** is instant matchmaking. You set what you want — gender,
-age range, kind of connection, optional interests — and hit search. Everyone
-searching sits in a pool, and as soon as two searches satisfy each other
-*both ways* (each is the gender the other wants, each falls inside the
-other's age range, and their relationship goals don't conflict) the pair is
-created and both browsers jump straight into a shared chatroom. The waiting
-page holds an open request, so the second person is pulled in the moment
-the first one matches them.
+**Live search** is instant matchmaking, in two steps:
+
+1. **Choose the kind of connection** you're after (long-term, casual,
+   friendship, …) — this is the first and only thing on the entry page.
+2. **Set your filters:** who you're looking for, an age range on a
+   two-handle slider, your location plus a **search radius in km** on its
+   own slider (at the maximum it means "anywhere"), and optional interests.
+
+Everyone searching sits in a pool, and as soon as two searches satisfy each
+other *both ways* — each is the gender the other wants, each falls inside
+the other's age range, the distance between their cities fits inside **both**
+radii, and their relationship goals don't conflict — the pair is created and
+both browsers jump straight into a shared chatroom. The waiting page holds
+an open request, so the second person is pulled in the moment the first one
+matches them.
+
+Distances come from a built-in table of city coordinates (great-circle
+maths, no external geocoding service), so "Berlin" to "Leipzig" is 149 km.
+An unrecognised city simply isn't distance-filtered.
 
 Example: a man seeking women 18–25, a woman seeking men 18–25, and a man
 seeking men 18–25 all search at once — the first two are paired, and the

@@ -17,6 +17,7 @@ register an account and log in. Set AUTO_LOGIN=1 to skip the login page
 during local development and browse as admin automatically.
 """
 
+import math
 import os
 import re
 import secrets
@@ -55,6 +56,47 @@ SEEKING_MATCHES = {
     "Men": {"Man"},
     "Everyone": set(GENDERS),
 }
+
+# Coordinates for the cities the search can filter by, so a radius in km
+# can be applied without calling out to a geocoding service.
+CITY_COORDS = {
+    "berlin": (52.520, 13.405),
+    "hamburg": (53.551, 9.994),
+    "munich": (48.135, 11.582),
+    "münchen": (48.135, 11.582),
+    "cologne": (50.938, 6.960),
+    "köln": (50.938, 6.960),
+    "frankfurt": (50.110, 8.682),
+    "frankfurt am main": (50.110, 8.682),
+    "stuttgart": (48.776, 9.183),
+    "düsseldorf": (51.228, 6.773),
+    "dusseldorf": (51.228, 6.773),
+    "leipzig": (51.340, 12.375),
+    "dresden": (51.051, 13.739),
+    "hannover": (52.376, 9.732),
+    "hanover": (52.376, 9.732),
+    "bremen": (53.079, 8.802),
+    "nuremberg": (49.452, 11.077),
+    "nürnberg": (49.452, 11.077),
+    "essen": (51.456, 7.012),
+    "dortmund": (51.514, 7.466),
+    "vienna": (48.208, 16.373),
+    "wien": (48.208, 16.373),
+    "zurich": (47.377, 8.542),
+    "zürich": (47.377, 8.542),
+    "amsterdam": (52.370, 4.895),
+    "basel": (47.560, 7.588),
+    "salzburg": (47.809, 13.055),
+}
+
+# Offered in the location picker, nicely cased.
+CITY_CHOICES = [
+    "Berlin", "Hamburg", "Munich", "Cologne", "Frankfurt", "Stuttgart",
+    "Düsseldorf", "Leipzig", "Dresden", "Hannover", "Bremen", "Nuremberg",
+    "Essen", "Dortmund", "Vienna", "Zurich", "Amsterdam", "Basel", "Salzburg",
+]
+
+RADIUS_MAX_KM = 500  # slider maximum; at the top it means "anywhere"
 
 RELATIONSHIP_TYPES = [
     "Long-term relationship",
@@ -140,6 +182,8 @@ def init_db():
             age_max INTEGER NOT NULL DEFAULT 120,
             relationship_type TEXT NOT NULL DEFAULT '',
             interests TEXT NOT NULL DEFAULT '',
+            location TEXT NOT NULL DEFAULT '',
+            radius_km INTEGER NOT NULL DEFAULT 500,
             status TEXT NOT NULL DEFAULT 'waiting',
             match_id INTEGER REFERENCES matches(id) ON DELETE SET NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -159,6 +203,8 @@ def init_db():
         "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE profiles ADD COLUMN gender TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE profiles ADD COLUMN seeking TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE searches ADD COLUMN location TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE searches ADD COLUMN radius_km INTEGER NOT NULL DEFAULT 500",
     ):
         try:
             db.execute(stmt)
@@ -545,13 +591,35 @@ SEARCH_EVENT = threading.Condition()
 SEARCH_WAIT_TIMEOUT = 25.0
 
 
+def city_coords(location):
+    """Look up coordinates for a location string like 'Berlin, Germany'."""
+    if not location:
+        return None
+    key = location.split(",")[0].strip().lower()
+    return CITY_COORDS.get(key)
+
+
+def distance_km(loc_a, loc_b):
+    """Great-circle distance between two location strings, or None."""
+    a, b = city_coords(loc_a), city_coords(loc_b)
+    if a is None or b is None:
+        return None
+
+    lat1, lon1 = map(math.radians, a)
+    lat2, lon2 = map(math.radians, b)
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 2 * 6371.0 * math.asin(math.sqrt(h))
+
+
 def searches_compatible(s1, s2):
     """True when two live searches satisfy each other's criteria.
 
     Both directions must hold: each person's gender must be one the other
-    is looking for, and each person's age must fall inside the other's
-    requested range. Relationship type only blocks when both named one and
-    they differ. Unset fields are treated as "no preference".
+    is looking for, each person's age must fall inside the other's
+    requested range, and the distance between them must sit inside both
+    radii. Relationship type only blocks when both named one and they
+    differ. Unset fields are treated as "no preference".
     """
 
     def gender_ok(searcher, candidate_gender):
@@ -574,6 +642,14 @@ def searches_compatible(s1, s2):
         and s1["relationship_type"] != s2["relationship_type"]
     ):
         return False
+
+    # Distance must fit inside both people's radius. An unknown city or a
+    # radius at the maximum means "anywhere".
+    gap = distance_km(s1["location"], s2["location"])
+    if gap is not None:
+        for search in (s1, s2):
+            if search["radius_km"] < RADIUS_MAX_KM and gap > search["radius_km"]:
+                return False
     return True
 
 
@@ -649,40 +725,81 @@ def try_pair(user_id):
     return matched_id
 
 
+def require_profile():
+    """Return the caller's profile, or None if it still needs filling in."""
+    me = get_db().execute(
+        "SELECT * FROM profiles WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+    return me if me is not None and me["name"] else None
+
+
 @app.route("/search", methods=["GET", "POST"])
 @login_required
 def live_search():
-    """Enter the live pool: get paired instantly with a compatible searcher."""
-    db = get_db()
-    user_id = session["user_id"]
-    me = db.execute(
-        "SELECT * FROM profiles WHERE user_id = ?", (user_id,)
-    ).fetchone()
-
-    if me is None or not me["name"]:
+    """Step 1: choose the kind of connection you're searching for."""
+    if require_profile() is None:
         flash("Fill in your profile first so others can match with you.")
         return redirect(url_for("edit_profile"))
 
     if request.method == "POST":
+        wanted = request.form.get("relationship_type", "")
+        if wanted not in RELATIONSHIP_TYPES:
+            flash("Please choose what kind of connection you want.")
+        else:
+            return redirect(url_for("search_criteria", relationship_type=wanted))
+
+    existing = get_db().execute(
+        "SELECT * FROM searches WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+
+    return render_template(
+        "search_start.html",
+        relationship_types=RELATIONSHIP_TYPES,
+        existing=existing,
+    )
+
+
+@app.route("/search/criteria", methods=["GET", "POST"])
+@login_required
+def search_criteria():
+    """Step 2: gender, age range, location + radius, interests — then search."""
+    db = get_db()
+    user_id = session["user_id"]
+    me = require_profile()
+    if me is None:
+        flash("Fill in your profile first so others can match with you.")
+        return redirect(url_for("edit_profile"))
+
+    wanted = request.values.get("relationship_type", "")
+    if wanted not in RELATIONSHIP_TYPES:
+        return redirect(url_for("live_search"))
+
+    existing = db.execute(
+        "SELECT * FROM searches WHERE user_id = ?", (user_id,)
+    ).fetchone()
+
+    if request.method == "POST":
         seeking = request.form.get("seeking", "")
-        relationship_type = request.form.get("relationship_type", "")
         interests = request.form.get("interests", "").strip()
+        location = request.form.get("location", "").strip()
 
         error = None
         if seeking and seeking not in SEEKING_OPTIONS:
             error = "Please choose who you're looking for."
-        if relationship_type and relationship_type not in RELATIONSHIP_TYPES:
-            error = "Please choose what kind of connection you want."
 
         try:
             age_min = int(request.form.get("age_min", 18))
             age_max = int(request.form.get("age_max", 120))
+            radius_km = int(request.form.get("radius_km", RADIUS_MAX_KM))
         except ValueError:
-            error = "Please enter a valid age range."
-            age_min, age_max = 18, 120
+            error = "Please check the age range and radius."
+            age_min, age_max, radius_km = 18, 120, RADIUS_MAX_KM
 
-        if error is None and not 18 <= age_min <= age_max <= 120:
-            error = "Age range must run from 18 up to 120."
+        if error is None:
+            if not 18 <= age_min <= age_max <= 120:
+                error = "Age range must run from 18 up to 120."
+            elif not 1 <= radius_km <= RADIUS_MAX_KM:
+                error = f"Radius must be between 1 and {RADIUS_MAX_KM} km."
 
         if error:
             flash(error)
@@ -691,19 +808,24 @@ def live_search():
                 """
                 INSERT INTO searches
                     (user_id, seeking, age_min, age_max, relationship_type,
-                     interests, status, match_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'waiting', NULL, datetime('now'))
+                     interests, location, radius_km, status, match_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, datetime('now'))
                 ON CONFLICT(user_id) DO UPDATE SET
                     seeking = excluded.seeking,
                     age_min = excluded.age_min,
                     age_max = excluded.age_max,
                     relationship_type = excluded.relationship_type,
                     interests = excluded.interests,
+                    location = excluded.location,
+                    radius_km = excluded.radius_km,
                     status = 'waiting',
                     match_id = NULL,
                     created_at = datetime('now')
                 """,
-                (user_id, seeking, age_min, age_max, relationship_type, interests),
+                (
+                    user_id, seeking, age_min, age_max, wanted, interests,
+                    location, radius_km,
+                ),
             )
             db.commit()
 
@@ -713,16 +835,14 @@ def live_search():
                 return redirect(url_for("chat", match_id=match_id))
             return redirect(url_for("search_waiting"))
 
-    existing = db.execute(
-        "SELECT * FROM searches WHERE user_id = ?", (user_id,)
-    ).fetchone()
-
     return render_template(
-        "search.html",
+        "search_criteria.html",
         me=me,
         existing=existing,
+        wanted=wanted,
         seeking_options=SEEKING_OPTIONS,
-        relationship_types=RELATIONSHIP_TYPES,
+        city_choices=CITY_CHOICES,
+        radius_max=RADIUS_MAX_KM,
     )
 
 
@@ -742,7 +862,12 @@ def search_waiting():
         "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
     ).fetchone()["n"]
 
-    return render_template("search_waiting.html", search=row, waiting=waiting_count)
+    return render_template(
+        "search_waiting.html",
+        search=row,
+        waiting=waiting_count,
+        radius_max=RADIUS_MAX_KM,
+    )
 
 
 @app.route("/search/status")

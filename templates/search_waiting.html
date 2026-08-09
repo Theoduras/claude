@@ -14,6 +14,13 @@
     {% if search['relationship_type'] %}
       <dt>Connection</dt><dd>{{ search['relationship_type'] }}</dd>
     {% endif %}
+    <dt>Where</dt>
+    <dd>
+      {% if search['location'] %}{{ search['location'] }}{% else %}Anywhere{% endif %}
+      {% if search['location'] %}
+        &middot; {% if search['radius_km'] >= radius_max %}any distance{% else %}within {{ search['radius_km'] }} km{% endif %}
+      {% endif %}
+    </dd>
     {% if search['interests'] %}
       <dt>Interests</dt><dd>{{ search['interests'] }}</dd>
     {% endif %}

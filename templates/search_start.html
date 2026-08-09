@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Live search — Heartlink{% endblock %}
+{% block content %}
+<h1>What are you looking for?</h1>
+<p class="subtitle">Step 1 of 2 &middot; Choose the kind of connection, then set your filters.</p>
+
+<form method="post" action="{{ url_for('live_search') }}">
+  <div class="grid">
+    {% for rt in relationship_types %}
+      <label class="choice {% if existing and existing['relationship_type'] == rt %}choice-suggested{% endif %}">
+        <input type="radio" name="relationship_type" value="{{ rt }}"
+               {% if existing and existing['relationship_type'] == rt %}checked{% endif %} required>
+        <span>
+          <strong>{{ rt }}</strong>
+          {% if existing and existing['relationship_type'] == rt %}
+            <span class="muted" style="font-size: 0.8rem;">your last search</span>
+          {% endif %}
+        </span>
+      </label>
+    {% endfor %}
+  </div>
+  <button class="btn" type="submit" style="margin-top: 1rem;">Continue &rarr;</button>
+</form>
+{% endblock %}
