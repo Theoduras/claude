@@ -21,6 +21,8 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
+import time
 
 from flask import (
     Flask,
@@ -672,6 +674,10 @@ def chat(match_id):
     )
 
 
+# Wakes long-polling /messages requests the moment a message is sent.
+NEW_MESSAGE = threading.Condition()
+
+
 def message_dict(row):
     return {
         "id": row["id"],
@@ -682,10 +688,30 @@ def message_dict(row):
     }
 
 
+LONG_POLL_TIMEOUT = 25.0
+
+
+def fetch_messages_after(match_id, after):
+    return get_db().execute(
+        """
+        SELECT msg.*, p.name AS sender_name FROM messages msg
+        JOIN profiles p ON p.user_id = msg.sender_id
+        WHERE msg.match_id = ? AND msg.id > ?
+        ORDER BY msg.id
+        """,
+        (match_id, after),
+    ).fetchall()
+
+
 @app.route("/chat/<int:match_id>/messages")
 @login_required
 def chat_messages(match_id):
-    """JSON feed of messages newer than ?after=<id>, polled by the chat page."""
+    """JSON feed of messages newer than ?after=<id>.
+
+    With ?wait=1 the request is held open (long polling) until a message
+    arrives or LONG_POLL_TIMEOUT passes, so the browser sees new messages
+    the instant they are sent instead of on the next poll tick.
+    """
     match, _ = get_match_participants(match_id)
     user = current_user()
     if match is None:
@@ -698,15 +724,17 @@ def chat_messages(match_id):
     except ValueError:
         after = 0
 
-    rows = get_db().execute(
-        """
-        SELECT msg.*, p.name AS sender_name FROM messages msg
-        JOIN profiles p ON p.user_id = msg.sender_id
-        WHERE msg.match_id = ? AND msg.id > ?
-        ORDER BY msg.id
-        """,
-        (match_id, after),
-    ).fetchall()
+    rows = fetch_messages_after(match_id, after)
+
+    if not rows and request.args.get("wait") == "1":
+        deadline = time.monotonic() + LONG_POLL_TIMEOUT
+        while not rows:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            with NEW_MESSAGE:
+                NEW_MESSAGE.wait(min(remaining, 1.0))
+            rows = fetch_messages_after(match_id, after)
 
     return {"messages": [message_dict(r) for r in rows]}
 
@@ -743,6 +771,10 @@ def send_message(match_id):
         (match_id, sender_id, body),
     )
     db.commit()
+
+    # Release anyone long-polling this room.
+    with NEW_MESSAGE:
+        NEW_MESSAGE.notify_all()
 
     if wants_json:
         row = db.execute(
@@ -785,4 +817,5 @@ def browse():
 init_db()
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    # threaded=True so long-polling chat requests don't block the server.
+    app.run(host="127.0.0.1", port=5000, debug=True, threaded=True)

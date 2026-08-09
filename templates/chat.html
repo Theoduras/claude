@@ -89,8 +89,10 @@
     scrollDown();
   }
 
-  function poll() {
-    fetch(log.dataset.messagesUrl + "?after=" + lastId, {
+  // Long-poll loop: the request stays open until the server has something
+  // to send, so new messages arrive instantly rather than on a tick.
+  function listen() {
+    fetch(log.dataset.messagesUrl + "?wait=1&after=" + lastId, {
       headers: { "Accept": "application/json" }
     })
       .then(function (res) {
@@ -100,13 +102,15 @@
       .then(function (data) {
         data.messages.forEach(addMessage);
         status.textContent = "live";
+        listen();
       })
       .catch(function () {
         status.textContent = "reconnecting…";
+        setTimeout(listen, 2000);
       });
   }
 
-  setInterval(poll, 2000);
+  listen();
   scrollDown();
 
   var form = document.getElementById("chat-form");

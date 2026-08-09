@@ -88,7 +88,10 @@ the profile exists but has no login access. For local development,
 Chat messages are always sent as the logged-in user, and chatrooms are
 private to the two matched members — the admin can view (not write in)
 any room. The chat updates in real time: messages send without a page
-reload and new messages from the other side appear within ~2 seconds.
+reload, and the browser holds an open long-poll request that the server
+releases the instant a message is stored, so the other side sees it in
+milliseconds (no polling delay). Dropped connections retry automatically
+and the header shows `live` / `reconnecting…`.
 
 Data is stored in a local SQLite file (`dating.db`, git-ignored). Set
 `APP_SECRET_KEY` to keep login sessions valid across restarts. This is a
