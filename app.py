@@ -18,6 +18,7 @@ in as admin automatically; set AUTO_LOGIN=0 to get the normal login page.
 """
 
 import os
+import re
 import secrets
 import sqlite3
 
@@ -42,6 +43,17 @@ ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = os.environ.get("APP_ADMIN_PASSWORD", "admin12345")
 AUTO_LOGIN = os.environ.get("AUTO_LOGIN", "1") not in ("0", "false", "no")
 
+GENDERS = ["Woman", "Man", "Non-binary"]
+
+SEEKING_OPTIONS = ["Women", "Men", "Everyone"]
+
+# Which profile genders each "looking for" choice accepts.
+SEEKING_MATCHES = {
+    "Women": {"Woman"},
+    "Men": {"Man"},
+    "Everyone": set(GENDERS),
+}
+
 RELATIONSHIP_TYPES = [
     "Long-term relationship",
     "Short-term relationship",
@@ -54,6 +66,8 @@ RELATIONSHIP_TYPES = [
 PROFILE_FIELDS = [
     "name",
     "age",
+    "gender",
+    "seeking",
     "location",
     "bio",
     "interests",
@@ -95,6 +109,8 @@ def init_db():
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             name TEXT NOT NULL DEFAULT '',
             age INTEGER,
+            gender TEXT NOT NULL DEFAULT '',
+            seeking TEXT NOT NULL DEFAULT '',
             location TEXT NOT NULL DEFAULT '',
             bio TEXT NOT NULL DEFAULT '',
             interests TEXT NOT NULL DEFAULT '',
@@ -106,11 +122,16 @@ def init_db():
         );
         """
     )
-    # Migrate databases created before the is_admin column existed.
-    try:
-        db.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+    # Migrate databases created before later columns existed.
+    for stmt in (
+        "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE profiles ADD COLUMN gender TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN seeking TEXT NOT NULL DEFAULT ''",
+    ):
+        try:
+            db.execute(stmt)
+        except sqlite3.OperationalError:
+            pass
 
     admin = db.execute(
         "SELECT id FROM users WHERE username = ?", (ADMIN_USERNAME,)
@@ -223,6 +244,10 @@ def validate_profile(values):
 
     if values["relationship_type"] and values["relationship_type"] not in RELATIONSHIP_TYPES:
         error = "Please pick a relationship type from the list."
+    if values["gender"] and values["gender"] not in GENDERS:
+        error = "Please pick a gender from the list."
+    if values["seeking"] and values["seeking"] not in SEEKING_OPTIONS:
+        error = "Please pick who you're looking for from the list."
 
     return error, age
 
@@ -241,15 +266,16 @@ def edit_profile():
             db.execute(
                 """
                 UPDATE profiles SET
-                    name = ?, age = ?, location = ?, bio = ?, interests = ?,
-                    hobbies = ?, wants = ?, needs = ?, relationship_type = ?,
-                    updated_at = datetime('now')
+                    name = ?, age = ?, gender = ?, seeking = ?, location = ?,
+                    bio = ?, interests = ?, hobbies = ?, wants = ?, needs = ?,
+                    relationship_type = ?, updated_at = datetime('now')
                 WHERE user_id = ?
                 """,
                 (
-                    values["name"], age, values["location"], values["bio"],
-                    values["interests"], values["hobbies"], values["wants"],
-                    values["needs"], values["relationship_type"], user_id,
+                    values["name"], age, values["gender"], values["seeking"],
+                    values["location"], values["bio"], values["interests"],
+                    values["hobbies"], values["wants"], values["needs"],
+                    values["relationship_type"], user_id,
                 ),
             )
             db.commit()
@@ -269,6 +295,8 @@ def edit_profile():
         "profile_edit.html",
         profile=profile,
         relationship_types=RELATIONSHIP_TYPES,
+        genders=GENDERS,
+        seeking_options=SEEKING_OPTIONS,
     )
 
 
@@ -321,15 +349,15 @@ def admin_new_profile():
                 db.execute(
                     """
                     INSERT INTO profiles
-                        (user_id, name, age, location, bio, interests,
-                         hobbies, wants, needs, relationship_type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        (user_id, name, age, gender, seeking, location, bio,
+                         interests, hobbies, wants, needs, relationship_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        cur.lastrowid, values["name"], age, values["location"],
-                        values["bio"], values["interests"], values["hobbies"],
-                        values["wants"], values["needs"],
-                        values["relationship_type"],
+                        cur.lastrowid, values["name"], age, values["gender"],
+                        values["seeking"], values["location"], values["bio"],
+                        values["interests"], values["hobbies"], values["wants"],
+                        values["needs"], values["relationship_type"],
                     ),
                 )
                 db.commit()
@@ -350,6 +378,103 @@ def admin_new_profile():
         "admin_profile_new.html",
         profile=profile,
         relationship_types=RELATIONSHIP_TYPES,
+        genders=GENDERS,
+        seeking_options=SEEKING_OPTIONS,
+    )
+
+
+def _tokens(*texts):
+    """Split free-text fields into a set of lowercase keywords."""
+    words = set()
+    for text in texts:
+        for tok in re.split(r"[,;/\n]+|\s+", (text or "").lower()):
+            tok = tok.strip(".!?()\"'")
+            if len(tok) > 2:
+                words.add(tok)
+    return words
+
+
+def genders_compatible(me, other):
+    """True when both profiles' gender preferences accept each other.
+
+    An unset gender or preference is treated as open, so incomplete
+    profiles still get matches.
+    """
+
+    def accepts(seeker, candidate):
+        if not seeker["seeking"] or not candidate["gender"]:
+            return True
+        return candidate["gender"] in SEEKING_MATCHES[seeker["seeking"]]
+
+    return accepts(me, other) and accepts(other, me)
+
+
+def match_score(me, other):
+    """Score a candidate: shared keywords, goals, and age proximity."""
+    score = 0
+    reasons = []
+
+    shared = _tokens(me["interests"], me["hobbies"]) & _tokens(
+        other["interests"], other["hobbies"]
+    )
+    if shared:
+        score += 15 * len(shared)
+        reasons.append("Shared interests: " + ", ".join(sorted(shared)))
+
+    if me["relationship_type"] and me["relationship_type"] == other["relationship_type"]:
+        score += 30
+        reasons.append("You both want: " + me["relationship_type"].lower())
+
+    if me["age"] and other["age"]:
+        gap = abs(me["age"] - other["age"])
+        if gap <= 10:
+            score += 10 - gap
+            if gap <= 3:
+                reasons.append("Close in age")
+
+    if me["location"] and other["location"] and (
+        me["location"].strip().lower() == other["location"].strip().lower()
+    ):
+        score += 25
+        reasons.append("Same location: " + other["location"])
+
+    return score, reasons
+
+
+@app.route("/matches")
+@login_required
+def matches():
+    db = get_db()
+    me = db.execute(
+        "SELECT * FROM profiles WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+
+    if me is None or not me["name"]:
+        flash("Fill in your profile first so we can find your matches.")
+        return redirect(url_for("edit_profile"))
+
+    candidates = db.execute(
+        """
+        SELECT p.*, u.username FROM profiles p
+        JOIN users u ON u.id = p.user_id
+        WHERE p.user_id != ? AND p.name != ''
+        """,
+        (session["user_id"],),
+    ).fetchall()
+
+    scored = []
+    for cand in candidates:
+        if not genders_compatible(me, cand):
+            continue
+        score, reasons = match_score(me, cand)
+        scored.append({"profile": cand, "score": score, "reasons": reasons})
+
+    scored.sort(key=lambda m: m["score"], reverse=True)
+
+    return render_template(
+        "matches.html",
+        top=scored[0] if scored else None,
+        others=scored[1:],
     )
 
 

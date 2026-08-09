@@ -17,7 +17,7 @@
       <div class="profile-card">
         <h2>{{ p['name'] }}{% if p['age'] %}, {{ p['age'] }}{% endif %}</h2>
         <div class="meta">
-          @{{ p['username'] }}{% if p['location'] %} &middot; {{ p['location'] }}{% endif %}
+          @{{ p['username'] }}{% if p['gender'] %} &middot; {{ p['gender'] }}{% endif %}{% if p['location'] %} &middot; {{ p['location'] }}{% endif %}
         </div>
         {% if p['relationship_type'] %}
           <div><span class="tag">{{ p['relationship_type'] }}</span></div>

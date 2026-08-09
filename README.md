@@ -62,9 +62,14 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Then open <http://localhost:5000>. Fill in your profile (name, age,
-location, bio, interests, hobbies, wants, needs, relationship type) and
-browse other members' profiles.
+Then open <http://localhost:5000>. Fill in your profile (name, age, gender,
+who you're looking for, location, bio, interests, hobbies, wants, needs,
+relationship type) and browse other members' profiles.
+
+The **Matches** page finds compatible profiles: both people's gender
+preferences must accept each other, then candidates are ranked by shared
+interests/hobbies, matching relationship goals, age proximity, and same
+location — with the top match highlighted and the reasons listed.
 
 **Login is currently bypassed:** every visitor is signed in automatically
 as the seeded `admin` account and lands straight on the browse page. The

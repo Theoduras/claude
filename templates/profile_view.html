@@ -5,11 +5,15 @@
   <h1>{{ profile['name'] or profile['username'] }}{% if profile['age'] %}, {{ profile['age'] }}{% endif %}</h1>
   <p class="subtitle">
     @{{ profile['username'] }}
+    {% if profile['gender'] %} &middot; {{ profile['gender'] }}{% endif %}
     {% if profile['location'] %} &middot; {{ profile['location'] }}{% endif %}
   </p>
 
+  {% if profile['seeking'] %}
+    <span class="tag">Looking for: {{ profile['seeking'] }}</span>
+  {% endif %}
   {% if profile['relationship_type'] %}
-    <span class="tag">Looking for: {{ profile['relationship_type'] }}</span>
+    <span class="tag">Wants: {{ profile['relationship_type'] }}</span>
   {% endif %}
 
   <dl>

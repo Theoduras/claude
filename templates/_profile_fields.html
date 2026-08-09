@@ -5,6 +5,22 @@
 <input id="age" name="age" type="number" min="18" max="120"
        value="{{ profile['age'] or '' }}" required>
 
+<label for="gender">Gender</label>
+<select id="gender" name="gender">
+  <option value="">— Select —</option>
+  {% for g in genders %}
+    <option value="{{ g }}" {% if profile['gender'] == g %}selected{% endif %}>{{ g }}</option>
+  {% endfor %}
+</select>
+
+<label for="seeking">Looking for</label>
+<select id="seeking" name="seeking">
+  <option value="">— Select —</option>
+  {% for s in seeking_options %}
+    <option value="{{ s }}" {% if profile['seeking'] == s %}selected{% endif %}>{{ s }}</option>
+  {% endfor %}
+</select>
+
 <label for="location">Location</label>
 <input id="location" name="location" type="text" value="{{ profile['location'] or '' }}"
        placeholder="e.g. Berlin, Germany">
