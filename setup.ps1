@@ -42,8 +42,12 @@ if (Test-Path (Join-Path $TargetDir ".git")) {
 Write-Host "Installing dependencies ..."
 & $python -m pip install --quiet -r (Join-Path $TargetDir "requirements.txt")
 
+Set-Location $TargetDir
+
+Write-Host "Seeding 20 demo members into the live-search pool ..."
+& $python seed_demo.py
+
 Write-Host ""
 Write-Host "Starting Heartlink at http://localhost:5000 (Ctrl+C to stop)" -ForegroundColor Green
 Start-Process "http://localhost:5000"
-Set-Location $TargetDir
 & $python app.py

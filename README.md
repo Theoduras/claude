@@ -79,6 +79,21 @@ Example: a man seeking women 18–25, a woman seeking men 18–25, and a man
 seeking men 18–25 all search at once — the first two are paired, and the
 third keeps waiting because nobody in the pool is looking for men.
 
+### Demo data
+
+`seed_demo.py` fills the site with 20 varied members (ages 20–41, mixed
+genders, cities and goals) who are **all live-searching at the same
+time**, so a search finds a partner immediately:
+
+```bash
+python seed_demo.py            # add/refresh them (safe to re-run)
+python seed_demo.py --reset    # wipe them and their chats, then re-add
+```
+
+They all log in with the password `demo12345` (e.g. `mia_b`, `liam_k`),
+which is handy for watching a chat from the other side in a second
+browser window. The Windows setup script runs the seeder automatically.
+
 **Find a match** is a guided two-step flow: first choose which kind of
 relationship you're after (your profile's choice is pre-selected), then
 you get **3 options** — people who want that same relationship type, whose
