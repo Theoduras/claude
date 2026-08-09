@@ -66,9 +66,16 @@ Then open <http://localhost:5000>. Create an account, fill in your profile
 (name, age, location, bio, interests, hobbies, wants, needs, relationship
 type), and browse other members' profiles.
 
+An **admin account** (username `admin`, password `admin12345`, override
+with `APP_ADMIN_PASSWORD`) is created automatically on first start, and
+opening the site signs you in as admin automatically. Set `AUTO_LOGIN=0`
+to disable auto-login and use the normal login page instead; after an
+explicit logout the login page is shown either way.
+
 Data is stored in a local SQLite file (`dating.db`, git-ignored). Set
 `APP_SECRET_KEY` to keep login sessions valid across restarts. This is a
-local demo — don't expose it to the internet as-is.
+local demo — the default admin password and auto-login make it unsafe to
+expose to the internet as-is.
 
 ## Notes
 

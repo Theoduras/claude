@@ -10,6 +10,11 @@ fill in your profile, and browse other members.
 
 Data is stored in a local SQLite file (dating.db). Set APP_SECRET_KEY to
 keep sessions valid across restarts.
+
+An admin account is created automatically on startup (username "admin",
+password from APP_ADMIN_PASSWORD, default "admin12345"). While AUTO_LOGIN
+is enabled (the default for this local demo), opening the site signs you
+in as admin automatically; set AUTO_LOGIN=0 to get the normal login page.
 """
 
 import os
@@ -32,6 +37,10 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
 
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dating.db")
+
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = os.environ.get("APP_ADMIN_PASSWORD", "admin12345")
+AUTO_LOGIN = os.environ.get("AUTO_LOGIN", "1") not in ("0", "false", "no")
 
 RELATIONSHIP_TYPES = [
     "Long-term relationship",
@@ -78,6 +87,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL COLLATE NOCASE,
             password_hash TEXT NOT NULL,
+            is_admin INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
@@ -96,6 +106,27 @@ def init_db():
         );
         """
     )
+    # Migrate databases created before the is_admin column existed.
+    try:
+        db.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+
+    admin = db.execute(
+        "SELECT id FROM users WHERE username = ?", (ADMIN_USERNAME,)
+    ).fetchone()
+    if admin is None:
+        cur = db.execute(
+            "INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, 1)",
+            (ADMIN_USERNAME, generate_password_hash(ADMIN_PASSWORD)),
+        )
+        db.execute(
+            "INSERT INTO profiles (user_id, name) VALUES (?, 'Site Admin')",
+            (cur.lastrowid,),
+        )
+    else:
+        db.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (admin[0],))
+
     db.commit()
     db.close()
 
@@ -127,9 +158,24 @@ def inject_user():
     return {"current_user": current_user()}
 
 
+def auto_login_admin():
+    """Sign the request in as the admin account (local demo convenience)."""
+    admin = get_db().execute(
+        "SELECT id FROM users WHERE username = ?", (ADMIN_USERNAME,)
+    ).fetchone()
+    if admin is None:
+        return False
+    session.clear()
+    session["user_id"] = admin["id"]
+    flash("Signed in automatically as admin (set AUTO_LOGIN=0 to disable).")
+    return True
+
+
 @app.route("/")
 def index():
     if session.get("user_id"):
+        return redirect(url_for("browse"))
+    if AUTO_LOGIN and not session.get("no_auto_login") and auto_login_admin():
         return redirect(url_for("browse"))
     return redirect(url_for("login"))
 
@@ -202,6 +248,9 @@ def login():
 @app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
+    # Remember the explicit logout so "/" doesn't immediately sign the
+    # browser back in as admin.
+    session["no_auto_login"] = True
     return redirect(url_for("login"))
 
 
