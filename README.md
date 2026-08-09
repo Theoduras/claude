@@ -40,19 +40,22 @@ client = VastClient()          # reads VAST_API_KEY
 offers = client.search_offers(max_price=0.5)
 ```
 
-## Local web app with login
+## Heartlink — dating website (local demo)
 
-A minimal Flask app with a basic login screen is included:
+A Flask dating site with registration, login, and member profiles:
 
 ```bash
 pip install -r requirements.txt
 python app.py
 ```
 
-Then open <http://localhost:5000>. Demo credentials are `admin` / `password`;
-override them with the `APP_USERNAME`, `APP_PASSWORD`, and `APP_SECRET_KEY`
-environment variables. This is a demo login for local use only — don't expose
-it to the internet as-is.
+Then open <http://localhost:5000>. Create an account, fill in your profile
+(name, age, location, bio, interests, hobbies, wants, needs, relationship
+type), and browse other members' profiles.
+
+Data is stored in a local SQLite file (`dating.db`, git-ignored). Set
+`APP_SECRET_KEY` to keep login sessions valid across restarts. This is a
+local demo — don't expose it to the internet as-is.
 
 ## Notes
 

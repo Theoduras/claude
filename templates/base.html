@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Heartlink{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #fdf2f5;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #e11d63;
+      --accent-hover: #be1354;
+      --accent-soft: #fce7ef;
+      --border: #e5e7eb;
+      --error-bg: #fef2f2;
+      --error-text: #b91c1c;
+      --error-border: #fecaca;
+      --info-bg: #eff6ff;
+      --info-text: #1d4ed8;
+      --info-border: #bfdbfe;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    nav {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .brand {
+      font-weight: 800;
+      font-size: 1.2rem;
+      color: var(--accent);
+      text-decoration: none;
+      margin-right: auto;
+    }
+    nav a:not(.brand) {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.95rem;
+      padding: 0.35rem 0.6rem;
+      border-radius: 0.4rem;
+    }
+    nav a:not(.brand):hover { background: var(--accent-soft); }
+    nav form { margin: 0; }
+    main {
+      max-width: 52rem;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+    }
+    .card {
+      background: var(--card);
+      padding: 1.5rem;
+      border-radius: 0.75rem;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+      margin-bottom: 1rem;
+    }
+    .narrow { max-width: 26rem; margin-left: auto; margin-right: auto; }
+    h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+    .subtitle { margin: 0 0 1.25rem; color: var(--muted); font-size: 0.9rem; }
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 0.55rem 0.7rem;
+      margin-bottom: 1rem;
+      font-size: 1rem;
+      font-family: inherit;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      background: #fff;
+      color: var(--text);
+    }
+    textarea { resize: vertical; min-height: 5rem; }
+    input:focus, textarea:focus, select:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      border-color: var(--accent);
+    }
+    .btn {
+      display: inline-block;
+      padding: 0.6rem 1.2rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      background: var(--accent);
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn-block { width: 100%; }
+    .btn-secondary {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .btn-secondary:hover { background: #f9d3e2; }
+    .flash {
+      background: var(--info-bg);
+      color: var(--info-text);
+      border: 1px solid var(--info-border);
+      border-radius: 0.5rem;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.875rem;
+      margin-bottom: 1rem;
+    }
+    .muted { color: var(--muted); }
+    .hint {
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin: -0.7rem 0 1rem;
+    }
+    .auth-footer {
+      text-align: center;
+      font-size: 0.9rem;
+      margin-top: 1rem;
+    }
+    .auth-footer a { color: var(--accent); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+      gap: 1rem;
+    }
+    .profile-card {
+      background: var(--card);
+      border-radius: 0.75rem;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .profile-card h2 { margin: 0; font-size: 1.15rem; }
+    .profile-card .meta { color: var(--muted); font-size: 0.85rem; }
+    .profile-card .bio {
+      font-size: 0.9rem;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .tag {
+      display: inline-block;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+    }
+    dl { margin: 0; }
+    dt {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+      margin-top: 1rem;
+    }
+    dd { margin: 0.25rem 0 0; white-space: pre-line; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="brand" href="{{ url_for('index') }}">&#10084; Heartlink</a>
+    {% if current_user %}
+      <a href="{{ url_for('browse') }}">Browse</a>
+      <a href="{{ url_for('view_profile', user_id=current_user['id']) }}">My profile</a>
+      <a href="{{ url_for('edit_profile') }}">Edit profile</a>
+      <form method="post" action="{{ url_for('logout') }}">
+        <button class="btn btn-secondary" type="submit">Log out</button>
+      </form>
+    {% endif %}
+  </nav>
+  <main>
+    {% with messages = get_flashed_messages() %}
+      {% for message in messages %}
+        <div class="flash" role="alert">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

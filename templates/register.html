@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Create account — Heartlink{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>Create account</h1>
+  <p class="subtitle">Join Heartlink and set up your dating profile.</p>
+
+  <form method="post" action="{{ url_for('register') }}">
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" autocomplete="username"
+           minlength="3" required autofocus>
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="new-password"
+           minlength="8" required>
+    <p class="hint">At least 8 characters.</p>
+
+    <label for="confirm">Confirm password</label>
+    <input id="confirm" name="confirm" type="password" autocomplete="new-password"
+           minlength="8" required>
+
+    <button class="btn btn-block" type="submit">Create account</button>
+  </form>
+</div>
+<p class="auth-footer">Already have an account? <a href="{{ url_for('login') }}">Sign in</a></p>
+{% endblock %}
