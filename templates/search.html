@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Live search — Heartlink{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Search for a match now</h1>
+  <p class="subtitle">
+    Set what you're looking for and we'll pair you with someone searching for
+    you at the same time — the chat opens instantly for both of you.
+  </p>
+
+  <form method="post" action="{{ url_for('live_search') }}">
+    <label for="seeking">I'm looking for</label>
+    <select id="seeking" name="seeking">
+      <option value="">Anyone</option>
+      {% for s in seeking_options %}
+        <option value="{{ s }}"
+          {% if (existing and existing['seeking'] == s) or (not existing and me['seeking'] == s) %}selected{% endif %}>
+          {{ s }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <label for="age_min">Age range</label>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <input id="age_min" name="age_min" type="number" min="18" max="120"
+             value="{{ existing['age_min'] if existing else 18 }}" required>
+      <span class="muted">to</span>
+      <input id="age_max" name="age_max" type="number" min="18" max="120"
+             value="{{ existing['age_max'] if existing else 30 }}" required>
+    </div>
+
+    <label for="relationship_type">Kind of connection</label>
+    <select id="relationship_type" name="relationship_type">
+      <option value="">Doesn't matter</option>
+      {% for rt in relationship_types %}
+        <option value="{{ rt }}"
+          {% if (existing and existing['relationship_type'] == rt) or (not existing and me['relationship_type'] == rt) %}selected{% endif %}>
+          {{ rt }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <label for="interests">Interests (optional)</label>
+    <input id="interests" name="interests" type="text"
+           value="{{ existing['interests'] if existing else me['interests'] }}"
+           placeholder="e.g. music, hiking — used to pick the best fit">
+
+    <button class="btn btn-block" type="submit">&#128269; Start searching</button>
+  </form>
+  <p class="hint" style="margin-top: 0.75rem;">
+    You are {{ me['gender'] or 'unspecified gender' }}{% if me['age'] %}, {{ me['age'] }}{% endif %} —
+    others' age and gender filters apply to you too, so keep
+    <a href="{{ url_for('edit_profile') }}">your profile</a> accurate.
+  </p>
+</div>
+{% endblock %}

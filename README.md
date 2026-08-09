@@ -66,6 +66,19 @@ Then open <http://localhost:5000>. Fill in your profile (name, age, gender,
 who you're looking for, location, bio, interests, hobbies, wants, needs,
 relationship type) and browse other members' profiles.
 
+**Live search** is instant matchmaking. You set what you want — gender,
+age range, kind of connection, optional interests — and hit search. Everyone
+searching sits in a pool, and as soon as two searches satisfy each other
+*both ways* (each is the gender the other wants, each falls inside the
+other's age range, and their relationship goals don't conflict) the pair is
+created and both browsers jump straight into a shared chatroom. The waiting
+page holds an open request, so the second person is pulled in the moment
+the first one matches them.
+
+Example: a man seeking women 18–25, a woman seeking men 18–25, and a man
+seeking men 18–25 all search at once — the first two are paired, and the
+third keeps waiting because nobody in the pool is looking for men.
+
 **Find a match** is a guided two-step flow: first choose which kind of
 relationship you're after (your profile's choice is pre-selected), then
 you get **3 options** — people who want that same relationship type, whose

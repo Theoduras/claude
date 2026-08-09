@@ -132,6 +132,19 @@ def init_db():
             CHECK (user_a < user_b)
         );
 
+        -- One row per member currently looking for a live match.
+        CREATE TABLE IF NOT EXISTS searches (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            seeking TEXT NOT NULL DEFAULT '',
+            age_min INTEGER NOT NULL DEFAULT 18,
+            age_max INTEGER NOT NULL DEFAULT 120,
+            relationship_type TEXT NOT NULL DEFAULT '',
+            interests TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'waiting',
+            match_id INTEGER REFERENCES matches(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
@@ -524,6 +537,263 @@ def match_score(me, other):
 
 
 MATCH_OPTION_COUNT = 3
+
+# Serializes live-search pairing so two simultaneous searchers can't both
+# claim the same partner, and wakes anyone waiting for a match.
+SEARCH_LOCK = threading.Lock()
+SEARCH_EVENT = threading.Condition()
+SEARCH_WAIT_TIMEOUT = 25.0
+
+
+def searches_compatible(s1, s2):
+    """True when two live searches satisfy each other's criteria.
+
+    Both directions must hold: each person's gender must be one the other
+    is looking for, and each person's age must fall inside the other's
+    requested range. Relationship type only blocks when both named one and
+    they differ. Unset fields are treated as "no preference".
+    """
+
+    def gender_ok(searcher, candidate_gender):
+        if not searcher["seeking"] or not candidate_gender:
+            return True
+        return candidate_gender in SEEKING_MATCHES[searcher["seeking"]]
+
+    def age_ok(searcher, candidate_age):
+        if candidate_age is None:
+            return True
+        return searcher["age_min"] <= candidate_age <= searcher["age_max"]
+
+    if not (gender_ok(s1, s2["gender"]) and gender_ok(s2, s1["gender"])):
+        return False
+    if not (age_ok(s1, s2["age"]) and age_ok(s2, s1["age"])):
+        return False
+    if (
+        s1["relationship_type"]
+        and s2["relationship_type"]
+        and s1["relationship_type"] != s2["relationship_type"]
+    ):
+        return False
+    return True
+
+
+def try_pair(user_id):
+    """Pair this searcher with a waiting, mutually-compatible one.
+
+    Returns the match id when a pair is formed (or already was), else None.
+    """
+    db = get_db()
+    matched_id = None
+
+    with SEARCH_LOCK:
+        mine = db.execute(
+            """
+            SELECT s.*, p.gender, p.age FROM searches s
+            JOIN profiles p ON p.user_id = s.user_id
+            WHERE s.user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+
+        if mine is None:
+            return None
+        if mine["status"] == "matched":
+            return mine["match_id"]
+        if mine["status"] != "waiting":
+            return None
+
+        others = db.execute(
+            """
+            SELECT s.*, p.gender, p.age FROM searches s
+            JOIN profiles p ON p.user_id = s.user_id
+            WHERE s.status = 'waiting' AND s.user_id != ?
+            ORDER BY s.created_at
+            """,
+            (user_id,),
+        ).fetchall()
+
+        best = None
+        my_words = _tokens(mine["interests"])
+        for other in others:
+            if not searches_compatible(mine, other):
+                continue
+            # Tie-break on shared interests, then longest wait (query order).
+            overlap = len(my_words & _tokens(other["interests"]))
+            if best is None or overlap > best[0]:
+                best = (overlap, other)
+
+        if best is None:
+            return None
+
+        partner_id = best[1]["user_id"]
+        a, b = sorted((user_id, partner_id))
+        existing = db.execute(
+            "SELECT id FROM matches WHERE user_a = ? AND user_b = ?", (a, b)
+        ).fetchone()
+        if existing:
+            matched_id = existing["id"]
+        else:
+            matched_id = db.execute(
+                "INSERT INTO matches (user_a, user_b) VALUES (?, ?)", (a, b)
+            ).lastrowid
+
+        db.execute(
+            "UPDATE searches SET status = 'matched', match_id = ? WHERE user_id IN (?, ?)",
+            (matched_id, user_id, partner_id),
+        )
+        db.commit()
+
+    # Wake the partner's waiting page immediately.
+    with SEARCH_EVENT:
+        SEARCH_EVENT.notify_all()
+    return matched_id
+
+
+@app.route("/search", methods=["GET", "POST"])
+@login_required
+def live_search():
+    """Enter the live pool: get paired instantly with a compatible searcher."""
+    db = get_db()
+    user_id = session["user_id"]
+    me = db.execute(
+        "SELECT * FROM profiles WHERE user_id = ?", (user_id,)
+    ).fetchone()
+
+    if me is None or not me["name"]:
+        flash("Fill in your profile first so others can match with you.")
+        return redirect(url_for("edit_profile"))
+
+    if request.method == "POST":
+        seeking = request.form.get("seeking", "")
+        relationship_type = request.form.get("relationship_type", "")
+        interests = request.form.get("interests", "").strip()
+
+        error = None
+        if seeking and seeking not in SEEKING_OPTIONS:
+            error = "Please choose who you're looking for."
+        if relationship_type and relationship_type not in RELATIONSHIP_TYPES:
+            error = "Please choose what kind of connection you want."
+
+        try:
+            age_min = int(request.form.get("age_min", 18))
+            age_max = int(request.form.get("age_max", 120))
+        except ValueError:
+            error = "Please enter a valid age range."
+            age_min, age_max = 18, 120
+
+        if error is None and not 18 <= age_min <= age_max <= 120:
+            error = "Age range must run from 18 up to 120."
+
+        if error:
+            flash(error)
+        else:
+            db.execute(
+                """
+                INSERT INTO searches
+                    (user_id, seeking, age_min, age_max, relationship_type,
+                     interests, status, match_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'waiting', NULL, datetime('now'))
+                ON CONFLICT(user_id) DO UPDATE SET
+                    seeking = excluded.seeking,
+                    age_min = excluded.age_min,
+                    age_max = excluded.age_max,
+                    relationship_type = excluded.relationship_type,
+                    interests = excluded.interests,
+                    status = 'waiting',
+                    match_id = NULL,
+                    created_at = datetime('now')
+                """,
+                (user_id, seeking, age_min, age_max, relationship_type, interests),
+            )
+            db.commit()
+
+            match_id = try_pair(user_id)
+            if match_id:
+                flash("It's a match! You were paired instantly — say hi.")
+                return redirect(url_for("chat", match_id=match_id))
+            return redirect(url_for("search_waiting"))
+
+    existing = db.execute(
+        "SELECT * FROM searches WHERE user_id = ?", (user_id,)
+    ).fetchone()
+
+    return render_template(
+        "search.html",
+        me=me,
+        existing=existing,
+        seeking_options=SEEKING_OPTIONS,
+        relationship_types=RELATIONSHIP_TYPES,
+    )
+
+
+@app.route("/search/waiting")
+@login_required
+def search_waiting():
+    row = get_db().execute(
+        "SELECT * FROM searches WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+
+    if row is None or row["status"] == "cancelled":
+        return redirect(url_for("live_search"))
+    if row["status"] == "matched" and row["match_id"]:
+        return redirect(url_for("chat", match_id=row["match_id"]))
+
+    waiting_count = get_db().execute(
+        "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
+    ).fetchone()["n"]
+
+    return render_template("search_waiting.html", search=row, waiting=waiting_count)
+
+
+@app.route("/search/status")
+@login_required
+def search_status():
+    """Long-polled by the waiting page; returns as soon as a match exists."""
+    user_id = session["user_id"]
+
+    def snapshot():
+        # Retry pairing on each pass so a searcher who arrived while we
+        # were waiting still gets picked up.
+        try_pair(user_id)
+        return get_db().execute(
+            "SELECT status, match_id FROM searches WHERE user_id = ?", (user_id,)
+        ).fetchone()
+
+    row = snapshot()
+    if row is None:
+        return {"status": "none"}
+
+    if row["status"] == "waiting" and request.args.get("wait") == "1":
+        deadline = time.monotonic() + SEARCH_WAIT_TIMEOUT
+        while row is not None and row["status"] == "waiting":
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            with SEARCH_EVENT:
+                SEARCH_EVENT.wait(min(remaining, 1.0))
+            row = snapshot()
+
+    if row is None:
+        return {"status": "none"}
+
+    result = {"status": row["status"]}
+    if row["status"] == "matched" and row["match_id"]:
+        result["match_id"] = row["match_id"]
+        result["chat_url"] = url_for("chat", match_id=row["match_id"])
+    return result
+
+
+@app.route("/search/cancel", methods=["POST"])
+@login_required
+def search_cancel():
+    db = get_db()
+    db.execute(
+        "UPDATE searches SET status = 'cancelled' WHERE user_id = ? AND status = 'waiting'",
+        (session["user_id"],),
+    )
+    db.commit()
+    flash("Search stopped.")
+    return redirect(url_for("live_search"))
 
 
 @app.route("/find", methods=["GET", "POST"])

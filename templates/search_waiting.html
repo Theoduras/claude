@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Searching… — Heartlink{% endblock %}
+{% block content %}
+<div class="card narrow" style="text-align: center;">
+  <div class="pulse-heart">&#10084;</div>
+  <h1>Searching for your match…</h1>
+  <p class="subtitle" id="status-line">
+    Looking for someone who fits — and who's looking for you.
+  </p>
+
+  <dl style="text-align: left; margin-bottom: 1.25rem;">
+    <dt>Looking for</dt>
+    <dd>{{ search['seeking'] or 'Anyone' }}, age {{ search['age_min'] }}–{{ search['age_max'] }}</dd>
+    {% if search['relationship_type'] %}
+      <dt>Connection</dt><dd>{{ search['relationship_type'] }}</dd>
+    {% endif %}
+    {% if search['interests'] %}
+      <dt>Interests</dt><dd>{{ search['interests'] }}</dd>
+    {% endif %}
+  </dl>
+
+  <p class="muted" style="font-size: 0.85rem;">
+    {{ waiting }} {{ 'person' if waiting == 1 else 'people' }} searching right now.
+  </p>
+
+  <form method="post" action="{{ url_for('search_cancel') }}">
+    <button class="btn btn-secondary" type="submit">Stop searching</button>
+  </form>
+</div>
+
+<script>
+(function () {
+  var statusLine = document.getElementById("status-line");
+  var statusUrl = "{{ url_for('search_status') }}";
+
+  function listen() {
+    fetch(statusUrl + "?wait=1", { headers: { "Accept": "application/json" } })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        if (data.status === "matched" && data.chat_url) {
+          statusLine.textContent = "It's a match! Opening your chat…";
+          window.location.href = data.chat_url;
+          return;
+        }
+        if (data.status === "none" || data.status === "cancelled") {
+          window.location.href = "{{ url_for('live_search') }}";
+          return;
+        }
+        listen();
+      })
+      .catch(function () {
+        statusLine.textContent = "Reconnecting…";
+        setTimeout(listen, 2000);
+      });
+  }
+
+  listen();
+})();
+</script>
+{% endblock %}
