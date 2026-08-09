@@ -6,40 +6,7 @@
   <p class="subtitle">Tell others who you are and what you're looking for.</p>
 
   <form method="post" action="{{ url_for('edit_profile') }}">
-    <label for="name">Name</label>
-    <input id="name" name="name" type="text" value="{{ profile['name'] or '' }}" required autofocus>
-
-    <label for="age">Age</label>
-    <input id="age" name="age" type="number" min="18" max="120"
-           value="{{ profile['age'] or '' }}" required>
-
-    <label for="location">Location</label>
-    <input id="location" name="location" type="text" value="{{ profile['location'] or '' }}"
-           placeholder="e.g. Berlin, Germany">
-
-    <label for="bio">Bio</label>
-    <textarea id="bio" name="bio" placeholder="A few sentences about yourself...">{{ profile['bio'] or '' }}</textarea>
-
-    <label for="interests">Interests</label>
-    <textarea id="interests" name="interests" placeholder="e.g. music, travel, cooking">{{ profile['interests'] or '' }}</textarea>
-
-    <label for="hobbies">Hobbies</label>
-    <textarea id="hobbies" name="hobbies" placeholder="e.g. hiking, gaming, painting">{{ profile['hobbies'] or '' }}</textarea>
-
-    <label for="wants">What I want</label>
-    <textarea id="wants" name="wants" placeholder="What you're hoping to find...">{{ profile['wants'] or '' }}</textarea>
-
-    <label for="needs">What I need</label>
-    <textarea id="needs" name="needs" placeholder="What matters most to you in a partner...">{{ profile['needs'] or '' }}</textarea>
-
-    <label for="relationship_type">Relationship type</label>
-    <select id="relationship_type" name="relationship_type">
-      <option value="">— Select —</option>
-      {% for rt in relationship_types %}
-        <option value="{{ rt }}" {% if profile['relationship_type'] == rt %}selected{% endif %}>{{ rt }}</option>
-      {% endfor %}
-    </select>
-
+    {% include "_profile_fields.html" %}
     <button class="btn" type="submit">Save profile</button>
   </form>
 </div>

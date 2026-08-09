@@ -153,6 +153,20 @@ def login_required(view):
     return wrapped
 
 
+def admin_required(view):
+    from functools import wraps
+
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        user = current_user()
+        if user is None or not user["is_admin"]:
+            flash("Only the admin can do that.")
+            return redirect(url_for("browse"))
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
 @app.context_processor
 def inject_user():
     return {"current_user": current_user()}
@@ -193,6 +207,26 @@ def logout():
     return redirect(url_for("index"))
 
 
+def validate_profile(values):
+    """Return (error, age) for a submitted profile form."""
+    age = None
+    error = None
+    if not values["name"]:
+        error = "Please enter your name."
+    else:
+        try:
+            age = int(values["age"])
+            if not 18 <= age <= 120:
+                error = "Age must be between 18 and 120."
+        except (TypeError, ValueError):
+            error = "Please enter a valid age."
+
+    if values["relationship_type"] and values["relationship_type"] not in RELATIONSHIP_TYPES:
+        error = "Please pick a relationship type from the list."
+
+    return error, age
+
+
 @app.route("/profile/edit", methods=["GET", "POST"])
 @login_required
 def edit_profile():
@@ -201,20 +235,7 @@ def edit_profile():
 
     if request.method == "POST":
         values = {f: request.form.get(f, "").strip() for f in PROFILE_FIELDS}
-
-        error = None
-        if not values["name"]:
-            error = "Please enter your name."
-        else:
-            try:
-                age = int(values["age"])
-                if not 18 <= age <= 120:
-                    error = "Age must be between 18 and 120."
-            except (TypeError, ValueError):
-                error = "Please enter a valid age."
-
-        if values["relationship_type"] and values["relationship_type"] not in RELATIONSHIP_TYPES:
-            error = "Please pick a relationship type from the list."
+        error, age = validate_profile(values)
 
         if error is None:
             db.execute(
@@ -271,6 +292,64 @@ def view_profile(user_id):
         "profile_view.html",
         profile=row,
         is_own=(user_id == session["user_id"]),
+    )
+
+
+@app.route("/admin/profiles/new", methods=["GET", "POST"])
+@admin_required
+def admin_new_profile():
+    db = get_db()
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        values = {f: request.form.get(f, "").strip() for f in PROFILE_FIELDS}
+
+        error = None
+        if not username or len(username) < 3:
+            error = "Username must be at least 3 characters."
+        else:
+            error, age = validate_profile(values)
+
+        if error is None:
+            try:
+                # Login is bypassed, so the account gets an unguessable
+                # random password; set a real one when logins return.
+                cur = db.execute(
+                    "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                    (username, generate_password_hash(secrets.token_urlsafe(32))),
+                )
+                db.execute(
+                    """
+                    INSERT INTO profiles
+                        (user_id, name, age, location, bio, interests,
+                         hobbies, wants, needs, relationship_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        cur.lastrowid, values["name"], age, values["location"],
+                        values["bio"], values["interests"], values["hobbies"],
+                        values["wants"], values["needs"],
+                        values["relationship_type"],
+                    ),
+                )
+                db.commit()
+            except sqlite3.IntegrityError:
+                error = "That username is already taken."
+            else:
+                flash(f"Profile for {values['name']} (@{username}) created.")
+                return redirect(url_for("view_profile", user_id=cur.lastrowid))
+
+        flash(error)
+        profile = dict(values)
+        profile["username"] = username
+    else:
+        profile = {f: "" for f in PROFILE_FIELDS}
+        profile["username"] = ""
+
+    return render_template(
+        "admin_profile_new.html",
+        profile=profile,
+        relationship_types=RELATIONSHIP_TYPES,
     )
 
 
