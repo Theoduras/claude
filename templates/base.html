@@ -233,6 +233,9 @@
       {% if current_user['is_admin'] %}
         <a href="{{ url_for('admin_new_profile') }}">+ New profile</a>
       {% endif %}
+      <form method="post" action="{{ url_for('logout') }}">
+        <button class="btn btn-secondary" type="submit">Log out</button>
+      </form>
     {% endif %}
   </nav>
   <main>

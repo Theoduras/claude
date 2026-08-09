@@ -12,9 +12,9 @@ Data is stored in a local SQLite file (dating.db). Set APP_SECRET_KEY to
 keep sessions valid across restarts.
 
 An admin account is created automatically on startup (username "admin",
-password from APP_ADMIN_PASSWORD, default "admin12345"). While AUTO_LOGIN
-is enabled (the default for this local demo), opening the site signs you
-in as admin automatically; set AUTO_LOGIN=0 to get the normal login page.
+password from APP_ADMIN_PASSWORD, default "admin12345"). Anyone can
+register an account and log in. Set AUTO_LOGIN=1 to skip the login page
+during local development and browse as admin automatically.
 """
 
 import os
@@ -32,7 +32,7 @@ from flask import (
     session,
     url_for,
 )
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
@@ -41,7 +41,7 @@ DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dating.db")
 
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = os.environ.get("APP_ADMIN_PASSWORD", "admin12345")
-AUTO_LOGIN = os.environ.get("AUTO_LOGIN", "1") not in ("0", "false", "no")
+AUTO_LOGIN = os.environ.get("AUTO_LOGIN", "0") not in ("0", "false", "no")
 
 GENDERS = ["Woman", "Man", "Non-binary"]
 
@@ -212,8 +212,8 @@ def inject_user():
 
 @app.before_request
 def auto_login_admin():
-    """Login is disabled for now: every visitor is signed in as admin."""
-    if session.get("user_id") is not None:
+    """Optional dev shortcut (AUTO_LOGIN=1): browse as admin without logging in."""
+    if not AUTO_LOGIN or session.get("user_id") is not None:
         return
     admin = get_db().execute(
         "SELECT id FROM users WHERE username = ?", (ADMIN_USERNAME,)
@@ -224,25 +224,80 @@ def auto_login_admin():
 
 @app.route("/")
 def index():
-    return redirect(url_for("browse"))
+    if session.get("user_id"):
+        return redirect(url_for("browse"))
+    return redirect(url_for("login"))
 
 
-# Login is bypassed for now: auto_login_admin() signs every visitor in as
-# admin, and the login/register pages just forward to the site.
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    return redirect(url_for("browse"))
+    if session.get("user_id"):
+        return redirect(url_for("browse"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm", "")
+
+        error = None
+        if not username or len(username) < 3:
+            error = "Username must be at least 3 characters."
+        elif len(password) < 8:
+            error = "Password must be at least 8 characters."
+        elif password != confirm:
+            error = "Passwords do not match."
+
+        if error is None:
+            db = get_db()
+            try:
+                cur = db.execute(
+                    "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                    (username, generate_password_hash(password)),
+                )
+                db.execute(
+                    "INSERT INTO profiles (user_id) VALUES (?)", (cur.lastrowid,)
+                )
+                db.commit()
+            except sqlite3.IntegrityError:
+                error = "That username is already taken."
+            else:
+                session.clear()
+                session["user_id"] = cur.lastrowid
+                flash("Welcome! Now set up your profile.")
+                return redirect(url_for("edit_profile"))
+
+        flash(error)
+
+    return render_template("register.html")
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    return redirect(url_for("browse"))
+    if session.get("user_id"):
+        return redirect(url_for("browse"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        user = get_db().execute(
+            "SELECT * FROM users WHERE username = ?", (username,)
+        ).fetchone()
+
+        if user and check_password_hash(user["password_hash"], password):
+            session.clear()
+            session["user_id"] = user["id"]
+            return redirect(url_for("browse"))
+
+        flash("Invalid username or password.")
+
+    return render_template("login.html")
 
 
 @app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
-    return redirect(url_for("index"))
+    return redirect(url_for("login"))
 
 
 def validate_profile(values):
@@ -347,21 +402,29 @@ def admin_new_profile():
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
         values = {f: request.form.get(f, "").strip() for f in PROFILE_FIELDS}
 
         error = None
         if not username or len(username) < 3:
             error = "Username must be at least 3 characters."
+        elif password and len(password) < 8:
+            error = "Password must be at least 8 characters (or leave it empty)."
         else:
             error, age = validate_profile(values)
 
         if error is None:
             try:
-                # Login is bypassed, so the account gets an unguessable
-                # random password; set a real one when logins return.
+                # Without a password the account can't log in until one
+                # is set; with one, the person can sign in right away.
                 cur = db.execute(
                     "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                    (username, generate_password_hash(secrets.token_urlsafe(32))),
+                    (
+                        username,
+                        generate_password_hash(
+                            password or secrets.token_urlsafe(32)
+                        ),
+                    ),
                 )
                 db.execute(
                     """
@@ -552,9 +615,8 @@ def create_match(other_id):
 @app.route("/chats")
 @login_required
 def chats():
-    # Login is bypassed and everyone is admin, so list every chatroom.
-    rows = get_db().execute(
-        """
+    user = current_user()
+    query = """
         SELECT m.id, m.created_at,
                pa.name AS name_a, pb.name AS name_b,
                (SELECT body FROM messages WHERE match_id = m.id
@@ -562,9 +624,17 @@ def chats():
         FROM matches m
         JOIN profiles pa ON pa.user_id = m.user_a
         JOIN profiles pb ON pb.user_id = m.user_b
+        {where}
         ORDER BY m.id DESC
-        """
-    ).fetchall()
+    """
+    if user["is_admin"]:
+        # The admin moderates and can see every room.
+        rows = get_db().execute(query.format(where="")).fetchall()
+    else:
+        rows = get_db().execute(
+            query.format(where="WHERE ? IN (m.user_a, m.user_b)"),
+            (user["id"],),
+        ).fetchall()
     return render_template("chats.html", rooms=rows)
 
 
@@ -572,8 +642,14 @@ def chats():
 @login_required
 def chat(match_id):
     match, profiles = get_match_participants(match_id)
+    user = current_user()
     if match is None:
         flash("That chatroom does not exist.")
+        return redirect(url_for("chats"))
+
+    is_participant = user["id"] in (match["user_a"], match["user_b"])
+    if not is_participant and not user["is_admin"]:
+        flash("That chatroom is private.")
         return redirect(url_for("chats"))
 
     messages = get_db().execute(
@@ -592,6 +668,7 @@ def chat(match_id):
         profiles=profiles,
         messages=messages,
         me_id=session["user_id"],
+        is_participant=is_participant,
     )
 
 
@@ -604,14 +681,11 @@ def send_message(match_id):
         return redirect(url_for("chats"))
 
     body = request.form.get("body", "").strip()
-    # While login is bypassed, the form says which of the two matched
-    # profiles is speaking; only participants are accepted.
-    try:
-        sender_id = int(request.form.get("sender_id", ""))
-    except ValueError:
-        sender_id = None
+    # Messages are always sent as the logged-in user, who must be one
+    # of the two matched participants.
+    sender_id = session["user_id"]
     if sender_id not in (match["user_a"], match["user_b"]):
-        flash("Pick which profile is sending the message.")
+        flash("Only the two matched members can write in this chatroom.")
     elif not body:
         flash("Message can't be empty.")
     else:

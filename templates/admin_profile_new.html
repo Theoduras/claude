@@ -10,6 +10,11 @@
     <input id="username" name="username" type="text" minlength="3" required autofocus
            value="{{ profile['username'] or '' }}" placeholder="unique handle, e.g. maria92">
 
+    <label for="password">Password (optional)</label>
+    <input id="password" name="password" type="password" minlength="8" autocomplete="new-password"
+           placeholder="lets this member log in themselves">
+    <p class="hint">Leave empty to create a profile without login access.</p>
+
     {% include "_profile_fields.html" %}
     <button class="btn" type="submit">Create profile</button>
   </form>

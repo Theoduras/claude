@@ -77,11 +77,17 @@ history kept in the database. All rooms are listed under **Chats**. While
 login is bypassed, the chat form lets you pick which of the two matched
 profiles is speaking, so you can play both sides from one browser.
 
-**Login is currently bypassed:** every visitor is signed in automatically
-as the seeded `admin` account and lands straight on the browse page. The
-`/login` and `/register` pages just forward into the site. (The account
-and password-hashing plumbing is still in place, so a real login flow can
-be re-enabled later.)
+**Accounts and login:** anyone can register (username + password, min 8
+chars) and log in; registering walks you straight into the profile
+editor. The seeded `admin` account logs in with `admin12345` (override
+via `APP_ADMIN_PASSWORD`). When the admin creates a profile they can set
+an optional password so that member can log in themselves; without one
+the profile exists but has no login access. For local development,
+`AUTO_LOGIN=1` skips the login page and browses as admin.
+
+Chat messages are always sent as the logged-in user, and chatrooms are
+private to the two matched members — the admin can view (not write in)
+any room.
 
 Data is stored in a local SQLite file (`dating.db`, git-ignored). Set
 `APP_SECRET_KEY` to keep login sessions valid across restarts. This is a
