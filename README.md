@@ -42,7 +42,20 @@ offers = client.search_offers(max_price=0.5)
 
 ## Heartlink — dating website (local demo)
 
-A Flask dating site with registration, login, and member profiles:
+A Flask dating site with registration, login, and member profiles.
+
+**Windows quick start** — paste this into PowerShell; it clones the repo to
+`~\heartlink`, installs dependencies, opens your browser, and starts the app:
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/Theoduras/claude/claude/localhost-login-page-el4mjf/setup.ps1 -OutFile "$env:TEMP\setup.ps1"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\setup.ps1"
+```
+
+Re-running it later pulls the latest version before starting. Requires
+[Git](https://git-scm.com/download/win) and
+[Python](https://www.python.org/downloads/) (check "Add python.exe to PATH").
+
+**Manual start** on any platform:
 
 ```bash
 pip install -r requirements.txt
