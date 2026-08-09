@@ -523,6 +523,85 @@ def match_score(me, other):
     return score, reasons
 
 
+MATCH_OPTION_COUNT = 3
+
+
+@app.route("/find", methods=["GET", "POST"])
+@login_required
+def find():
+    """Step 1: pick the relationship type you're looking for."""
+    me = get_db().execute(
+        "SELECT * FROM profiles WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+
+    if me is None or not me["name"]:
+        flash("Fill in your profile first so we can find your matches.")
+        return redirect(url_for("edit_profile"))
+
+    if request.method == "POST":
+        wanted = request.form.get("relationship_type", "")
+        if wanted not in RELATIONSHIP_TYPES:
+            flash("Please choose what you're looking for.")
+        else:
+            return redirect(url_for("find_results", relationship_type=wanted))
+
+    return render_template(
+        "find.html",
+        relationship_types=RELATIONSHIP_TYPES,
+        current_choice=me["relationship_type"],
+    )
+
+
+@app.route("/find/results")
+@login_required
+def find_results():
+    """Step 2: three candidates who want the same kind of relationship."""
+    db = get_db()
+    wanted = request.args.get("relationship_type", "")
+    if wanted not in RELATIONSHIP_TYPES:
+        return redirect(url_for("find"))
+
+    me = db.execute(
+        "SELECT * FROM profiles WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+    if me is None or not me["name"]:
+        flash("Fill in your profile first so we can find your matches.")
+        return redirect(url_for("edit_profile"))
+
+    # Only people after the same kind of relationship, and not already
+    # matched with me.
+    candidates = db.execute(
+        """
+        SELECT p.*, u.username FROM profiles p
+        JOIN users u ON u.id = p.user_id
+        WHERE p.user_id != ?
+          AND p.name != ''
+          AND p.relationship_type = ?
+          AND p.user_id NOT IN (
+              SELECT CASE WHEN user_a = ? THEN user_b ELSE user_a END
+              FROM matches WHERE ? IN (user_a, user_b)
+          )
+        """,
+        (session["user_id"], wanted, session["user_id"], session["user_id"]),
+    ).fetchall()
+
+    scored = []
+    for cand in candidates:
+        if not genders_compatible(me, cand):
+            continue
+        score, reasons = match_score(me, cand)
+        scored.append({"profile": cand, "score": score, "reasons": reasons})
+
+    scored.sort(key=lambda m: m["score"], reverse=True)
+
+    return render_template(
+        "find_results.html",
+        wanted=wanted,
+        options=scored[:MATCH_OPTION_COUNT],
+        total=len(scored),
+    )
+
+
 @app.route("/matches")
 @login_required
 def matches():

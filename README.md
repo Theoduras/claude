@@ -66,10 +66,16 @@ Then open <http://localhost:5000>. Fill in your profile (name, age, gender,
 who you're looking for, location, bio, interests, hobbies, wants, needs,
 relationship type) and browse other members' profiles.
 
-The **Matches** page finds compatible profiles: both people's gender
-preferences must accept each other, then candidates are ranked by shared
-interests/hobbies, matching relationship goals, age proximity, and same
-location — with the top match highlighted and the reasons listed.
+**Find a match** is a guided two-step flow: first choose which kind of
+relationship you're after (your profile's choice is pre-selected), then
+you get **3 options** — people who want that same relationship type, whose
+gender preferences mutually match yours, ranked best-fit first with the
+reasons shown. People you've already matched with are filtered out, so
+the options refresh as you go.
+
+The **Matches** page is the unfiltered view: every gender-compatible
+profile ranked by shared interests/hobbies, matching relationship goals,
+age proximity, and same location.
 
 Hitting **Match & chat** on a match stores the pairing and opens a shared
 **chatroom** for the two profiles, with message bubbles per side and full

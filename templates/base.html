@@ -201,6 +201,23 @@
     .chat-form { display: flex; gap: 0.5rem; align-items: flex-start; flex-wrap: wrap; }
     .chat-form select { width: auto; margin-bottom: 0; }
     .chat-form input[type="text"] { flex: 1; min-width: 10rem; margin-bottom: 0; }
+    .choice {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 0.9rem 1rem;
+      cursor: pointer;
+      font-weight: 500;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.04);
+    }
+    .choice:hover { border-color: var(--accent); }
+    .choice input { width: auto; margin: 0; accent-color: var(--accent); }
+    .choice span { display: flex; flex-direction: column; gap: 0.1rem; }
+    .choice-suggested { border-color: var(--accent); background: var(--accent-soft); }
+    .best-option { border: 2px solid var(--accent); }
     .room-row {
       display: flex;
       align-items: center;
@@ -225,6 +242,7 @@
     <a class="brand" href="{{ url_for('index') }}">&#10084; Heartlink</a>
     {% if current_user %}
       {% if current_user['is_admin'] %}<span class="tag">Admin</span>{% endif %}
+      <a href="{{ url_for('find') }}">Find a match</a>
       <a href="{{ url_for('browse') }}">Browse</a>
       <a href="{{ url_for('matches') }}">Matches</a>
       <a href="{{ url_for('chats') }}">Chats</a>

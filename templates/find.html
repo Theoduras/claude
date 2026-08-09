@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Find a match — Heartlink{% endblock %}
+{% block content %}
+<h1>Find a match</h1>
+<p class="subtitle">Step 1 of 2 &middot; What kind of connection are you looking for?</p>
+
+<form method="post" action="{{ url_for('find') }}">
+  <div class="grid">
+    {% for rt in relationship_types %}
+      <label class="choice {% if current_choice == rt %}choice-suggested{% endif %}">
+        <input type="radio" name="relationship_type" value="{{ rt }}"
+               {% if current_choice == rt %}checked{% endif %} required>
+        <span>
+          <strong>{{ rt }}</strong>
+          {% if current_choice == rt %}
+            <span class="muted" style="font-size: 0.8rem;">from your profile</span>
+          {% endif %}
+        </span>
+      </label>
+    {% endfor %}
+  </div>
+  <button class="btn" type="submit" style="margin-top: 1rem;">Show me matches &rarr;</button>
+</form>
+{% endblock %}
