@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Velvet — Style Guide</title>
+<style>
+  /* ===================================================================
+     VELVET STYLE GUIDE
+     A single committed dark world — Velvet is a night brand. Every
+     colour is painted explicitly so the page holds on any host ground.
+     =================================================================== */
+  :root {
+    --ink:          #0B0713;
+    --ink-raised:   #150C22;
+    --ink-hairline: rgba(168, 133, 247, 0.16);
+
+    --violet:       #8A2BE2;
+    --violet-crest: #A855F7;
+    --violet-deep:  #3B0B66;
+
+    --teal:         #12807F;
+    --teal-crest:   #1DA6A2;
+    --teal-deep:    #06383B;
+
+    --champagne:    #E8D3A9;
+
+    --text:         #F7F1FB;
+    --text-muted:   #B7A6CB;
+    --text-faint:   #7C6B92;
+
+    --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+    --nap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.62;
+    color: var(--text);
+    background-color: var(--ink);
+    background-image:
+      radial-gradient(58% 42% at 12% -4%, rgba(168, 85, 247, 0.40), transparent 70%),
+      radial-gradient(52% 40% at 96% 10%, rgba(29, 166, 162, 0.26), transparent 72%),
+      radial-gradient(70% 46% at 50% 100%, rgba(59, 11, 102, 0.55), transparent 76%);
+    background-attachment: fixed;
+  }
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image: var(--nap);
+    background-size: 180px 180px;
+    opacity: 0.3;
+    mix-blend-mode: overlay;
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 6vw, 4.5rem) clamp(1.1rem, 4vw, 2rem) 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2.75rem, 6vw, 4.5rem);
+  }
+
+  /* ---------- type ------------------------------------------------- */
+  h1, h2, h3, h4 {
+    font-family: var(--serif);
+    font-weight: 500;
+    letter-spacing: -0.016em;
+    line-height: 1.1;
+    text-wrap: balance;
+    margin: 0;
+  }
+  h1 { font-size: clamp(2.6rem, 7vw, 4.4rem); }
+  h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); }
+  h3 { font-size: 1.15rem; }
+  h4 { font-size: 1rem; }
+  p { margin: 0; max-width: 64ch; }
+
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--text-faint);
+    margin: 0;
+  }
+  .lede { font-size: 1.14rem; color: var(--text-muted); max-width: 54ch; }
+  .muted { color: var(--text-muted); }
+  .faint { color: var(--text-faint); }
+  a { color: var(--violet-crest); }
+
+  section { display: flex; flex-direction: column; gap: 1.4rem; }
+  .section-head { display: flex; flex-direction: column; gap: 0.55rem; }
+  .rule { height: 1px; background: var(--ink-hairline); border: 0; margin: 0; }
+
+  /* ---------- hero: the bolt of cloth ------------------------------ */
+  .hero {
+    position: relative;
+    border-radius: 24px;
+    overflow: hidden;
+    border: 1px solid var(--ink-hairline);
+    min-height: clamp(20rem, 46vh, 27rem);
+    display: flex;
+    align-items: flex-end;
+    padding: clamp(1.5rem, 4vw, 2.75rem);
+  }
+  /* violet bolt meeting teal, folds radiating from two centres */
+  .hero-cloth {
+    position: absolute;
+    inset: 0;
+    background-color: #12081F;
+    background-image:
+      radial-gradient(56% 46% at 18% 6%,  rgba(168, 85, 247, 0.62), transparent 70%),
+      radial-gradient(46% 38% at 40% 34%, rgba(138, 43, 226, 0.44), transparent 72%),
+      radial-gradient(52% 44% at 92% 16%, rgba(29, 166, 162, 0.50), transparent 72%),
+      radial-gradient(44% 36% at 74% 62%, rgba(18, 128, 127, 0.34), transparent 74%),
+      radial-gradient(64% 44% at 46% 104%, rgba(59, 11, 102, 0.70), transparent 76%);
+  }
+  .hero-folds {
+    position: absolute;
+    inset: -18%;
+    background-image:
+      conic-gradient(from 195deg at 30% 20%,
+        rgba(255,255,255,0.11) 0deg, rgba(255,255,255,0.02) 26deg,
+        rgba(0,0,0,0.26) 76deg, rgba(0,0,0,0.40) 124deg,
+        rgba(0,0,0,0.10) 188deg, rgba(255,255,255,0.07) 256deg,
+        rgba(0,0,0,0.30) 320deg, rgba(255,255,255,0.11) 360deg),
+      conic-gradient(from 40deg at 82% 70%,
+        rgba(255,255,255,0.07) 0deg, rgba(0,0,0,0.28) 70deg,
+        rgba(255,255,255,0.05) 150deg, rgba(0,0,0,0.32) 228deg,
+        rgba(255,255,255,0.06) 302deg, rgba(255,255,255,0.07) 360deg);
+    filter: blur(26px);
+  }
+  .hero-nap {
+    position: absolute;
+    inset: 0;
+    background-image:
+      var(--nap),
+      repeating-linear-gradient(94deg,
+        rgba(255,255,255,0.05) 0 1px, rgba(0,0,0,0.06) 1px 2px, transparent 2px 4px);
+    background-size: 180px 180px, auto;
+    opacity: 0.5;
+    mix-blend-mode: overlay;
+  }
+  .hero-copy { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 0.75rem; }
+  .hero h1 { text-shadow: 0 2px 30px rgba(0,0,0,0.5); }
+  .wordmark { display: flex; align-items: baseline; gap: 0.6rem; }
+  .mark {
+    width: 0.7rem; height: 0.7rem; border-radius: 50%;
+    background: radial-gradient(circle at 32% 28%, var(--violet-crest), var(--violet) 55%, var(--violet-deep));
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.85);
+  }
+
+  /* ---------- swatches --------------------------------------------- */
+  .swatches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 0.9rem;
+  }
+  .swatch {
+    border-radius: 14px;
+    border: 1px solid var(--ink-hairline);
+    overflow: hidden;
+    background: var(--ink-raised);
+  }
+  .swatch .chip { height: 5.2rem; position: relative; }
+  .swatch .chip::after {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: var(--nap);
+    background-size: 180px 180px;
+    opacity: 0.22;
+    mix-blend-mode: overlay;
+  }
+  .swatch .label { padding: 0.7rem 0.85rem 0.9rem; display: flex; flex-direction: column; gap: 0.15rem; }
+  .swatch .name { font-size: 0.86rem; font-weight: 600; }
+  .swatch .hex {
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .swatch .use { font-size: 0.76rem; color: var(--text-muted); }
+
+  /* ---------- panels ----------------------------------------------- */
+  .panel {
+    position: relative;
+    padding: clamp(1.25rem, 3vw, 1.9rem);
+    border-radius: 18px;
+    border: 1px solid var(--ink-hairline);
+    background-color: var(--ink-raised);
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 34%),
+      linear-gradient(155deg, rgba(75,20,124,0.50), rgba(11,7,19,0.88) 72%);
+    box-shadow: 0 26px 70px -28px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.07);
+    overflow: hidden;
+  }
+  .panel::before {
+    content: "";
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: conic-gradient(from 200deg at 18% 0%,
+      rgba(255,255,255,0.09) 0deg, rgba(255,255,255,0.01) 40deg,
+      rgba(0,0,0,0.16) 110deg, transparent 190deg);
+    filter: blur(18px);
+  }
+  .panel::after {
+    content: "";
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: var(--nap),
+      repeating-linear-gradient(94deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 3px);
+    background-size: 180px 180px, auto;
+    opacity: 0.3;
+    mix-blend-mode: overlay;
+  }
+  .panel > * { position: relative; z-index: 1; }
+  .panel-stack { display: flex; flex-direction: column; gap: 1rem; }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: 1rem;
+    align-items: start;
+  }
+
+  /* ---------- type specimen ---------------------------------------- */
+  .specimen { display: flex; flex-direction: column; gap: 1.3rem; }
+  .spec-row { display: flex; flex-direction: column; gap: 0.3rem; }
+  .spec-meta {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .display-xl { font-family: var(--serif); font-size: clamp(2.4rem, 6vw, 3.6rem); font-weight: 500; letter-spacing: -0.02em; line-height: 1.06; }
+  .display-l { font-family: var(--serif); font-size: 2.1rem; font-weight: 500; letter-spacing: -0.016em; }
+  .display-m { font-family: var(--serif); font-size: 1.3rem; font-weight: 500; }
+  .body-l { font-size: 1.14rem; color: var(--text-muted); }
+  .body-m { font-size: 1rem; }
+  .body-s { font-size: 0.88rem; color: var(--text-muted); }
+  .label-xs {
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.16em; color: var(--text-faint);
+  }
+
+  /* ---------- component demos -------------------------------------- */
+  .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+  .btn {
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
+    padding: 0.72rem 1.35rem;
+    font-family: var(--sans); font-size: 0.95rem; font-weight: 600;
+    color: #fff;
+    background-color: var(--violet);
+    background-image: linear-gradient(160deg, var(--violet-crest), var(--violet) 45%, var(--violet-deep));
+    border: none; border-radius: 999px; cursor: pointer; overflow: hidden;
+    box-shadow: 0 12px 30px -12px rgba(138,43,226,0.85), inset 0 1px 0 rgba(255,255,255,0.24);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .btn::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(105deg, transparent 32%, rgba(255,255,255,0.38) 50%, transparent 68%);
+    transform: translateX(-120%);
+    transition: transform 0.55s ease;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 16px 38px -12px rgba(168,85,247,0.95), inset 0 1px 0 rgba(255,255,255,0.3); }
+  .btn:hover::before { transform: translateX(120%); }
+  .btn:focus-visible { outline: 2px solid var(--champagne); outline-offset: 3px; }
+  .btn-secondary {
+    color: var(--text);
+    background-color: transparent;
+    background-image: linear-gradient(160deg, rgba(29,166,162,0.32), rgba(6,56,59,0.55));
+    border: 1px solid rgba(29,166,162,0.4);
+    box-shadow: none;
+  }
+  .btn-secondary:hover { background-image: linear-gradient(160deg, rgba(29,166,162,0.5), rgba(6,56,59,0.7)); box-shadow: 0 12px 28px -14px rgba(18,128,127,0.9); }
+  .btn-ghost {
+    color: var(--text-muted);
+    background: transparent; background-image: none;
+    border: 1px solid var(--ink-hairline);
+    box-shadow: none;
+  }
+  .btn-ghost:hover { color: var(--text); border-color: rgba(168,85,247,0.45); }
+
+  .tag {
+    display: inline-block; padding: 0.26rem 0.72rem;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: #F0E2FF; border-radius: 999px;
+    border: 1px solid rgba(168,85,247,0.42);
+    background: linear-gradient(150deg, rgba(138,43,226,0.4), rgba(59,11,102,0.55));
+  }
+  .tag-teal { color: #D8F5F2; border-color: rgba(29,166,162,0.45); background: linear-gradient(150deg, rgba(18,128,127,0.4), rgba(6,56,59,0.6)); }
+
+  .field { display: flex; flex-direction: column; gap: 0.45rem; }
+  input[type="text"], select {
+    width: 100%;
+    padding: 0.7rem 0.85rem;
+    font-family: inherit; font-size: 1rem; color: var(--text);
+    background: rgba(8,5,14,0.7);
+    border: 1px solid var(--ink-hairline);
+    border-radius: 11px;
+  }
+  input[type="text"]::placeholder { color: var(--text-faint); }
+  input[type="text"]:focus, select:focus {
+    outline: none; border-color: var(--violet-crest);
+    box-shadow: 0 0 0 3px rgba(168,85,247,0.24);
+  }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 1.6rem; padding: 0; background: transparent; border: none;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 0.35rem; border-radius: 999px;
+    background: linear-gradient(90deg, var(--violet-deep), rgba(168,85,247,0.45));
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 1.15rem; height: 1.15rem; margin-top: -0.4rem; border-radius: 50%;
+    background: radial-gradient(circle at 32% 28%, var(--violet-crest), var(--violet) 60%, var(--violet-deep));
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 0 0 14px rgba(168,85,247,0.8);
+  }
+  input[type="range"]::-moz-range-track { height: 0.35rem; border-radius: 999px; background: linear-gradient(90deg, var(--violet-deep), rgba(168,85,247,0.45)); }
+  input[type="range"]::-moz-range-thumb {
+    width: 1.15rem; height: 1.15rem; border-radius: 50%;
+    background: radial-gradient(circle at 32% 28%, var(--violet-crest), var(--violet) 60%, var(--violet-deep));
+    border: 1px solid rgba(255,255,255,0.5); box-shadow: 0 0 14px rgba(168,85,247,0.8);
+  }
+
+  .bubbles { display: flex; flex-direction: column; gap: 0.55rem; }
+  .bubble {
+    max-width: 80%; padding: 0.6rem 0.9rem; font-size: 0.95rem; line-height: 1.5;
+    border-radius: 1.1rem; white-space: pre-line;
+  }
+  .bubble .sender {
+    display: block; font-size: 0.66rem; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; margin-bottom: 0.2rem;
+  }
+  .bubble.left {
+    align-self: flex-start; color: #D8F5F2;
+    background-image: linear-gradient(150deg, rgba(18,128,127,0.5), rgba(6,56,59,0.72));
+    border: 1px solid rgba(29,166,162,0.3); border-bottom-left-radius: 0.3rem;
+  }
+  .bubble.right {
+    align-self: flex-end; color: #F6ECFF;
+    background-image: linear-gradient(150deg, rgba(138,43,226,0.6), rgba(59,11,102,0.78));
+    border: 1px solid rgba(168,85,247,0.36); border-bottom-right-radius: 0.3rem;
+  }
+
+  .orb {
+    width: 4.5rem; height: 4.5rem; border-radius: 50%;
+    background: radial-gradient(circle at 34% 30%, var(--violet-crest), var(--violet) 45%, var(--violet-deep) 78%);
+    box-shadow: 0 0 60px rgba(168,85,247,0.6);
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(168,85,247,0.45); }
+    50% { transform: scale(1.07); box-shadow: 0 0 78px rgba(168,85,247,0.75); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .orb { animation: none; }
+    .btn, .btn::before { transition: none; }
+    .btn:hover { transform: none; }
+  }
+
+  /* ---------- code ------------------------------------------------- */
+  pre {
+    margin: 0;
+    padding: 1rem 1.1rem;
+    background: rgba(6,4,11,0.8);
+    border: 1px solid var(--ink-hairline);
+    border-radius: 12px;
+    overflow-x: auto;
+  }
+  code { font-family: var(--mono); font-size: 0.8rem; line-height: 1.65; color: #DCC9F5; }
+
+  /* ---------- do / don't ------------------------------------------- */
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; }
+  .rule-card { padding: 1.15rem 1.25rem; border-radius: 14px; border: 1px solid var(--ink-hairline); background: rgba(15,9,26,0.7); }
+  .rule-card h4 { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+  .rule-card ul { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.4rem; }
+  .rule-card li { font-size: 0.9rem; color: var(--text-muted); }
+  .yes .bar, .no .bar { width: 1.6rem; height: 0.2rem; border-radius: 999px; }
+  .yes .bar { background: var(--teal-crest); }
+  .no .bar { background: #FF7A8A; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th, td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--ink-hairline); }
+  th { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-faint); font-weight: 700; }
+  td.mono { font-family: var(--mono); color: var(--champagne); font-variant-numeric: tabular-nums; }
+  .table-scroll { overflow-x: auto; }
+
+  footer { color: var(--text-faint); font-size: 0.84rem; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- ============ HERO ============ -->
+  <header class="hero">
+    <div class="hero-cloth"></div>
+    <div class="hero-folds"></div>
+    <div class="hero-nap"></div>
+    <div class="hero-copy">
+      <p class="wordmark eyebrow"><span class="mark"></span>Velvet — Style Guide</p>
+      <h1>The interface should<br>feel like the fabric.</h1>
+      <p class="lede">
+        Velvet pairs people the instant they're looking for each other. Its surfaces
+        borrow the behaviour of crushed velvet: light pools on a crest, shadow gathers
+        in the crease, and the nap changes as you brush it.
+      </p>
+    </div>
+  </header>
+
+  <!-- ============ FOUNDATION ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Foundation</p>
+      <h2>Where the palette comes from</h2>
+      <p class="muted">
+        Two bolts of stretch velvet — one violet, one deep teal — sampled at three
+        depths each: the specular crest, the mid pile, and the near-black inside a fold.
+        Violet leads; teal answers. Nothing here is a flat brand colour, because velvet
+        is never one colour.
+      </p>
+    </div>
+
+    <div class="swatches">
+      <div class="swatch">
+        <div class="chip" style="background: linear-gradient(150deg, #A855F7, #8A2BE2 55%, #6A15B4);"></div>
+        <div class="label">
+          <span class="name">Violet Crest</span>
+          <span class="hex">#A855F7</span>
+          <span class="use">Highlights, focus, glow</span>
+        </div>
+      </div>
+      <div class="swatch">
+        <div class="chip" style="background: linear-gradient(150deg, #9333EA, #8A2BE2 50%, #5B1296);"></div>
+        <div class="label">
+          <span class="name">Violet</span>
+          <span class="hex">#8A2BE2</span>
+          <span class="use">Primary action</span>
+        </div>
+      </div>
+      <div class="swatch">
+        <div class="chip" style="background: linear-gradient(150deg, #4C0F8C, #3B0B66 60%, #250742);"></div>
+        <div class="label">
+          <span class="name">Violet Deep</span>
+          <span class="hex">#3B0B66</span>
+          <span class="use">Fold shadow, gradient base</span>
+        </div>
+      </div>
+      <div class="swatch">
+        <div class="chip" style="background: linear-gradient(150deg, #1DA6A2, #12807F 55%, #0B5F60);"></div>
+        <div class="label">
+          <span class="name">Teal Crest</span>
+          <span class="hex">#1DA6A2</span>
+          <span class="use">Live state, incoming</span>
+        </div>
+      </div>
+      <div class="swatch">
+        <div class="chip" style="background: linear-gradient(150deg, #12807F, #0B5F60 55%, #06383B);"></div>
+        <div class="label">
+          <span class="name">Teal</span>
+          <span class="hex">#12807F</span>
+          <span class="use">Secondary action</span>
+        </div>
+      </div>
+      <div class="swatch">
+        <div class="chip" style="background: linear-gradient(150deg, #06383B, #042A2C);"></div>
+        <div class="label">
+          <span class="name">Teal Deep</span>
+          <span class="hex">#06383B</span>
+          <span class="use">Received messages</span>
+        </div>
+      </div>
+      <div class="swatch">
+        <div class="chip" style="background: linear-gradient(150deg, #150C22, #0B0713);"></div>
+        <div class="label">
+          <span class="name">Ink</span>
+          <span class="hex">#0B0713</span>
+          <span class="use">Page ground</span>
+        </div>
+      </div>
+      <div class="swatch">
+        <div class="chip" style="background: linear-gradient(150deg, #F3E4C4, #E8D3A9);"></div>
+        <div class="label">
+          <span class="name">Champagne</span>
+          <span class="hex">#E8D3A9</span>
+          <span class="use">Light itself — values, focus ring</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="body-s" style="margin-bottom: 0.9rem;">
+        <strong style="color: var(--text);">The neutrals are violet-biased on purpose.</strong>
+        Ink is not <code style="color: var(--text-muted);">#0B0B0B</code> — it carries a
+        trace of the violet dye, the way the inside of a fold still reads as the fabric's
+        colour. A pure grey next to these swatches looks like a mistake.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Token</th><th>Value</th><th>Role</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Text</td><td class="mono">#F7F1FB</td><td>Primary copy — warm white, never pure #FFF</td></tr>
+            <tr><td>Text muted</td><td class="mono">#B7A6CB</td><td>Supporting copy, metadata</td></tr>
+            <tr><td>Text faint</td><td class="mono">#7C6B92</td><td>Labels, hints, disabled</td></tr>
+            <tr><td>Hairline</td><td class="mono">rgba(168,133,247,.16)</td><td>Every border on the site</td></tr>
+            <tr><td>Danger</td><td class="mono">#FF7A8A</td><td>Destructive only — never decorative</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ============ THE VELVET SURFACE ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Signature</p>
+      <h2>The velvet surface</h2>
+      <p class="muted">
+        The texture is drawn, not photographed — three stacked layers, no image
+        requests, no fixed art direction that breaks at another viewport. Use it on the
+        page ground and on panels. Never on small controls: at that size the grain turns
+        to dirt.
+      </p>
+    </div>
+
+    <div class="two-col">
+      <div class="panel panel-stack">
+        <p class="eyebrow">Layer 1 — The pile</p>
+        <p class="body-s">
+          Overlapping soft radial gradients place the light. Violet pools top-left,
+          teal answers top-right, and the deepest violet gathers along the bottom edge
+          where cloth would bunch.
+        </p>
+      </div>
+      <div class="panel panel-stack">
+        <p class="eyebrow">Layer 2 — The folds</p>
+        <p class="body-s">
+          Two conic gradients radiate from off-centre points, alternating white and
+          black stops so pleats sweep out from a twist. A 26–28px blur keeps every
+          crease edge soft — this is the step that decides whether it reads as cloth
+          or as a hard geometric band.
+        </p>
+      </div>
+      <div class="panel panel-stack">
+        <p class="eyebrow">Layer 3 — The nap</p>
+        <p class="body-s">
+          An inline SVG <code>feTurbulence</code> grain plus a 1px repeating gradient
+          raked to 94°, composited in <code>overlay</code>. The grain is the fibre; the
+          rake is the cut pile's direction.
+        </p>
+      </div>
+      <div class="panel panel-stack">
+        <p class="eyebrow">Behaviour — The brush</p>
+        <p class="body-s">
+          Velvet changes colour when you stroke it, so primary buttons sweep a
+          highlight across themselves on hover, and panels lift 1–3px. Motion is
+          always this: light moving over a surface, never a surface bouncing.
+        </p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="eyebrow" style="margin-bottom: 0.8rem;">The recipe</p>
+      <pre><code>/* Layer 3 — the nap, reusable as a token */
+--nap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'
+  width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence
+  type='fractalNoise' baseFrequency='0.85' numOctaves='3'
+  stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180'
+  filter='url(%23n)'/%3E%3C/svg%3E");
+
+body::after {                    /* fibre + cut-pile rake */
+  background-image:
+    var(--nap),
+    repeating-linear-gradient(94deg,
+      rgba(255,255,255,.035) 0 1px,
+      rgba(0,0,0,.05)        1px 2px,
+      transparent            2px 4px);
+  background-size: 180px 180px, auto;
+  opacity: .42;
+  mix-blend-mode: overlay;
+}
+
+body::before {                   /* folds — blur is not optional */
+  background-image: conic-gradient(from 195deg at 30% 18%, /* … */);
+  filter: blur(28px);
+}</code></pre>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ============ TYPE ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Typography</p>
+      <h2>A serif that undresses well</h2>
+      <p class="muted">
+        High-contrast serif for anything a person reads slowly — names, headlines, the
+        one line that sets a mood. Grotesque sans for anything they operate. The
+        tension between the two is the whole personality: intimate to read, clinical
+        to use.
+      </p>
+    </div>
+
+    <div class="panel specimen">
+      <div class="spec-row">
+        <span class="spec-meta">Display XL · serif 500 · −0.02em · 1.06</span>
+        <span class="display-xl">Feeling for a match</span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-meta">Display L · serif 500 · −0.016em</span>
+        <span class="display-l">Mia, 26 · Berlin</span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-meta">Display M · serif 500 — card titles, choice cards</span>
+        <span class="display-m">Long-term relationship</span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-meta">Body L · sans · 1.14rem — lede, subtitle</span>
+        <span class="body-l">Sign in and search — we pair you the moment someone is looking for you too.</span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-meta">Body M · sans · 1rem/1.62 — running copy, messages</span>
+        <span class="body-m">Distance must fit inside both radii. Nobody matches you unless you match them back.</span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-meta">Label XS · sans 700 · 0.16em · uppercase — every form label</span>
+        <span class="label-xs">Search radius</span>
+      </div>
+      <div class="spec-row">
+        <span class="spec-meta">Numeric · mono · tabular — ages, distances, counts</span>
+        <span class="body-m" style="font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--champagne);">21 – 35 years · 149 km · 20 searching</span>
+      </div>
+    </div>
+
+    <div class="rules">
+      <div class="rule-card yes">
+        <h4><span class="bar"></span>Do</h4>
+        <ul>
+          <li>Keep running copy near 65 characters.</li>
+          <li>Let serif headlines break where the meaning breaks — use <code>&lt;br&gt;</code> deliberately.</li>
+          <li>Set every number that appears in a column as tabular.</li>
+          <li>Use champagne for values the eye hunts for: a distance, an age range, a count.</li>
+        </ul>
+      </div>
+      <div class="rule-card no">
+        <h4><span class="bar"></span>Don't</h4>
+        <ul>
+          <li>Set serif below 1rem — the contrast collapses and it reads as an accident.</li>
+          <li>Use the serif for buttons or labels. Controls are sans, always.</li>
+          <li>Stack more than two type sizes inside one card.</li>
+          <li>Centre body copy. Centre only the searching state, which has no reading to do.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ============ COMPONENTS ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Components</p>
+      <h2>Parts, and what they promise</h2>
+      <p class="muted">
+        Violet acts. Teal responds. That split is load-bearing: a violet control changes
+        something about you, a teal one belongs to the other person or to live state.
+      </p>
+    </div>
+
+    <div class="panel panel-stack">
+      <p class="eyebrow">Buttons</p>
+      <div class="row">
+        <button class="btn" type="button">Start searching</button>
+        <button class="btn btn-secondary" type="button">View profile</button>
+        <button class="btn btn-ghost" type="button">Stop searching</button>
+      </div>
+      <p class="body-s">
+        Pill radius throughout — nothing in Velvet has a sharp corner. Primary carries
+        the sheen sweep and a violet cast shadow; secondary is teal and flat; ghost is
+        a hairline for anything that undoes. Hover a primary button to brush the pile.
+      </p>
+    </div>
+
+    <div class="two-col">
+      <div class="panel panel-stack">
+        <p class="eyebrow">Tags</p>
+        <div class="row">
+          <span class="tag">Best fit</span>
+          <span class="tag">Marriage</span>
+          <span class="tag-teal tag">Live</span>
+        </div>
+        <p class="body-s">
+          Violet tags classify a person; teal tags report system state. Uppercase,
+          0.1em tracked, never more than two per card.
+        </p>
+      </div>
+
+      <div class="panel panel-stack">
+        <p class="eyebrow">Searching state</p>
+        <div class="row" style="gap: 1.1rem;">
+          <div class="orb"></div>
+          <p class="body-s" style="flex: 1; min-width: 9rem;">
+            One breathing orb, 2.4s, and nothing else moving on the page. Waiting is the
+            most emotional screen in the product — it earns the only ambient animation.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel panel-stack">
+      <p class="eyebrow">Inputs &amp; sliders</p>
+      <div class="two-col">
+        <div class="field">
+          <label class="label-xs" for="demo-city">Location</label>
+          <input id="demo-city" type="text" value="Berlin" placeholder="e.g. Berlin">
+        </div>
+        <div class="field">
+          <label class="label-xs" for="demo-radius">Search radius <span style="float: right; color: var(--champagne); font-weight: 700;">150 km</span></label>
+          <input id="demo-radius" type="range" min="5" max="500" step="5" value="150" aria-label="Search radius demo">
+        </div>
+      </div>
+      <p class="body-s">
+        Fields sit darker than the panel they're on — recessed, like a seam. Focus is a
+        violet crest border plus a 3px soft ring; the slider thumb is a lit bead with a
+        real glow. Every slider states its value in champagne, right-aligned to the label.
+      </p>
+    </div>
+
+    <div class="panel panel-stack">
+      <p class="eyebrow">Messages</p>
+      <div class="bubbles">
+        <div class="bubble left"><span class="sender">Mia</span>You picked the same three things I did. Suspicious.</div>
+        <div class="bubble right"><span class="sender">You</span>Or fate. Drink on Thursday?</div>
+        <div class="bubble left"><span class="sender">Mia</span>Fate it is.</div>
+      </div>
+      <p class="body-s">
+        Yours is violet on the right, theirs is teal on the left — the two bolts of
+        cloth, one per person. The tail corner tightens to 0.3rem on the sender's side.
+        Sender names are uppercase micro-labels at 70% opacity, never full strength.
+      </p>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ============ VOICE ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Voice</p>
+      <h2>Low, warm, and never coy</h2>
+      <p class="muted">
+        Velvet is a dating product, so the copy carries heat — but it states facts. The
+        sexiness is in restraint and specificity, never in innuendo or exclamation marks.
+      </p>
+    </div>
+
+    <div class="rules">
+      <div class="rule-card yes">
+        <h4><span class="bar"></span>Write it like this</h4>
+        <ul>
+          <li>“Feeling for a match” — the fabric verb, doing real work.</li>
+          <li>“Something softer than swiping.”</li>
+          <li>“Nobody fits every filter yet. You'd match 3 people if you widen your radius.”</li>
+          <li>“Only the two matched members can write here.”</li>
+        </ul>
+      </div>
+      <div class="rule-card no">
+        <h4><span class="bar"></span>Not like this</h4>
+        <ul>
+          <li>“Oops! No matches found 😢” — no apologies, no emoji as tone.</li>
+          <li>“Get ready to meet your soulmate!!” — no promises we can't keep.</li>
+          <li>“Invalid search parameters.” — say which one and how to fix it.</li>
+          <li>“Sultry singles near you” — innuendo reads cheap, which is the opposite of the brand.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="body-s">
+        <strong style="color: var(--text);">Errors name the fix.</strong>
+        Every failure message in Velvet answers two questions in one sentence: what
+        stopped, and what to change. “Age range must run from 18 up to 120” beats
+        “invalid input”, and the waiting screen quantifies the cost of each filter
+        rather than shrugging.
+      </p>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ============ CRAFT ============ -->
+  <section>
+    <div class="section-head">
+      <p class="eyebrow">Craft rules</p>
+      <h2>Non-negotiables</h2>
+    </div>
+    <div class="rules">
+      <div class="rule-card">
+        <h4>Contrast</h4>
+        <ul>
+          <li>Body copy is <code>#F7F1FB</code> or <code>#B7A6CB</code> on ink — both clear AA.</li>
+          <li>Faint text is for labels and hints only, never for content someone must read.</li>
+          <li>Never put violet text on violet fabric; put white on it.</li>
+        </ul>
+      </div>
+      <div class="rule-card">
+        <h4>Focus &amp; motion</h4>
+        <ul>
+          <li>Every control shows a visible focus state; the ring is champagne so it reads on both fabrics.</li>
+          <li>Transitions are 0.18s for state, 0.55s for the sheen sweep. Nothing else.</li>
+          <li><code>prefers-reduced-motion</code> stops the orb, the sweep, and every lift.</li>
+        </ul>
+      </div>
+      <div class="rule-card">
+        <h4>Restraint</h4>
+        <ul>
+          <li>One glow per screen. If two things glow, neither is special.</li>
+          <li>Texture belongs to grounds and panels, not to buttons, tags, or inputs.</li>
+          <li>Champagne is light, not a third brand colour — it never fills a shape.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Velvet — visual identity derived from violet and teal crushed-velvet photography.
+    Palette, texture recipe, and components as implemented in the product's base stylesheet.
+  </footer>
+</div>
+</body>
+</html>

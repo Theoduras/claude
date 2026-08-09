@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ profile['name'] or profile['username'] }} — Heartlink{% endblock %}
+{% block title %}{{ profile['name'] or profile['username'] }} — Velvet{% endblock %}
 {% block content %}
 <div class="card">
   <h1>{{ profile['name'] or profile['username'] }}{% if profile['age'] %}, {{ profile['age'] }}{% endif %}</h1>

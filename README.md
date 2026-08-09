@@ -40,9 +40,33 @@ client = VastClient()          # reads VAST_API_KEY
 offers = client.search_offers(max_price=0.5)
 ```
 
-## Heartlink — dating website (local demo)
+## Velvet — dating website (local demo)
 
 A Flask dating site with registration, login, and member profiles.
+
+### Design system
+
+Velvet's identity is documented in `docs/style-guide.html` (open it in a
+browser). The short version:
+
+| Token | Value | Role |
+| --- | --- | --- |
+| `--ink` | `#0B0713` | Page ground — near-black with a violet bias |
+| `--violet` / `--violet-crest` | `#8A2BE2` / `#A855F7` | Primary action, highlights |
+| `--violet-deep` | `#3B0B66` | Fold shadow, gradient base |
+| `--teal` / `--teal-crest` | `#12807F` / `#1DA6A2` | Secondary action, live state |
+| `--champagne` | `#E8D3A9` | Light itself — values and focus rings |
+
+Violet acts, teal responds: a violet control changes something about you, a
+teal one belongs to the other person or to live state. Headings are a
+high-contrast serif, controls and labels are sans, and numbers are tabular.
+
+The velvet texture is drawn in CSS — no image files — as three layers on
+`body` and `.card`: soft radial gradients place the light, blurred conic
+gradients form the pleats, and an inline SVG `feTurbulence` grain raked to
+94° gives the cut pile its nap. Primary buttons sweep a highlight on hover,
+because brushing velvet changes how it catches light. All tokens live at the
+top of `templates/base.html`.
 
 **Windows quick start** — paste this into PowerShell; it clones the repo to
 `~\heartlink`, installs dependencies, opens your browser, and starts the app:

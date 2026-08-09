@@ -1,9 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Create account — Heartlink{% endblock %}
+{% block title %}Create account — Velvet{% endblock %}
 {% block content %}
 <div class="card narrow">
-  <h1>Create account</h1>
-  <p class="subtitle">Join Heartlink and set up your dating profile.</p>
+  <p class="eyebrow">Join Velvet</p>
+  <h1 style="margin-top: 0.5rem;">Make your entrance.</h1>
+  <p class="subtitle" style="margin-bottom: 1.6rem;">
+    Pick a name and a password. Your profile comes next.
+  </p>
 
   <form method="post" action="{{ url_for('register') }}">
     <label for="username">Username</label>
@@ -21,6 +24,9 @@
 
     <button class="btn btn-block" type="submit">Create account</button>
   </form>
+
+  <p class="hint" style="margin: 1.1rem 0 0; text-align: center;">
+    Already a member? <a href="{{ url_for('login') }}">Sign in</a>
+  </p>
 </div>
-<p class="auth-footer">Already have an account? <a href="{{ url_for('login') }}">Sign in</a></p>
 {% endblock %}

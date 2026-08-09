@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Matches — Heartlink{% endblock %}
+{% block title %}Matches — Velvet{% endblock %}
 {% block content %}
 <h1>Your matches</h1>
 <p class="subtitle">Compatible profiles, best match first.</p>
 
 {% if top %}
   {% set p = top.profile %}
-  <div class="card" style="border: 2px solid var(--accent);">
+  <div class="card best-option">
     <span class="tag">&#10084; Top match{% if top.score %} &middot; {{ top.score }} points{% endif %}</span>
     <h2 style="margin: 0.75rem 0 0.25rem;">
       {{ p['name'] }}{% if p['age'] %}, {{ p['age'] }}{% endif %}
