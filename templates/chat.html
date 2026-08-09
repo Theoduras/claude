@@ -12,28 +12,34 @@
     <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">@{{ left['username'] }}</a>
     and
     <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">@{{ right['username'] }}</a>
+    &middot; <span class="muted" id="live-status">live</span>
   </p>
 
-  <div class="chat-log">
-    {% if messages %}
-      {% for msg in messages %}
-        {% if is_participant %}
-          {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
-        {% else %}
-          {% set side = 'left' if msg['sender_id'] == left['user_id'] else 'right' %}
-        {% endif %}
-        <div class="bubble {{ side }}">
-          <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
-        </div>
-      {% endfor %}
-    {% else %}
-      <p class="muted" style="margin: 0;">No messages yet — break the ice!</p>
-    {% endif %}
+  <div class="chat-log" id="chat-log"
+       data-me="{{ me_id }}"
+       data-left="{{ left['user_id'] }}"
+       data-participant="{{ 1 if is_participant else 0 }}"
+       data-messages-url="{{ url_for('chat_messages', match_id=match['id']) }}"
+       data-send-url="{{ url_for('send_message', match_id=match['id']) }}">
+    {% for msg in messages %}
+      {% if is_participant %}
+        {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
+      {% else %}
+        {% set side = 'left' if msg['sender_id'] == left['user_id'] else 'right' %}
+      {% endif %}
+      <div class="bubble {{ side }}" data-id="{{ msg['id'] }}">
+        <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
+      </div>
+    {% endfor %}
+    <p class="muted" id="empty-note" {% if messages %}hidden{% endif %} style="margin: 0;">
+      No messages yet — break the ice!
+    </p>
   </div>
 
   {% if is_participant %}
-    <form class="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
-      <input type="text" name="body" placeholder="Type a message..." autofocus required>
+    <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
+      <input type="text" name="body" id="chat-input" placeholder="Type a message..."
+             autofocus required autocomplete="off">
       <button class="btn" type="submit">Send</button>
     </form>
   {% else %}
@@ -42,4 +48,98 @@
     </p>
   {% endif %}
 </div>
+
+<script>
+(function () {
+  var log = document.getElementById("chat-log");
+  var emptyNote = document.getElementById("empty-note");
+  var status = document.getElementById("live-status");
+  var meId = parseInt(log.dataset.me, 10);
+  var leftId = parseInt(log.dataset.left, 10);
+  var isParticipant = log.dataset.participant === "1";
+  var lastId = 0;
+
+  log.querySelectorAll(".bubble[data-id]").forEach(function (b) {
+    lastId = Math.max(lastId, parseInt(b.dataset.id, 10));
+  });
+
+  function scrollDown() {
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function addMessage(msg) {
+    if (log.querySelector('.bubble[data-id="' + msg.id + '"]')) return;
+    var side;
+    if (isParticipant) {
+      side = msg.sender_id === meId ? "right" : "left";
+    } else {
+      side = msg.sender_id === leftId ? "left" : "right";
+    }
+    var bubble = document.createElement("div");
+    bubble.className = "bubble " + side;
+    bubble.dataset.id = msg.id;
+    var sender = document.createElement("span");
+    sender.className = "sender";
+    sender.textContent = msg.sender_name;
+    bubble.appendChild(sender);
+    bubble.appendChild(document.createTextNode(msg.body));
+    log.insertBefore(bubble, emptyNote);
+    emptyNote.hidden = true;
+    lastId = Math.max(lastId, msg.id);
+    scrollDown();
+  }
+
+  function poll() {
+    fetch(log.dataset.messagesUrl + "?after=" + lastId, {
+      headers: { "Accept": "application/json" }
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        data.messages.forEach(addMessage);
+        status.textContent = "live";
+      })
+      .catch(function () {
+        status.textContent = "reconnecting…";
+      });
+  }
+
+  setInterval(poll, 2000);
+  scrollDown();
+
+  var form = document.getElementById("chat-form");
+  if (form) {
+    var input = document.getElementById("chat-input");
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var body = input.value.trim();
+      if (!body) return;
+      input.value = "";
+      input.focus();
+      fetch(log.dataset.sendUrl, {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: "body=" + encodeURIComponent(body)
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          addMessage(data.message);
+        })
+        .catch(function () {
+          // Restore the text so nothing is lost; next poll may still show it.
+          input.value = body;
+          status.textContent = "send failed — retry";
+        });
+    });
+  }
+})();
+</script>
 {% endblock %}

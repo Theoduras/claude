@@ -672,29 +672,88 @@ def chat(match_id):
     )
 
 
+def message_dict(row):
+    return {
+        "id": row["id"],
+        "sender_id": row["sender_id"],
+        "sender_name": row["sender_name"],
+        "body": row["body"],
+        "created_at": row["created_at"],
+    }
+
+
+@app.route("/chat/<int:match_id>/messages")
+@login_required
+def chat_messages(match_id):
+    """JSON feed of messages newer than ?after=<id>, polled by the chat page."""
+    match, _ = get_match_participants(match_id)
+    user = current_user()
+    if match is None:
+        return {"error": "not found"}, 404
+    if user["id"] not in (match["user_a"], match["user_b"]) and not user["is_admin"]:
+        return {"error": "forbidden"}, 403
+
+    try:
+        after = int(request.args.get("after", 0))
+    except ValueError:
+        after = 0
+
+    rows = get_db().execute(
+        """
+        SELECT msg.*, p.name AS sender_name FROM messages msg
+        JOIN profiles p ON p.user_id = msg.sender_id
+        WHERE msg.match_id = ? AND msg.id > ?
+        ORDER BY msg.id
+        """,
+        (match_id, after),
+    ).fetchall()
+
+    return {"messages": [message_dict(r) for r in rows]}
+
+
 @app.route("/chat/<int:match_id>/send", methods=["POST"])
 @login_required
 def send_message(match_id):
     match, _ = get_match_participants(match_id)
+    wants_json = "application/json" in request.headers.get("Accept", "")
+
+    def fail(msg, code):
+        if wants_json:
+            return {"error": msg}, code
+        flash(msg)
+        target = "chats" if match is None else "chat"
+        kwargs = {} if match is None else {"match_id": match_id}
+        return redirect(url_for(target, **kwargs))
+
     if match is None:
-        flash("That chatroom does not exist.")
-        return redirect(url_for("chats"))
+        return fail("That chatroom does not exist.", 404)
 
     body = request.form.get("body", "").strip()
     # Messages are always sent as the logged-in user, who must be one
     # of the two matched participants.
     sender_id = session["user_id"]
     if sender_id not in (match["user_a"], match["user_b"]):
-        flash("Only the two matched members can write in this chatroom.")
-    elif not body:
-        flash("Message can't be empty.")
-    else:
-        db = get_db()
-        db.execute(
-            "INSERT INTO messages (match_id, sender_id, body) VALUES (?, ?, ?)",
-            (match_id, sender_id, body),
-        )
-        db.commit()
+        return fail("Only the two matched members can write in this chatroom.", 403)
+    if not body:
+        return fail("Message can't be empty.", 400)
+
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO messages (match_id, sender_id, body) VALUES (?, ?, ?)",
+        (match_id, sender_id, body),
+    )
+    db.commit()
+
+    if wants_json:
+        row = db.execute(
+            """
+            SELECT msg.*, p.name AS sender_name FROM messages msg
+            JOIN profiles p ON p.user_id = msg.sender_id
+            WHERE msg.id = ?
+            """,
+            (cur.lastrowid,),
+        ).fetchone()
+        return {"message": message_dict(row)}
 
     return redirect(url_for("chat", match_id=match_id))
 
