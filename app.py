@@ -31,7 +31,7 @@ from flask import (
     session,
     url_for,
 )
-from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.security import generate_password_hash
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
@@ -158,100 +158,39 @@ def inject_user():
     return {"current_user": current_user()}
 
 
+@app.before_request
 def auto_login_admin():
-    """Sign the request in as the admin account (local demo convenience)."""
+    """Login is disabled for now: every visitor is signed in as admin."""
+    if session.get("user_id") is not None:
+        return
     admin = get_db().execute(
         "SELECT id FROM users WHERE username = ?", (ADMIN_USERNAME,)
     ).fetchone()
-    if admin is None:
-        return False
-    session.clear()
-    session["user_id"] = admin["id"]
-    flash("Signed in automatically as admin (set AUTO_LOGIN=0 to disable).")
-    return True
+    if admin is not None:
+        session["user_id"] = admin["id"]
 
 
 @app.route("/")
 def index():
-    if session.get("user_id"):
-        return redirect(url_for("browse"))
-    if AUTO_LOGIN and not session.get("no_auto_login") and auto_login_admin():
-        return redirect(url_for("browse"))
-    return redirect(url_for("login"))
+    return redirect(url_for("browse"))
 
 
+# Login is bypassed for now: auto_login_admin() signs every visitor in as
+# admin, and the login/register pages just forward to the site.
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    if session.get("user_id"):
-        return redirect(url_for("browse"))
-
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-        confirm = request.form.get("confirm", "")
-
-        error = None
-        if not username or len(username) < 3:
-            error = "Username must be at least 3 characters."
-        elif len(password) < 8:
-            error = "Password must be at least 8 characters."
-        elif password != confirm:
-            error = "Passwords do not match."
-
-        if error is None:
-            db = get_db()
-            try:
-                cur = db.execute(
-                    "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                    (username, generate_password_hash(password)),
-                )
-                db.execute(
-                    "INSERT INTO profiles (user_id) VALUES (?)", (cur.lastrowid,)
-                )
-                db.commit()
-            except sqlite3.IntegrityError:
-                error = "That username is already taken."
-            else:
-                session.clear()
-                session["user_id"] = cur.lastrowid
-                flash("Welcome! Now set up your profile.")
-                return redirect(url_for("edit_profile"))
-
-        flash(error)
-
-    return render_template("register.html")
+    return redirect(url_for("browse"))
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if session.get("user_id"):
-        return redirect(url_for("browse"))
-
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-
-        user = get_db().execute(
-            "SELECT * FROM users WHERE username = ?", (username,)
-        ).fetchone()
-
-        if user and check_password_hash(user["password_hash"], password):
-            session.clear()
-            session["user_id"] = user["id"]
-            return redirect(url_for("browse"))
-
-        flash("Invalid username or password.")
-
-    return render_template("login.html")
+    return redirect(url_for("browse"))
 
 
 @app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
-    # Remember the explicit logout so "/" doesn't immediately sign the
-    # browser back in as admin.
-    session["no_auto_login"] = True
-    return redirect(url_for("login"))
+    return redirect(url_for("index"))
 
 
 @app.route("/profile/edit", methods=["GET", "POST"])

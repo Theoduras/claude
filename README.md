@@ -62,15 +62,15 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Then open <http://localhost:5000>. Create an account, fill in your profile
-(name, age, location, bio, interests, hobbies, wants, needs, relationship
-type), and browse other members' profiles.
+Then open <http://localhost:5000>. Fill in your profile (name, age,
+location, bio, interests, hobbies, wants, needs, relationship type) and
+browse other members' profiles.
 
-An **admin account** (username `admin`, password `admin12345`, override
-with `APP_ADMIN_PASSWORD`) is created automatically on first start, and
-opening the site signs you in as admin automatically. Set `AUTO_LOGIN=0`
-to disable auto-login and use the normal login page instead; after an
-explicit logout the login page is shown either way.
+**Login is currently bypassed:** every visitor is signed in automatically
+as the seeded `admin` account and lands straight on the browse page. The
+`/login` and `/register` pages just forward into the site. (The account
+and password-hashing plumbing is still in place, so a real login flow can
+be re-enabled later.)
 
 Data is stored in a local SQLite file (`dating.db`, git-ignored). Set
 `APP_SECRET_KEY` to keep login sessions valid across restarts. This is a
