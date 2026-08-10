@@ -83,6 +83,17 @@ fi
 CONN_NAME="$(gcloud sql instances describe "$INSTANCE" --format='value(connectionName)')"
 [[ -n "$CONN_NAME" ]] || die "could not read connectionName for $INSTANCE"
 
+# The connection name embeds the instance's real region, which is not necessarily
+# --region: an instance created by an earlier run in another region is reused
+# silently, and every query then crosses regions. Surface it rather than hide it.
+INSTANCE_REGION="$(gcloud sql instances describe "$INSTANCE" --format='value(region)')"
+if [[ "$INSTANCE_REGION" != "$REGION" ]]; then
+  die "Cloud SQL instance $INSTANCE is in $INSTANCE_REGION but --region is $REGION.
+     Cloud Run in $REGION would reach it cross-region on every query.
+     Either deploy with --region $INSTANCE_REGION, or use a differently named
+     instance in $REGION with --instance (see docs/deploy-gcp.md)."
+fi
+
 if gcloud sql databases describe "$DB_NAME" --instance="$INSTANCE" --quiet >/dev/null 2>&1; then
   echo "database $DB_NAME exists"
 else
@@ -108,6 +119,19 @@ create_secret() { # name, value
 log "Provisioning secrets"
 if secret_exists velvet-db-pass; then
   DB_PASS="$(gcloud secrets versions access latest --secret=velvet-db-pass)"
+  # A password from `openssl rand -base64` can contain "/" or "+". Older versions
+  # of the app pasted credentials into a URI, where "/" ends the userinfo segment
+  # and libpq then reads the password as the port — the container crash-looped on
+  # "invalid integer value ... for connection option port". The app now escapes
+  # properly, but a password like that is still a trap for anything else reading
+  # the secret, so say so once.
+  if [[ "$DB_PASS" =~ [^A-Za-z0-9_-] ]]; then
+    echo "note: velvet-db-pass contains characters outside [A-Za-z0-9_-]."
+    echo "      To rotate it to a URI-safe value:"
+    echo "        NEW=\$(python3 -c 'import secrets;print(secrets.token_urlsafe(32),end=\"\")')"
+    echo "        printf '%s' \"\$NEW\" | gcloud secrets versions add velvet-db-pass --data-file=-"
+    echo "      then re-run this script (it resets the Cloud SQL user to match)."
+  fi
 else
   DB_PASS="$(python3 -c 'import secrets;print(secrets.token_urlsafe(32),end="")')"
   create_secret velvet-db-pass "$DB_PASS"
@@ -193,6 +217,28 @@ gcloud run deploy "$SERVICE" \
   --quiet
 
 URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
+
+# ----------------------------------------------------------- Smoke check
+# `gcloud run deploy` succeeds as soon as the container answers the startup
+# TCP probe, which gunicorn does before it imports the app. If the app then
+# fails to reach the database, every worker exits and the service 503s while
+# the deploy reports success. Check an actual request before saying "deployed".
+log "Checking the service responds"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$URL/" || echo 000)"
+case "$CODE" in
+  200|302)
+    echo "GET / -> $CODE"
+    ;;
+  *)
+    echo "GET / -> $CODE" >&2
+    die "the service deployed but does not serve requests.
+     Read the startup errors with:
+       gcloud run services logs read $SERVICE --region=$REGION --limit=50
+     A 503 with 'Worker failed to boot' in the logs is almost always the
+     database connection: check DB_PASS, the Cloud SQL attachment, and that
+     $DB_USER exists on $INSTANCE."
+    ;;
+esac
 
 # ------------------------------------------------------------------ Seed
 if [[ "$SEED" == "1" ]]; then

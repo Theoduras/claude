@@ -26,6 +26,7 @@ import re
 import secrets
 
 import psycopg
+from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -46,32 +47,40 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
 
 
-def database_url():
+def database_conninfo():
     """Build the Postgres connection string from the environment.
 
     DATABASE_URL wins if set. Otherwise the parts are assembled, which is
     what the Cloud Run deployment uses: INSTANCE_CONNECTION_NAME makes the
     app connect over the Cloud SQL unix socket rather than TCP.
+
+    The parts go through make_conninfo rather than into a URI f-string
+    because credentials are not URI-safe. A password containing "/" ends
+    the userinfo segment early, so libpq reads the text before it as the
+    port and the app dies at startup with "invalid integer value ... for
+    connection option port" — which is exactly what a base64 password
+    (openssl rand -base64) produces sooner or later.
     """
     url = os.environ.get("DATABASE_URL")
     if url:
         return url
 
-    user = os.environ.get("DB_USER", "postgres")
-    password = os.environ.get("DB_PASS", "postgres")
-    name = os.environ.get("DB_NAME", "velvet")
+    parts = {
+        "user": os.environ.get("DB_USER", "postgres"),
+        "password": os.environ.get("DB_PASS", "postgres"),
+        "dbname": os.environ.get("DB_NAME", "velvet"),
+    }
 
     instance = os.environ.get("INSTANCE_CONNECTION_NAME")
     if instance:
         socket_dir = os.environ.get("DB_SOCKET_DIR", "/cloudsql")
-        return (
-            f"postgresql://{user}:{password}@/{name}"
-            f"?host={socket_dir}/{instance}"
-        )
+        return make_conninfo(**parts, host=f"{socket_dir}/{instance}")
 
-    host = os.environ.get("DB_HOST", "127.0.0.1")
-    port = os.environ.get("DB_PORT", "5432")
-    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+    return make_conninfo(
+        **parts,
+        host=os.environ.get("DB_HOST", "127.0.0.1"),
+        port=os.environ.get("DB_PORT", "5432"),
+    )
 
 
 # Each instance keeps a deliberately small pool: Cloud Run multiplies it by
@@ -81,7 +90,7 @@ POOL_MIN_SIZE = int(os.environ.get("DB_POOL_MIN", 1))
 POOL_MAX_SIZE = int(os.environ.get("DB_POOL_MAX", 5))
 
 POOL = ConnectionPool(
-    conninfo=database_url(),
+    conninfo=database_conninfo(),
     min_size=POOL_MIN_SIZE,
     max_size=POOL_MAX_SIZE,
     max_idle=1800,  # recycle idle connections after 30 min
