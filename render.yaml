@@ -5,21 +5,17 @@ services:
   - type: web
     name: velvet-dating
     runtime: python
-    plan: starter # paid tier — required for the persistent disk below.
-    # Using "free" instead works, but Render's free web services spin down
-    # after 15 min idle and wipe local disk on every restart/redeploy, so
-    # dating.db resets constantly. Drop the whole `disk:` block (and the
-    # DATABASE_PATH env var) if you go with "free" and accept that.
+    plan: free
+    # Free tier: no persistent disk, and the instance spins down after
+    # ~15 min idle. The next request wakes it back up on a fresh
+    # filesystem, so dating.db (SQLite, next to app.py) resets at that
+    # point and on every redeploy — expect data to periodically vanish.
+    # Upgrade to `plan: starter` + a `disk:` block for real persistence;
+    # see docs/deploy-render.md for the exact config.
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn -w 2 --threads 4 -b 0.0.0.0:$PORT app:app
     healthCheckPath: /login
-    disk:
-      name: velvet-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
-      - key: DATABASE_PATH
-        value: /var/data/dating.db
       - key: APP_SECRET_KEY
         generateValue: true
       - key: APP_ADMIN_PASSWORD

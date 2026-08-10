@@ -1,13 +1,11 @@
-# Deploying Velvet to Render (live URL + persistent database)
+# Deploying Velvet to Render (live URL)
 
 This repo includes a `render.yaml` Blueprint that deploys the Flask app
-(`app.py`) behind gunicorn, with the SQLite database on a persistent disk
-so data survives restarts and redeploys.
+(`app.py`) behind gunicorn on Render's **free** tier.
 
 ## One-time setup
 
-1. Sign up / log in at <https://dashboard.render.com> (free account is
-   fine to start).
+1. Sign up / log in at <https://dashboard.render.com> (free account).
 2. **New** → **Blueprint**.
 3. Connect your GitHub account if you haven't, then pick the
    `Theoduras/claude` repo and the `claude/localhost-login-page-el4mjf`
@@ -17,33 +15,46 @@ so data survives restarts and redeploys.
    Click **Apply**.
 5. On the service's **Environment** tab, set `APP_ADMIN_PASSWORD` to a
    real password (it's marked `sync: false` in the blueprint so Render
-   prompts for it instead of storing a default). `APP_SECRET_KEY` is
-   auto-generated for you.
+   prompts for it instead of using the app's weak default).
+   `APP_SECRET_KEY` is auto-generated for you.
 6. First deploy takes a minute or two. When it's live, Render shows the
    URL — something like `https://velvet-dating.onrender.com`.
 
 That URL is permanent (until you delete the service) and every push to
 the connected branch triggers an automatic redeploy.
 
-## Persistent data
+## About data on the free tier
 
-`render.yaml` mounts a 1 GB disk at `/var/data` and points
-`DATABASE_PATH` at `/var/data/dating.db`, so the SQLite file lives on
-that disk instead of the app's ephemeral filesystem. It survives
-redeploys and restarts.
+The free plan has no persistent disk, and the instance **spins down
+after ~15 minutes of no traffic**. The next request boots a fresh
+instance with an empty filesystem — so the SQLite file (`dating.db`,
+living next to `app.py`) resets at that point, and also on every
+redeploy. Useful for showing off the UI and flows, not for data you
+need to keep.
 
-This requires a **paid instance type** (`plan: starter`, ~$7/mo) —
-Render's free web service tier doesn't support persistent disks, and
-free instances spin down after 15 minutes of inactivity and come back
-with a wiped filesystem, so the database would reset constantly. If you
-want to stay on the free tier for now and accept that trade-off, delete
-the `disk:` block and the `DATABASE_PATH` env var from `render.yaml`
-before deploying — the app falls back to `dating.db` next to `app.py`,
-which resets on every redeploy/spin-down.
+If/when you want data to actually stick around, switch to a paid
+instance and add a persistent disk — bump `render.yaml`:
 
-## Seeding demo data (optional)
+```yaml
+plan: starter # or higher
+disk:
+  name: velvet-data
+  mountPath: /var/data
+  sizeGB: 1
+envVars:
+  - key: DATABASE_PATH
+    value: /var/data/dating.db
+  # ...keep the other envVars from the free config
+```
 
-After the first deploy, open the service's **Shell** tab in the Render
+`app.py` already reads `DATABASE_PATH` from the environment (falls back
+to `dating.db` next to `app.py` when unset), so no code changes are
+needed to make that switch — just edit `render.yaml` and redeploy.
+
+## Seeding demo data
+
+After each fresh boot (first deploy, or any time the instance spins
+back up empty), open the service's **Shell** tab in the Render
 dashboard and run:
 
 ```bash
@@ -51,14 +62,14 @@ python seed_demo.py
 ```
 
 This adds 20 demo members who are all live-searching, so a search finds
-a match immediately. Re-run any time (safe), or `python seed_demo.py
---reset` to wipe and re-add them.
+a match immediately. `python seed_demo.py --reset` wipes and re-adds
+them.
 
 ## Iterating
 
-Just keep pushing commits to the connected branch — Render rebuilds and
-redeploys automatically, and the database on the persistent disk is
-untouched by the redeploy.
+Push commits to the connected branch — Render rebuilds and redeploys
+automatically. On the free tier, each redeploy also resets the
+database, so re-run the seeder afterward if you want demo data back.
 
 ## Local development is unaffected
 
