@@ -7,7 +7,7 @@
 {% if top %}
   {% set p = top.profile %}
   <div class="card best-option">
-    <span class="tag">&#10084; Top match{% if top.score %} &middot; {{ top.score }} points{% endif %}</span>
+    <span class="tag">&#10084; Top match{% if top.score %} &middot; {{ top.score }}% mutual fit{% endif %}</span>
     <h2 style="margin: 0.75rem 0 0.25rem;">
       {{ p['name'] }}{% if p['age'] %}, {{ p['age'] }}{% endif %}
     </h2>
@@ -44,7 +44,7 @@
             {% if p['gender'] %} &middot; {{ p['gender'] }}{% endif %}
             {% if p['location'] %} &middot; {{ p['location'] }}{% endif %}
           </div>
-          {% if m.score %}<div><span class="tag">{{ m.score }} points</span></div>{% endif %}
+          {% if m.score %}<div><span class="tag">{{ m.score }}% mutual fit</span></div>{% endif %}
           {% if m.reasons %}
             <div class="bio">{{ m.reasons | join(" · ") }}</div>
           {% endif %}

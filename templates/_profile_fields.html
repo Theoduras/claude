@@ -47,3 +47,82 @@
     <option value="{{ rt }}" {% if profile['relationship_type'] == rt %}selected{% endif %}>{{ rt }}</option>
   {% endfor %}
 </select>
+
+<div class="field-group">
+  <h2>Physical attributes</h2>
+  <p class="subtitle">All optional — anything you leave blank is simply skipped when matching.</p>
+</div>
+
+<label for="height_cm">Height (cm)</label>
+<input id="height_cm" name="height_cm" type="number"
+       min="{{ height_min }}" max="{{ height_max }}"
+       value="{{ profile['height_cm'] or '' }}" placeholder="e.g. 175">
+
+{% for field, label, options in [
+     ('body_type', 'Body type', body_types),
+     ('fitness_level', 'Fitness level', fitness_levels),
+     ('hair_color', 'Hair colour', hair_colors),
+     ('eye_color', 'Eye colour', eye_colors),
+     ('tattoos', 'Tattoos', tattoo_levels),
+   ] %}
+  <label for="{{ field }}">{{ label }}</label>
+  <select id="{{ field }}" name="{{ field }}">
+    <option value="">— Select —</option>
+    {% for opt in options %}
+      <option value="{{ opt }}" {% if profile[field] == opt %}selected{% endif %}>{{ opt }}</option>
+    {% endfor %}
+  </select>
+{% endfor %}
+
+<div class="field-group">
+  <h2>What I'm looking for (physical)</h2>
+  <p class="subtitle">
+    These weigh heavily in your match ranking, and they count both ways — a
+    match scores well only when each of you fits what the other asked for.
+  </p>
+</div>
+
+<div class="field-pair">
+  <div>
+    <label for="pref_height_min">Height from (cm)</label>
+    <input id="pref_height_min" name="pref_height_min" type="number"
+           min="{{ height_min }}" max="{{ height_max }}"
+           value="{{ profile['pref_height_min'] or '' }}" placeholder="{{ height_min }}">
+  </div>
+  <div>
+    <label for="pref_height_max">Height to (cm)</label>
+    <input id="pref_height_max" name="pref_height_max" type="number"
+           min="{{ height_min }}" max="{{ height_max }}"
+           value="{{ profile['pref_height_max'] or '' }}" placeholder="{{ height_max }}">
+  </div>
+</div>
+<p class="hint">Set both or neither. Leave empty for no height preference.</p>
+
+{% set chosen_body_types = (profile['pref_body_types'] or '').split(',') %}
+<label>Body types I'm drawn to</label>
+<div class="checkgroup">
+  {% for bt in body_types %}
+    <label for="pref_body_types_{{ loop.index }}">
+      <input type="checkbox" id="pref_body_types_{{ loop.index }}"
+             name="pref_body_types" value="{{ bt }}"
+             {% if bt in chosen_body_types %}checked{% endif %}>
+      {{ bt }}
+    </label>
+  {% endfor %}
+</div>
+<p class="hint">Tick any that apply. None ticked means no preference.</p>
+
+{% for field, label, options in [
+     ('pref_fitness_level', 'Preferred fitness level', fitness_levels),
+     ('pref_hair_color', 'Preferred hair colour', hair_colors),
+     ('pref_eye_color', 'Preferred eye colour', eye_colors),
+     ('pref_tattoos', 'Preferred tattoos', tattoo_levels),
+   ] %}
+  <label for="{{ field }}">{{ label }}</label>
+  <select id="{{ field }}" name="{{ field }}">
+    <option value="">No preference</option>
+    {% for opt in options %}
+      <option value="{{ opt }}" {% if profile[field] == opt %}selected{% endif %}>{{ opt }}</option>
+    {% endfor %}
+  </select>
+{% endfor %}

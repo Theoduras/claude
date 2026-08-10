@@ -74,8 +74,14 @@
   var statusLine = document.getElementById("status-line");
   var statusUrl = "{{ url_for('search_status') }}";
 
+  // Short-poll loop — see the note in chat.html. Each poll also re-runs
+  // the pairing attempt server-side, so a partner who starts searching
+  // after this page loaded is still picked up.
+  var POLL_MS = 1500;
+  var RETRY_MS = 4000;
+
   function listen() {
-    fetch(statusUrl + "?wait=1", { headers: { "Accept": "application/json" } })
+    fetch(statusUrl, { headers: { "Accept": "application/json" } })
       .then(function (res) {
         if (!res.ok) throw new Error(res.status);
         return res.json();
@@ -90,11 +96,11 @@
           window.location.href = "{{ url_for('live_search') }}";
           return;
         }
-        listen();
+        setTimeout(listen, POLL_MS);
       })
       .catch(function () {
         statusLine.textContent = "Reconnecting…";
-        setTimeout(listen, 2000);
+        setTimeout(listen, RETRY_MS);
       });
   }
 
