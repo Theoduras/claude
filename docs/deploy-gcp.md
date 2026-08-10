@@ -143,37 +143,59 @@ already-created Cloud Run service + Cloud SQL instance above on every push
 to `claude/local-dev-workflow-plan-p8bfzv` (or via **Run workflow** in the
 Actions tab). It assumes steps 1–4 have already been done once by hand.
 
-One-time setup, using a deploy-scoped service account:
+One-time setup, using **Workload Identity Federation** — GitHub Actions
+authenticates without any long-lived key. This is required on projects where
+the `iam.disableServiceAccountKeyCreation` org policy blocks SA key creation
+(the default on projects created since mid-2024), and is the recommended
+path regardless:
 
 ```bash
-gcloud iam service-accounts create velvet-deployer \
-  --display-name="Velvet CI deployer"
+gcloud services enable iamcredentials.googleapis.com --project="$PROJECT_ID"
 
-SA="velvet-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
+gcloud iam workload-identity-pools create "github-pool" \
+  --project="$PROJECT_ID" --location=global \
+  --display-name="GitHub Actions"
 
-for role in roles/run.admin roles/cloudsql.client \
-            roles/secretmanager.secretAccessor roles/iam.serviceAccountUser \
-            roles/cloudbuild.builds.editor roles/artifactregistry.writer \
-            roles/storage.admin; do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:${SA}" --role="$role"
-done
+gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --project="$PROJECT_ID" --location=global \
+  --workload-identity-pool="github-pool" \
+  --display-name="GitHub OIDC" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+  --attribute-condition="assertion.repository=='Theoduras/claude'"
 
-gcloud iam service-accounts keys create /tmp/velvet-deployer-key.json \
-  --iam-account="$SA"
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+gcloud iam service-accounts add-iam-policy-binding "$SA" \
+  --project="$PROJECT_ID" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool/attribute.repository/Theoduras/claude"
+
+gcloud iam workload-identity-pools providers describe "github-provider" \
+  --project="$PROJECT_ID" --location=global \
+  --workload-identity-pool="github-pool" --format="value(name)"
 ```
+
+The default compute SA already carries the roles this deploy needs (granted
+in step 4 above, plus `cloudbuild.builds.editor` and
+`secretmanager.secretAccessor`); a dedicated `velvet-deployer` account isn't
+necessary unless you want CI's identity separated from the app's runtime
+identity.
 
 Then in the repo's **Settings → Secrets and variables → Actions**, add:
 
-- `GCP_SA_KEY` — contents of `/tmp/velvet-deployer-key.json` (delete the
-  local file afterwards)
+- `GCP_WORKLOAD_IDENTITY_PROVIDER` — the resource name printed by the last
+  command above
+- `GCP_SERVICE_ACCOUNT` — `$SA` from above
 - `GCP_PROJECT_ID` — your `$PROJECT_ID`
 - `GCP_REGION` (optional, as a **variable** not a secret) — defaults to
   `us-central1` if unset
 
-A service-account JSON key is the simplest option here; swap it for
-[Workload Identity Federation](https://github.com/google-github-actions/auth#setting-up-workload-identity-federation)
-if you'd rather not hold a long-lived key.
+Both grants (`iam.workloadIdentityPoolAdmin` to create the pool/provider,
+`iam.serviceAccountKeyAdmin` if you experiment with keys instead) are
+project-level IAM roles — grant them to your own account first if a command
+above 403s with a `PERMISSION_DENIED` naming that permission.
 
 ## Local development
 
