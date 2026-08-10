@@ -8,8 +8,11 @@ Run it:
 Then open http://localhost:5000 in your browser. Register an account,
 fill in your profile, and browse other members.
 
-Data is stored in a local SQLite file (dating.db, or wherever DATABASE_PATH
-points). Set APP_SECRET_KEY to keep sessions valid across restarts.
+Data lives in PostgreSQL, so the app is stateless and can be scaled out
+across many instances (see docs/deploy-gcp.md). Point DATABASE_URL at your
+database, or set DB_USER/DB_PASS/DB_NAME plus either DB_HOST or
+INSTANCE_CONNECTION_NAME (Cloud SQL). Set APP_SECRET_KEY to keep sessions
+valid across restarts and across instances.
 
 An admin account is created automatically on startup (username "admin",
 password from APP_ADMIN_PASSWORD, default "admin12345"). Anyone can
@@ -21,9 +24,10 @@ import math
 import os
 import re
 import secrets
-import sqlite3
-import threading
-import time
+
+import psycopg
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 from flask import (
     Flask,
@@ -40,8 +44,48 @@ from werkzeug.security import check_password_hash, generate_password_hash
 app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
 
-DATABASE = os.environ.get("DATABASE_PATH") or os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "dating.db"
+
+def database_url():
+    """Build the Postgres connection string from the environment.
+
+    DATABASE_URL wins if set. Otherwise the parts are assembled, which is
+    what the Cloud Run deployment uses: INSTANCE_CONNECTION_NAME makes the
+    app connect over the Cloud SQL unix socket rather than TCP.
+    """
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        return url
+
+    user = os.environ.get("DB_USER", "postgres")
+    password = os.environ.get("DB_PASS", "postgres")
+    name = os.environ.get("DB_NAME", "velvet")
+
+    instance = os.environ.get("INSTANCE_CONNECTION_NAME")
+    if instance:
+        socket_dir = os.environ.get("DB_SOCKET_DIR", "/cloudsql")
+        return (
+            f"postgresql://{user}:{password}@/{name}"
+            f"?host={socket_dir}/{instance}"
+        )
+
+    host = os.environ.get("DB_HOST", "127.0.0.1")
+    port = os.environ.get("DB_PORT", "5432")
+    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+
+
+# Each instance keeps a deliberately small pool: Cloud Run multiplies it by
+# the number of running instances, and that product is what exhausts a
+# Cloud SQL instance's connection limit.
+POOL_MIN_SIZE = int(os.environ.get("DB_POOL_MIN", 1))
+POOL_MAX_SIZE = int(os.environ.get("DB_POOL_MAX", 5))
+
+POOL = ConnectionPool(
+    conninfo=database_url(),
+    min_size=POOL_MIN_SIZE,
+    max_size=POOL_MAX_SIZE,
+    max_idle=1800,  # recycle idle connections after 30 min
+    kwargs={"row_factory": dict_row},
+    open=False,
 )
 
 ADMIN_USERNAME = "admin"
@@ -146,138 +190,194 @@ PROFILE_FIELDS = [
 PREF_BODY_TYPES_FIELD = "pref_body_types"
 
 
+class Db:
+    """Thin wrapper giving a psycopg connection the shape this file expects.
+
+    Call sites keep using `?` placeholders and
+    `db.execute(...).fetchone()`. Postgres wants `%s`, so placeholders are
+    rewritten here — safe because no query in this file contains a literal
+    `?` or `%`. Rows come back as dicts, so both `row["col"]` and
+    `dict(row)` behave as they did with `sqlite3.Row`.
+    """
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql, params=()):
+        cur = self._conn.cursor()
+        cur.execute(sql.replace("?", "%s"), params)
+        return cur
+
+    def insert_returning_id(self, sql, params=()):
+        """Postgres has no lastrowid; ask the INSERT for the new id."""
+        return self.execute(sql + " RETURNING id", params).fetchone()["id"]
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DATABASE)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db_conn = POOL.getconn()
+        g.db = Db(g.db_conn)
     return g.db
 
 
 @app.teardown_appcontext
 def close_db(exc):
-    db = g.pop("db", None)
-    if db is not None:
-        db.close()
+    conn = g.pop("db_conn", None)
+    g.pop("db", None)
+    if conn is not None:
+        # Never hand a connection back mid-transaction.
+        if exc is not None:
+            conn.rollback()
+        POOL.putconn(conn)
+
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Case-insensitive uniqueness, the equivalent of SQLite's COLLATE NOCASE.
+-- An expression index rather than the citext extension, so no database
+-- privileges beyond CREATE are needed.
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_idx
+    ON users (LOWER(username));
+
+CREATE TABLE IF NOT EXISTS profiles (
+    user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    age INTEGER,
+    gender TEXT NOT NULL DEFAULT '',
+    seeking TEXT NOT NULL DEFAULT '',
+    location TEXT NOT NULL DEFAULT '',
+    height_cm INTEGER,
+    body_type TEXT NOT NULL DEFAULT '',
+    fitness_level TEXT NOT NULL DEFAULT '',
+    hair_color TEXT NOT NULL DEFAULT '',
+    eye_color TEXT NOT NULL DEFAULT '',
+    tattoos TEXT NOT NULL DEFAULT '',
+    pref_height_min INTEGER,
+    pref_height_max INTEGER,
+    pref_body_types TEXT NOT NULL DEFAULT '',
+    pref_fitness_level TEXT NOT NULL DEFAULT '',
+    pref_hair_color TEXT NOT NULL DEFAULT '',
+    pref_eye_color TEXT NOT NULL DEFAULT '',
+    pref_tattoos TEXT NOT NULL DEFAULT '',
+    bio TEXT NOT NULL DEFAULT '',
+    interests TEXT NOT NULL DEFAULT '',
+    hobbies TEXT NOT NULL DEFAULT '',
+    wants TEXT NOT NULL DEFAULT '',
+    needs TEXT NOT NULL DEFAULT '',
+    relationship_type TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Bring databases created before the physical/preference columns existed
+-- up to date. Postgres has ADD COLUMN IF NOT EXISTS, so this is idempotent
+-- without the try/except loop the SQLite version needed.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS height_cm INTEGER;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS body_type TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS fitness_level TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS hair_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS eye_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tattoos TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_height_min INTEGER;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_height_max INTEGER;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_body_types TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_fitness_level TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_hair_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_eye_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_tattoos TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS matches (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_a BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_b BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_a, user_b),
+    CHECK (user_a < user_b)
+);
+
+-- One row per member currently looking for a live match.
+CREATE TABLE IF NOT EXISTS searches (
+    user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    seeking TEXT NOT NULL DEFAULT '',
+    age_min INTEGER NOT NULL DEFAULT 18,
+    age_max INTEGER NOT NULL DEFAULT 120,
+    relationship_type TEXT NOT NULL DEFAULT '',
+    interests TEXT NOT NULL DEFAULT '',
+    location TEXT NOT NULL DEFAULT '',
+    radius_km INTEGER NOT NULL DEFAULT 500,
+    status TEXT NOT NULL DEFAULT 'waiting',
+    match_id BIGINT REFERENCES matches(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- The pairing pass scans waiting searchers.
+CREATE INDEX IF NOT EXISTS searches_status_idx ON searches (status);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    match_id BIGINT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+    sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Serves the chat poll: "messages in this room newer than <id>".
+CREATE INDEX IF NOT EXISTS messages_match_id_idx ON messages (match_id, id);
+"""
+
+# Arbitrary but fixed keys for Postgres advisory locks. Any instance taking
+# the same key blocks the others, which is what replaces the in-process
+# locks this app used when it could only run as a single process.
+INIT_LOCK_KEY = 8_474_021
+PAIRING_LOCK_KEY = 8_474_022
 
 
 def init_db():
-    db = sqlite3.connect(DATABASE)
-    db.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL COLLATE NOCASE,
-            password_hash TEXT NOT NULL,
-            is_admin INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
+    """Create the schema and ensure the admin account exists.
 
-        CREATE TABLE IF NOT EXISTS profiles (
-            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-            name TEXT NOT NULL DEFAULT '',
-            age INTEGER,
-            gender TEXT NOT NULL DEFAULT '',
-            seeking TEXT NOT NULL DEFAULT '',
-            location TEXT NOT NULL DEFAULT '',
-            height_cm INTEGER,
-            body_type TEXT NOT NULL DEFAULT '',
-            fitness_level TEXT NOT NULL DEFAULT '',
-            hair_color TEXT NOT NULL DEFAULT '',
-            eye_color TEXT NOT NULL DEFAULT '',
-            tattoos TEXT NOT NULL DEFAULT '',
-            pref_height_min INTEGER,
-            pref_height_max INTEGER,
-            pref_body_types TEXT NOT NULL DEFAULT '',
-            pref_fitness_level TEXT NOT NULL DEFAULT '',
-            pref_hair_color TEXT NOT NULL DEFAULT '',
-            pref_eye_color TEXT NOT NULL DEFAULT '',
-            pref_tattoos TEXT NOT NULL DEFAULT '',
-            bio TEXT NOT NULL DEFAULT '',
-            interests TEXT NOT NULL DEFAULT '',
-            hobbies TEXT NOT NULL DEFAULT '',
-            wants TEXT NOT NULL DEFAULT '',
-            needs TEXT NOT NULL DEFAULT '',
-            relationship_type TEXT NOT NULL DEFAULT '',
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
+    Every instance runs this at boot, so it is wrapped in an advisory lock:
+    concurrent `CREATE TABLE IF NOT EXISTS` from several instances can
+    otherwise deadlock against each other.
+    """
+    with POOL.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (INIT_LOCK_KEY,))
+            cur.execute(SCHEMA)
 
-        CREATE TABLE IF NOT EXISTS matches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_a INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            user_b INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            UNIQUE (user_a, user_b),
-            CHECK (user_a < user_b)
-        );
-
-        -- One row per member currently looking for a live match.
-        CREATE TABLE IF NOT EXISTS searches (
-            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-            seeking TEXT NOT NULL DEFAULT '',
-            age_min INTEGER NOT NULL DEFAULT 18,
-            age_max INTEGER NOT NULL DEFAULT 120,
-            relationship_type TEXT NOT NULL DEFAULT '',
-            interests TEXT NOT NULL DEFAULT '',
-            location TEXT NOT NULL DEFAULT '',
-            radius_km INTEGER NOT NULL DEFAULT 500,
-            status TEXT NOT NULL DEFAULT 'waiting',
-            match_id INTEGER REFERENCES matches(id) ON DELETE SET NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
-            sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            body TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        """
-    )
-    # Migrate databases created before later columns existed.
-    for stmt in (
-        "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE profiles ADD COLUMN gender TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE profiles ADD COLUMN seeking TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE searches ADD COLUMN location TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE searches ADD COLUMN radius_km INTEGER NOT NULL DEFAULT 500",
-        "ALTER TABLE profiles ADD COLUMN height_cm INTEGER",
-        "ALTER TABLE profiles ADD COLUMN body_type TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE profiles ADD COLUMN fitness_level TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE profiles ADD COLUMN hair_color TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE profiles ADD COLUMN eye_color TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE profiles ADD COLUMN tattoos TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE profiles ADD COLUMN pref_height_min INTEGER",
-        "ALTER TABLE profiles ADD COLUMN pref_height_max INTEGER",
-        "ALTER TABLE profiles ADD COLUMN pref_body_types TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE profiles ADD COLUMN pref_fitness_level TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE profiles ADD COLUMN pref_hair_color TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE profiles ADD COLUMN pref_eye_color TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE profiles ADD COLUMN pref_tattoos TEXT NOT NULL DEFAULT ''",
-    ):
-        try:
-            db.execute(stmt)
-        except sqlite3.OperationalError:
-            pass
-
-    admin = db.execute(
-        "SELECT id FROM users WHERE username = ?", (ADMIN_USERNAME,)
-    ).fetchone()
-    if admin is None:
-        cur = db.execute(
-            "INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, 1)",
-            (ADMIN_USERNAME, generate_password_hash(ADMIN_PASSWORD)),
-        )
-        db.execute(
-            "INSERT INTO profiles (user_id, name) VALUES (?, 'Site Admin')",
-            (cur.lastrowid,),
-        )
-    else:
-        db.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (admin[0],))
-
-    db.commit()
-    db.close()
+            cur.execute(
+                "SELECT id FROM users WHERE LOWER(username) = LOWER(%s)",
+                (ADMIN_USERNAME,),
+            )
+            admin = cur.fetchone()
+            if admin is None:
+                cur.execute(
+                    """
+                    INSERT INTO users (username, password_hash, is_admin)
+                    VALUES (%s, %s, TRUE) RETURNING id
+                    """,
+                    (ADMIN_USERNAME, generate_password_hash(ADMIN_PASSWORD)),
+                )
+                admin_id = cur.fetchone()["id"]
+                cur.execute(
+                    "INSERT INTO profiles (user_id, name) VALUES (%s, 'Site Admin')",
+                    (admin_id,),
+                )
+            else:
+                cur.execute(
+                    "UPDATE users SET is_admin = TRUE WHERE id = %s", (admin["id"],)
+                )
 
 
 def current_user():
@@ -327,7 +427,7 @@ def auto_login_admin():
     if not AUTO_LOGIN or session.get("user_id") is not None:
         return
     admin = get_db().execute(
-        "SELECT id FROM users WHERE username = ?", (ADMIN_USERNAME,)
+        "SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (ADMIN_USERNAME,)
     ).fetchone()
     if admin is not None:
         session["user_id"] = admin["id"]
@@ -361,19 +461,18 @@ def register():
         if error is None:
             db = get_db()
             try:
-                cur = db.execute(
+                new_id = db.insert_returning_id(
                     "INSERT INTO users (username, password_hash) VALUES (?, ?)",
                     (username, generate_password_hash(password)),
                 )
-                db.execute(
-                    "INSERT INTO profiles (user_id) VALUES (?)", (cur.lastrowid,)
-                )
+                db.execute("INSERT INTO profiles (user_id) VALUES (?)", (new_id,))
                 db.commit()
-            except sqlite3.IntegrityError:
+            except psycopg.errors.UniqueViolation:
+                db.rollback()
                 error = "That username is already taken."
             else:
                 session.clear()
-                session["user_id"] = cur.lastrowid
+                session["user_id"] = new_id
                 flash("Welcome! Now set up your profile.")
                 return redirect(url_for("edit_profile"))
 
@@ -392,7 +491,7 @@ def login():
         password = request.form.get("password", "")
 
         user = get_db().execute(
-            "SELECT * FROM users WHERE username = ?", (username,)
+            "SELECT * FROM users WHERE LOWER(username) = LOWER(?)", (username,)
         ).fetchone()
 
         if user and check_password_hash(user["password_hash"], password):
@@ -786,7 +885,7 @@ def edit_profile():
                 UPDATE profiles SET
                     name = ?, age = ?, gender = ?, seeking = ?, location = ?,
                     bio = ?, interests = ?, hobbies = ?, wants = ?, needs = ?,
-                    relationship_type = ?, updated_at = datetime('now')
+                    relationship_type = ?, updated_at = NOW()
                 WHERE user_id = ?
                 """,
                 (
@@ -863,7 +962,7 @@ def admin_new_profile():
             try:
                 # Without a password the account can't log in until one
                 # is set; with one, the person can sign in right away.
-                cur = db.execute(
+                new_id = db.insert_returning_id(
                     "INSERT INTO users (username, password_hash) VALUES (?, ?)",
                     (
                         username,
@@ -880,18 +979,19 @@ def admin_new_profile():
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        cur.lastrowid, values["name"], age, values["gender"],
+                        new_id, values["name"], age, values["gender"],
                         values["seeking"], values["location"], values["bio"],
                         values["interests"], values["hobbies"], values["wants"],
                         values["needs"], values["relationship_type"],
                     ),
                 )
                 db.commit()
-            except sqlite3.IntegrityError:
+            except psycopg.errors.UniqueViolation:
+                db.rollback()
                 error = "That username is already taken."
             else:
                 flash(f"Profile for {values['name']} (@{username}) created.")
-                return redirect(url_for("view_profile", user_id=cur.lastrowid))
+                return redirect(url_for("view_profile", user_id=new_id))
 
         flash(error)
         profile = dict(values)
@@ -969,12 +1069,6 @@ def match_score(me, other):
 
 MATCH_OPTION_COUNT = 3
 
-# Serializes live-search pairing so two simultaneous searchers can't both
-# claim the same partner, and wakes anyone waiting for a match.
-SEARCH_LOCK = threading.Lock()
-SEARCH_EVENT = threading.Condition()
-SEARCH_WAIT_TIMEOUT = 25.0
-
 
 def city_coords(location):
     """Look up coordinates for a location string like 'Berlin, Germany'."""
@@ -1042,11 +1136,16 @@ def try_pair(user_id):
     """Pair this searcher with a waiting, mutually-compatible one.
 
     Returns the match id when a pair is formed (or already was), else None.
+
+    Pairing is serialized with a Postgres advisory lock rather than an
+    in-process one, so two searchers cannot claim the same partner even
+    when they are being served by different instances. The lock is held
+    for the transaction and released by the commit/rollback below.
     """
     db = get_db()
-    matched_id = None
 
-    with SEARCH_LOCK:
+    db.execute("SELECT pg_advisory_xact_lock(?)", (PAIRING_LOCK_KEY,))
+    try:
         mine = db.execute(
             """
             SELECT s.*, p.gender, p.age FROM searches s
@@ -1057,10 +1156,13 @@ def try_pair(user_id):
         ).fetchone()
 
         if mine is None:
+            db.commit()
             return None
         if mine["status"] == "matched":
+            db.commit()
             return mine["match_id"]
         if mine["status"] != "waiting":
+            db.commit()
             return None
 
         others = db.execute(
@@ -1084,6 +1186,7 @@ def try_pair(user_id):
                 best = (overlap, other)
 
         if best is None:
+            db.commit()
             return None
 
         partner_id = best[1]["user_id"]
@@ -1094,20 +1197,19 @@ def try_pair(user_id):
         if existing:
             matched_id = existing["id"]
         else:
-            matched_id = db.execute(
+            matched_id = db.insert_returning_id(
                 "INSERT INTO matches (user_a, user_b) VALUES (?, ?)", (a, b)
-            ).lastrowid
+            )
 
         db.execute(
             "UPDATE searches SET status = 'matched', match_id = ? WHERE user_id IN (?, ?)",
             (matched_id, user_id, partner_id),
         )
         db.commit()
-
-    # Wake the partner's waiting page immediately.
-    with SEARCH_EVENT:
-        SEARCH_EVENT.notify_all()
-    return matched_id
+        return matched_id
+    except Exception:
+        db.rollback()
+        raise
 
 
 def require_profile():
@@ -1194,7 +1296,7 @@ def search_criteria():
                 INSERT INTO searches
                     (user_id, seeking, age_min, age_max, relationship_type,
                      interests, location, radius_km, status, match_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, datetime('now'))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, NOW())
                 ON CONFLICT(user_id) DO UPDATE SET
                     seeking = excluded.seeking,
                     age_min = excluded.age_min,
@@ -1205,7 +1307,7 @@ def search_criteria():
                     radius_km = excluded.radius_km,
                     status = 'waiting',
                     match_id = NULL,
-                    created_at = datetime('now')
+                    created_at = NOW()
                 """,
                 (
                     user_id, seeking, age_min, age_max, wanted, interests,
@@ -1305,30 +1407,21 @@ def search_waiting():
 @app.route("/search/status")
 @login_required
 def search_status():
-    """Long-polled by the waiting page; returns as soon as a match exists."""
+    """Polled by the waiting page; reports whether a match exists yet.
+
+    Returns immediately rather than holding the request open. Waking the
+    exact instance that happens to hold a waiting request is not possible
+    once the app is scaled out, so the waiting page polls on a short tick
+    instead (see templates/search_waiting.html).
+    """
     user_id = session["user_id"]
 
-    def snapshot():
-        # Retry pairing on each pass so a searcher who arrived while we
-        # were waiting still gets picked up.
-        try_pair(user_id)
-        return get_db().execute(
-            "SELECT status, match_id FROM searches WHERE user_id = ?", (user_id,)
-        ).fetchone()
-
-    row = snapshot()
-    if row is None:
-        return {"status": "none"}
-
-    if row["status"] == "waiting" and request.args.get("wait") == "1":
-        deadline = time.monotonic() + SEARCH_WAIT_TIMEOUT
-        while row is not None and row["status"] == "waiting":
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            with SEARCH_EVENT:
-                SEARCH_EVENT.wait(min(remaining, 1.0))
-            row = snapshot()
+    # Retry pairing on each poll so a searcher who arrived since the last
+    # tick still gets picked up.
+    try_pair(user_id)
+    row = get_db().execute(
+        "SELECT status, match_id FROM searches WHERE user_id = ?", (user_id,)
+    ).fetchone()
 
     if row is None:
         return {"status": "none"}
@@ -1512,12 +1605,12 @@ def create_match(other_id):
     if existing:
         return redirect(url_for("chat", match_id=existing["id"]))
 
-    cur = db.execute(
+    new_id = db.insert_returning_id(
         "INSERT INTO matches (user_a, user_b) VALUES (?, ?)", (a, b)
     )
     db.commit()
     flash(f"It's a match! You and {other['name']} can chat now.")
-    return redirect(url_for("chat", match_id=cur.lastrowid))
+    return redirect(url_for("chat", match_id=new_id))
 
 
 @app.route("/chats")
@@ -1580,21 +1673,14 @@ def chat(match_id):
     )
 
 
-# Wakes long-polling /messages requests the moment a message is sent.
-NEW_MESSAGE = threading.Condition()
-
-
 def message_dict(row):
     return {
         "id": row["id"],
         "sender_id": row["sender_id"],
         "sender_name": row["sender_name"],
         "body": row["body"],
-        "created_at": row["created_at"],
+        "created_at": row["created_at"].isoformat(),
     }
-
-
-LONG_POLL_TIMEOUT = 25.0
 
 
 def fetch_messages_after(match_id, after):
@@ -1614,9 +1700,10 @@ def fetch_messages_after(match_id, after):
 def chat_messages(match_id):
     """JSON feed of messages newer than ?after=<id>.
 
-    With ?wait=1 the request is held open (long polling) until a message
-    arrives or LONG_POLL_TIMEOUT passes, so the browser sees new messages
-    the instant they are sent instead of on the next poll tick.
+    Returns immediately. The browser polls this on a short tick rather than
+    holding a long-poll open: with the app scaled out, the instance that
+    stores a message is usually not the one holding the recipient's open
+    request, so an in-process wake-up could never reach them.
     """
     match, _ = get_match_participants(match_id)
     user = current_user()
@@ -1631,17 +1718,6 @@ def chat_messages(match_id):
         after = 0
 
     rows = fetch_messages_after(match_id, after)
-
-    if not rows and request.args.get("wait") == "1":
-        deadline = time.monotonic() + LONG_POLL_TIMEOUT
-        while not rows:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            with NEW_MESSAGE:
-                NEW_MESSAGE.wait(min(remaining, 1.0))
-            rows = fetch_messages_after(match_id, after)
-
     return {"messages": [message_dict(r) for r in rows]}
 
 
@@ -1672,15 +1748,11 @@ def send_message(match_id):
         return fail("Message can't be empty.", 400)
 
     db = get_db()
-    cur = db.execute(
+    new_id = db.insert_returning_id(
         "INSERT INTO messages (match_id, sender_id, body) VALUES (?, ?, ?)",
         (match_id, sender_id, body),
     )
     db.commit()
-
-    # Release anyone long-polling this room.
-    with NEW_MESSAGE:
-        NEW_MESSAGE.notify_all()
 
     if wants_json:
         row = db.execute(
@@ -1689,7 +1761,7 @@ def send_message(match_id):
             JOIN profiles p ON p.user_id = msg.sender_id
             WHERE msg.id = ?
             """,
-            (cur.lastrowid,),
+            (new_id,),
         ).fetchone()
         return {"message": message_dict(row)}
 
@@ -1720,14 +1792,18 @@ def browse():
     )
 
 
-init_db()
+def startup():
+    """Open the pool and make sure the schema is in place."""
+    POOL.open()
+    init_db()
+
+
+startup()
 
 if __name__ == "__main__":
-    # threaded=True so long-polling chat requests don't block the server.
-    # host/port/debug are overridable for deployment (Render sets PORT;
-    # FLASK_DEBUG=0 turns off the reloader/debugger in production). In
-    # production, run behind gunicorn instead ("gunicorn app:app"), which
-    # skips this block entirely.
+    # host/port/debug are overridable for deployment (Cloud Run sets PORT;
+    # FLASK_DEBUG=0 turns off the reloader/debugger). In production this
+    # runs behind gunicorn ("gunicorn app:app"), which skips this block.
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_DEBUG", "1") not in ("0", "false", "no")
     app.run(host="0.0.0.0", port=port, debug=debug, threaded=True)
