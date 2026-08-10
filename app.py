@@ -109,12 +109,31 @@ RELATIONSHIP_TYPES = [
     "Not sure yet",
 ]
 
+BODY_TYPES = ["Slim", "Athletic", "Average", "Curvy", "Muscular", "Plus-size"]
+FITNESS_LEVELS = ["Sedentary", "Lightly active", "Active", "Very active", "Athlete"]
+HAIR_COLORS = ["Black", "Brown", "Blonde", "Red", "Grey/White", "Other"]
+EYE_COLORS = ["Brown", "Blue", "Green", "Hazel", "Grey", "Other"]
+TATTOO_LEVELS = ["None", "A few", "Many"]
+HEIGHT_MIN_CM, HEIGHT_MAX_CM = 130, 230
+
 PROFILE_FIELDS = [
     "name",
     "age",
     "gender",
     "seeking",
     "location",
+    "height_cm",
+    "body_type",
+    "fitness_level",
+    "hair_color",
+    "eye_color",
+    "tattoos",
+    "pref_height_min",
+    "pref_height_max",
+    "pref_fitness_level",
+    "pref_hair_color",
+    "pref_eye_color",
+    "pref_tattoos",
     "bio",
     "interests",
     "hobbies",
@@ -122,6 +141,9 @@ PROFILE_FIELDS = [
     "needs",
     "relationship_type",
 ]
+# Handled separately via request.form.getlist() — a checkbox group, not a
+# single value, so it doesn't fit the uniform PROFILE_FIELDS .get() loop.
+PREF_BODY_TYPES_FIELD = "pref_body_types"
 
 
 def get_db():
@@ -158,6 +180,19 @@ def init_db():
             gender TEXT NOT NULL DEFAULT '',
             seeking TEXT NOT NULL DEFAULT '',
             location TEXT NOT NULL DEFAULT '',
+            height_cm INTEGER,
+            body_type TEXT NOT NULL DEFAULT '',
+            fitness_level TEXT NOT NULL DEFAULT '',
+            hair_color TEXT NOT NULL DEFAULT '',
+            eye_color TEXT NOT NULL DEFAULT '',
+            tattoos TEXT NOT NULL DEFAULT '',
+            pref_height_min INTEGER,
+            pref_height_max INTEGER,
+            pref_body_types TEXT NOT NULL DEFAULT '',
+            pref_fitness_level TEXT NOT NULL DEFAULT '',
+            pref_hair_color TEXT NOT NULL DEFAULT '',
+            pref_eye_color TEXT NOT NULL DEFAULT '',
+            pref_tattoos TEXT NOT NULL DEFAULT '',
             bio TEXT NOT NULL DEFAULT '',
             interests TEXT NOT NULL DEFAULT '',
             hobbies TEXT NOT NULL DEFAULT '',
@@ -207,6 +242,19 @@ def init_db():
         "ALTER TABLE profiles ADD COLUMN seeking TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE searches ADD COLUMN location TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE searches ADD COLUMN radius_km INTEGER NOT NULL DEFAULT 500",
+        "ALTER TABLE profiles ADD COLUMN height_cm INTEGER",
+        "ALTER TABLE profiles ADD COLUMN body_type TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN fitness_level TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN hair_color TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN eye_color TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN tattoos TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN pref_height_min INTEGER",
+        "ALTER TABLE profiles ADD COLUMN pref_height_max INTEGER",
+        "ALTER TABLE profiles ADD COLUMN pref_body_types TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN pref_fitness_level TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN pref_hair_color TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN pref_eye_color TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN pref_tattoos TEXT NOT NULL DEFAULT ''",
     ):
         try:
             db.execute(stmt)
