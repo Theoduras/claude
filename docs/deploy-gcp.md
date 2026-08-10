@@ -5,6 +5,16 @@ Velvet runs as a stateless container on **Cloud Run**, with all data in
 demand, and because no state lives in the container, any instance can serve
 any request.
 
+**To do all of this in one command**, run the installer — it performs every
+step below, skipping whatever already exists:
+
+```bash
+./scripts/deploy_gcp.sh --project your-project-id --region us-central1 --seed
+```
+
+Re-running it redeploys. The rest of this page is the same sequence by hand,
+which is what to read when a step fails or you want to vary something.
+
 Set `PROJECT_ID` and `REGION` once and the commands below can be pasted as-is:
 
 ```bash
