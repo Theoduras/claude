@@ -1,0 +1,10 @@
+.git
+.gitignore
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+*.db
+docs
+setup.ps1
+README.md

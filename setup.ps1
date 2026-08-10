@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 $RepoUrl = "https://github.com/Theoduras/claude.git"
-$Branch = "claude/localhost-login-page-el4mjf"
+$Branch = "claude/determined-wozniak-orobzv"
 $TargetDir = Join-Path $HOME "velvet"
 $LegacyDir = Join-Path $HOME "heartlink"
 
@@ -51,6 +51,21 @@ Write-Host "Installing dependencies ..."
 & $python -m pip install --quiet -r (Join-Path $TargetDir "requirements.txt")
 
 Set-Location $TargetDir
+
+# Velvet stores its data in PostgreSQL so it can run across many instances
+# in the cloud; there is no local SQLite file any more.
+if (-not $env:DATABASE_URL) {
+    Write-Host ""
+    Write-Host "DATABASE_URL is not set." -ForegroundColor Yellow
+    Write-Host "Velvet needs a PostgreSQL database. With Docker installed:"
+    Write-Host ""
+    Write-Host '  docker run -d --name velvet-pg -e POSTGRES_PASSWORD=postgres `'
+    Write-Host '    -e POSTGRES_DB=velvet -p 5432:5432 postgres:16'
+    Write-Host '  $env:DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/velvet"'
+    Write-Host ""
+    Write-Host "Then re-run this script. See docs/deploy-gcp.md for details."
+    exit 1
+}
 
 Write-Host "Seeding 20 demo members into the live-search pool ..."
 & $python seed_demo.py

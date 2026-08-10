@@ -89,10 +89,15 @@
     scrollDown();
   }
 
-  // Long-poll loop: the request stays open until the server has something
-  // to send, so new messages arrive instantly rather than on a tick.
+  // Short-poll loop. The app runs across many stateless instances, so the
+  // one that stores a message is usually not the one serving this browser
+  // — there is no open request for it to release. Polling on a tick is what
+  // works in that setting; POLL_MS is the delivery latency.
+  var POLL_MS = 1500;
+  var RETRY_MS = 4000;
+
   function listen() {
-    fetch(log.dataset.messagesUrl + "?wait=1&after=" + lastId, {
+    fetch(log.dataset.messagesUrl + "?after=" + lastId, {
       headers: { "Accept": "application/json" }
     })
       .then(function (res) {
@@ -102,11 +107,11 @@
       .then(function (data) {
         data.messages.forEach(addMessage);
         status.textContent = "live";
-        listen();
+        setTimeout(listen, POLL_MS);
       })
       .catch(function () {
         status.textContent = "reconnecting…";
-        setTimeout(listen, 2000);
+        setTimeout(listen, RETRY_MS);
       });
   }
 

@@ -68,23 +68,32 @@ gradients form the pleats, and an inline SVG `feTurbulence` grain raked to
 because brushing velvet changes how it catches light. All tokens live at the
 top of `templates/base.html`.
 
+### Running it
+
+Velvet stores its data in **PostgreSQL**, so start one and point
+`DATABASE_URL` at it:
+
+```bash
+docker run -d --name velvet-pg -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=velvet -p 5432:5432 postgres:16
+
+export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/velvet
+pip install -r requirements.txt
+python seed_demo.py     # optional: 20 demo members
+python app.py
+```
+
 **Windows quick start** — paste this into PowerShell; it clones the repo to
-`~\velvet`, installs dependencies, opens your browser, and starts the app:
+`~\velvet`, installs dependencies, opens your browser, and starts the app.
+Set `DATABASE_URL` first (the script tells you how if you forget):
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/Theoduras/claude/claude/localhost-login-page-el4mjf/setup.ps1 -OutFile "$env:TEMP\setup.ps1"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\setup.ps1"
+iwr -useb https://raw.githubusercontent.com/Theoduras/claude/claude/determined-wozniak-orobzv/setup.ps1 -OutFile "$env:TEMP\setup.ps1"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\setup.ps1"
 ```
 
 Re-running it later pulls the latest version before starting. Requires
 [Git](https://git-scm.com/download/win) and
 [Python](https://www.python.org/downloads/) (check "Add python.exe to PATH").
-
-**Manual start** on any platform:
-
-```bash
-pip install -r requirements.txt
-python app.py
-```
 
 Then open <http://localhost:5000>. Fill in your profile (name, age, gender,
 who you're looking for, location, bio, interests, hobbies, wants, needs,
@@ -156,16 +165,34 @@ the profile exists but has no login access. For local development,
 
 Chat messages are always sent as the logged-in user, and chatrooms are
 private to the two matched members — the admin can view (not write in)
-any room. The chat updates in real time: messages send without a page
-reload, and the browser holds an open long-poll request that the server
-releases the instant a message is stored, so the other side sees it in
-milliseconds (no polling delay). Dropped connections retry automatically
-and the header shows `live` / `reconnecting…`.
+any room. Messages send without a page reload and the other side picks
+them up on a ~1.5 s poll; dropped connections retry automatically and the
+header shows `live` / `reconnecting…`.
 
-Data is stored in a local SQLite file (`dating.db`, git-ignored). Set
-`APP_SECRET_KEY` to keep login sessions valid across restarts. This is a
-local demo — the default admin password and auto-login make it unsafe to
-expose to the internet as-is.
+### Scaling
+
+The app is **stateless**: data lives in PostgreSQL and nothing is kept in
+process memory, so it can run across as many instances as you like. Two
+details make that true, and both matter if you change this code:
+
+- **Pairing** is serialized with a Postgres *advisory lock*, not an
+  in-process mutex, so two people searching at the same moment can't claim
+  the same partner even when different instances serve them.
+- **Chat and live-search poll** on a short tick rather than holding a
+  long-poll open. An in-process wake-up can only reach requests parked in
+  the *same* process, so with more than one instance it would silently fail
+  to deliver. Sub-second delivery would need cross-instance pub/sub —
+  see `docs/deploy-gcp.md`.
+
+Set `APP_SECRET_KEY` explicitly in any multi-instance deployment: the
+random per-process fallback would make sessions issued by one instance
+invalid on the next.
+
+Deploying to Cloud Run + Cloud SQL: **[docs/deploy-gcp.md](docs/deploy-gcp.md)**.
+
+The default admin password and `AUTO_LOGIN` make an unconfigured instance
+unsafe to expose publicly — set `APP_ADMIN_PASSWORD` and leave
+`AUTO_LOGIN=0`.
 
 ## Notes
 

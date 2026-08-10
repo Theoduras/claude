@@ -9,5 +9,5 @@ venv/
 .env
 *.key
 
-# Local database
+# Local database (pre-PostgreSQL leftovers)
 dating.db
