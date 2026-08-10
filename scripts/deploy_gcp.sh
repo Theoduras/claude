@@ -22,6 +22,7 @@ TIER="db-g1-small"
 DB_VERSION="POSTGRES_16"
 MAX_INSTANCES=10
 SEED=0
+BUILD="source"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -31,6 +32,7 @@ while [[ $# -gt 0 ]]; do
     --service)       SERVICE="$2"; shift 2 ;;
     --tier)          TIER="$2"; shift 2 ;;
     --max-instances) MAX_INSTANCES="$2"; shift 2 ;;
+    --build)         BUILD="$2"; shift 2 ;;
     --seed)          SEED=1; shift ;;
     -h|--help)       sed -n '2,12p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
@@ -140,11 +142,46 @@ for s in velvet-db-pass velvet-secret-key velvet-admin-pass; do
 done
 
 # ---------------------------------------------------------------- Deploy
-# --source builds with Cloud Build and pushes to Artifact Registry; the repo's
-# Dockerfile wins over buildpack detection.
-log "Building and deploying to Cloud Run"
+# Two ways in, because they need different permissions:
+#
+#   --build source  (default) hands the tree to Cloud Build. Simplest, but it
+#                   first uploads a zip to a GCS staging bucket, so the
+#                   deploying account needs storage.objects.create.
+#   --build docker  builds locally and pushes straight to Artifact Registry.
+#                   No GCS involved — use this when the account has
+#                   run.admin + artifactregistry.admin but no storage role,
+#                   which is common on projects where roles were granted
+#                   individually rather than via owner.
+case "$BUILD" in
+  source)
+    DEPLOY_SOURCE=(--source .)
+    ;;
+  docker)
+    command -v docker >/dev/null || die "--build docker needs docker (present in Cloud Shell)"
+    REPO="velvet"
+    IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:$(date +%s)"
+
+    if ! gcloud artifacts repositories describe "$REPO" --location="$REGION" --quiet >/dev/null 2>&1; then
+      log "Creating Artifact Registry repo $REPO"
+      gcloud artifacts repositories create "$REPO" \
+        --repository-format=docker --location="$REGION" \
+        --description="Velvet container images" --quiet
+    fi
+
+    log "Building image locally and pushing to Artifact Registry"
+    gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+    docker build -t "$IMAGE" .
+    docker push "$IMAGE"
+    DEPLOY_SOURCE=(--image "$IMAGE")
+    ;;
+  *)
+    die "--build must be 'source' or 'docker'"
+    ;;
+esac
+
+log "Deploying to Cloud Run"
 gcloud run deploy "$SERVICE" \
-  --source . \
+  "${DEPLOY_SOURCE[@]}" \
   --region="$REGION" \
   --allow-unauthenticated \
   --add-cloudsql-instances="$CONN_NAME" \
