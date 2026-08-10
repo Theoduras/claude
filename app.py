@@ -8,8 +8,8 @@ Run it:
 Then open http://localhost:5000 in your browser. Register an account,
 fill in your profile, and browse other members.
 
-Data is stored in a local SQLite file (dating.db). Set APP_SECRET_KEY to
-keep sessions valid across restarts.
+Data is stored in a local SQLite file (dating.db, or wherever DATABASE_PATH
+points). Set APP_SECRET_KEY to keep sessions valid across restarts.
 
 An admin account is created automatically on startup (username "admin",
 password from APP_ADMIN_PASSWORD, default "admin12345"). Anyone can
@@ -40,7 +40,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
 
-DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dating.db")
+DATABASE = os.environ.get("DATABASE_PATH") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "dating.db"
+)
 
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = os.environ.get("APP_ADMIN_PASSWORD", "admin12345")
@@ -1339,4 +1341,10 @@ init_db()
 
 if __name__ == "__main__":
     # threaded=True so long-polling chat requests don't block the server.
-    app.run(host="127.0.0.1", port=5000, debug=True, threaded=True)
+    # host/port/debug are overridable for deployment (Render sets PORT;
+    # FLASK_DEBUG=0 turns off the reloader/debugger in production). In
+    # production, run behind gunicorn instead ("gunicorn app:app"), which
+    # skips this block entirely.
+    port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_DEBUG", "1") not in ("0", "false", "no")
+    app.run(host="0.0.0.0", port=port, debug=debug, threaded=True)
