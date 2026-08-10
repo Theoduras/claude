@@ -32,6 +32,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_from_directory,
     session,
     url_for,
 )
@@ -283,6 +284,16 @@ def auto_login_admin():
     ).fetchone()
     if admin is not None:
         session["user_id"] = admin["id"]
+
+
+MOCKUPS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mockups")
+
+
+@app.route("/lab")
+def design_lab():
+    """Serve the design iteration lab. Static, self-contained, no auth —
+    it renders mock data only and never touches the database."""
+    return send_from_directory(MOCKUPS_DIR, "velvet-lab.html")
 
 
 @app.route("/")
