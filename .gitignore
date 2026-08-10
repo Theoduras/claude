@@ -11,3 +11,6 @@ venv/
 
 # Local database (pre-PostgreSQL leftovers)
 dating.db
+
+# Local dev state — Postgres lives in a Docker volume, not the working tree
+.requirements-stamp

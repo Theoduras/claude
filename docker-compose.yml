@@ -1,0 +1,30 @@
+# Local Postgres for Velvet development.
+#
+#   docker compose up -d      # start (once per boot)
+#   docker compose down       # stop, keeping data
+#   docker compose down -v    # stop and wipe the database
+#
+# The named volume is what makes seeded profiles and chat history survive a
+# restart — without it every `down` would drop the demo members.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: velvet-pg
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: velvet
+    ports:
+      - "5432:5432"
+    volumes:
+      - velvet-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # dev.ps1 waits on this rather than racing the connection pool's first
+      # connect, which otherwise fails with a confusing psycopg traceback.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d velvet"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  velvet-pgdata:

@@ -1,11 +1,13 @@
-# Velvet one-shot setup for Windows.
-# Clones (or updates) the repo, installs dependencies, and starts the app.
+# Velvet first-time setup for Windows.
+# Clones the repo, installs dependencies, and starts the app.
 # Run from PowerShell:  powershell -ExecutionPolicy Bypass -File setup.ps1
+#
+# This is bootstrap only. Once you have a working copy, use dev.ps1 instead —
+# it starts the app from the code already on disk without touching git.
 
 $ErrorActionPreference = "Stop"
 
 $RepoUrl = "https://github.com/Theoduras/claude.git"
-$Branch = "claude/determined-wozniak-orobzv"
 $TargetDir = Join-Path $HOME "velvet"
 $LegacyDir = Join-Path $HOME "heartlink"
 
@@ -38,13 +40,13 @@ if ((Test-Path (Join-Path $LegacyDir ".git")) -and -not (Test-Path $TargetDir)) 
 }
 
 if (Test-Path (Join-Path $TargetDir ".git")) {
-    Write-Host "Updating existing copy in $TargetDir ..."
-    git -C $TargetDir fetch origin $Branch
-    git -C $TargetDir checkout $Branch
-    git -C $TargetDir pull origin $Branch
+    # Don't touch an existing copy — it may hold uncommitted local work, and
+    # pulling over it is exactly the round-trip dev.ps1 exists to avoid.
+    Write-Host "Found an existing copy in $TargetDir — leaving it alone."
+    Write-Host "Use dev.ps1 in that directory to run it." -ForegroundColor Green
 } else {
     Write-Host "Cloning into $TargetDir ..."
-    git clone -b $Branch $RepoUrl $TargetDir
+    git clone $RepoUrl $TargetDir
 }
 
 Write-Host "Installing dependencies ..."
@@ -53,24 +55,17 @@ Write-Host "Installing dependencies ..."
 Set-Location $TargetDir
 
 # Velvet stores its data in PostgreSQL so it can run across many instances
-# in the cloud; there is no local SQLite file any more.
-if (-not $env:DATABASE_URL) {
-    Write-Host ""
-    Write-Host "DATABASE_URL is not set." -ForegroundColor Yellow
-    Write-Host "Velvet needs a PostgreSQL database. With Docker installed:"
-    Write-Host ""
-    Write-Host '  docker run -d --name velvet-pg -e POSTGRES_PASSWORD=postgres `'
-    Write-Host '    -e POSTGRES_DB=velvet -p 5432:5432 postgres:16'
-    Write-Host '  $env:DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/velvet"'
-    Write-Host ""
-    Write-Host "Then re-run this script. See docs/deploy-gcp.md for details."
-    exit 1
-}
-
-Write-Host "Seeding 20 demo members into the live-search pool ..."
-& $python seed_demo.py
-
+# in the cloud; there is no local SQLite file any more. docker-compose.yml
+# provides one locally, and dev.ps1 starts it, waits for it, seeds it, and
+# runs the app — so hand off rather than duplicating any of that here.
 Write-Host ""
-Write-Host "Starting Velvet at http://localhost:5000 (Ctrl+C to stop)" -ForegroundColor Green
-Start-Process "http://localhost:5000"
-& $python app.py
+Write-Host "Setup complete." -ForegroundColor Green
+Write-Host ""
+Write-Host "From now on, run the app with:"
+Write-Host "  cd $TargetDir"
+Write-Host "  .\dev.ps1"
+Write-Host ""
+Write-Host "dev.ps1 needs Docker Desktop running (it hosts Postgres):"
+Write-Host "  winget install -e --id Docker.DockerDesktop"
+Write-Host ""
+Write-Host "See docs/deploy-gcp.md for the cloud deployment." -ForegroundColor DarkGray
