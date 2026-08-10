@@ -300,6 +300,50 @@
       margin: -0.75rem 0 1.15rem;
     }
 
+    /* A form section break: violet hairline, because it divides your own
+       attributes from what you're asking of someone else. */
+    .field-group {
+      margin: 1.9rem 0 1.15rem;
+      padding-top: 1.4rem;
+      border-top: 1px solid var(--ink-hairline);
+    }
+    .field-group h2 { font-size: 1.05rem; }
+    .field-group .subtitle { font-size: 0.85rem; margin-top: 0.3rem; }
+
+    /* Side-by-side numeric fields (a min/max pair reads as one control). */
+    .field-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 0.9rem;
+    }
+
+    /* Checkbox group: the uppercase block label styling is wrong for
+       individual options, so opt them out and lay them out as chips. */
+    .checkgroup {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.9rem;
+      margin-bottom: 1.15rem;
+    }
+    .checkgroup label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin: 0;
+      font-size: 0.9rem;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: normal;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .checkgroup input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      accent-color: var(--violet-crest);
+      cursor: pointer;
+    }
+
     /* ---------- buttons: sheen sweeps as the pile is brushed ---------- */
     .btn {
       position: relative;

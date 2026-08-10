@@ -11,17 +11,25 @@ see the other side of a chat.
 """
 
 import argparse
+import hashlib
 import sys
 
 from werkzeug.security import generate_password_hash
 
 from app import (
+    BODY_TYPES,
     CITY_COORDS,
+    EYE_COLORS,
+    FITNESS_LEVELS,
     GENDERS,
+    HAIR_COLORS,
+    HEIGHT_MAX_CM,
+    HEIGHT_MIN_CM,
     POOL,
     RADIUS_MAX_KM,
     RELATIONSHIP_TYPES,
     SEEKING_OPTIONS,
+    TATTOO_LEVELS,
     Db,
     startup,
 )
@@ -86,17 +94,154 @@ BIO = "{name} from {location}. Into {interests}. Here for {goal}."
 WANTS = "Someone I can share {interests} with."
 NEEDS = "Honesty, curiosity and a good sense of humour."
 
+# Physical attributes are derived from the username rather than listed, so the
+# aligned tuples above stay readable. sha256 (not the built-in hash(), which is
+# salted per process) keeps a given member's body identical across runs.
+#
+# Heights are drawn from a gendered band so the numbers look plausible; every
+# other attribute is spread evenly across its list.
+HEIGHT_BANDS = {
+    "Woman": (158, 178),
+    "Man": (170, 193),
+    "Non-binary": (163, 185),
+}
+
+
+def derive_physical(username, age, gender):
+    """Deterministically pick a member's physical attributes."""
+    digest = hashlib.sha256(username.encode()).digest()
+
+    low, high = HEIGHT_BANDS[gender]
+    height = low + digest[0] % (high - low + 1)
+    assert HEIGHT_MIN_CM <= height <= HEIGHT_MAX_CM
+
+    # Older members skew a little less "Athlete"; purely so the seeded pool
+    # isn't uniformly gym-obsessed.
+    fitness_pool = FITNESS_LEVELS[:-1] if age >= 33 else FITNESS_LEVELS
+
+    return {
+        "height_cm": height,
+        "body_type": BODY_TYPES[digest[1] % len(BODY_TYPES)],
+        "fitness_level": fitness_pool[digest[2] % len(fitness_pool)],
+        "hair_color": HAIR_COLORS[digest[3] % len(HAIR_COLORS)],
+        "eye_color": EYE_COLORS[digest[4] % len(EYE_COLORS)],
+        "tattoos": TATTOO_LEVELS[digest[5] % len(TATTOO_LEVELS)],
+    }
+
+
+# Hand-picked physical preferences for four of the "picky" anchors. Everyone
+# else leaves these blank, which the scorer skips rather than penalises.
+#
+# These are tuned against the attributes derive_physical() actually produces for
+# these usernames, to make the harmonic mean's effect visible in /matches:
+#
+#   clara_p <-> elias_m  each fits what the other asked for -> scores near 100
+#   hana_y  --> omar_f   omar fits hana's type, but hana is nothing like what
+#                        omar asked for, so the pair is dragged far below the
+#                        mutual one despite one side being a perfect fit
+#
+# Both pairs are gender-compatible and share a relationship type, so both really
+# do show up in each other's rankings.
+PHYSICAL_PREFS = {
+    # Wants elias_m: 187 cm, Muscular, Red hair, Hazel eyes, a few tattoos.
+    "clara_p": {
+        "pref_height_min": 180, "pref_height_max": 195,
+        "pref_body_types": "Athletic,Muscular",
+        "pref_hair_color": "Red",
+        "pref_eye_color": "Hazel",
+        "pref_tattoos": "A few",
+    },
+    # Wants clara_p: 166 cm, Plus-size, Other hair, Blue eyes, no tattoos.
+    "elias_m": {
+        "pref_height_min": 160, "pref_height_max": 175,
+        "pref_body_types": "Curvy,Plus-size",
+        "pref_hair_color": "Other",
+        "pref_eye_color": "Blue",
+        "pref_tattoos": "None",
+    },
+    # Wants a very tall, slim, blonde athlete — which omar_f is not.
+    "hana_y": {
+        "pref_height_min": 192, "pref_height_max": 200,
+        "pref_body_types": "Slim",
+        "pref_fitness_level": "Athlete",
+        "pref_hair_color": "Blonde",
+        "pref_eye_color": "Green",
+    },
+    # Wants hana_y almost exactly: 159 cm, Plus-size, Active, Brown, Hazel, Many.
+    "omar_f": {
+        "pref_height_min": 155, "pref_height_max": 165,
+        "pref_body_types": "Plus-size",
+        "pref_fitness_level": "Active",
+        "pref_hair_color": "Brown",
+        "pref_eye_color": "Hazel",
+        "pref_tattoos": "Many",
+    },
+}
+
+# Every physical column written by the seeder, with the blank/NULL default used
+# for members that have no hand-picked preference.
+PREF_DEFAULTS = {
+    "pref_height_min": None,
+    "pref_height_max": None,
+    "pref_body_types": "",
+    "pref_fitness_level": "",
+    "pref_hair_color": "",
+    "pref_eye_color": "",
+    "pref_tattoos": "",
+}
+
 
 def validate():
     """Fail loudly if the demo data drifts from the app's allowed values."""
+    usernames = set()
     for row in DEMO_MEMBERS:
-        _, name, _, gender, location, rel, _, _, seeking, lo, hi, radius = row
+        username, name, age, gender, location, rel, _, _, seeking, lo, hi, radius = row
         assert gender in GENDERS, f"{name}: bad gender {gender!r}"
         assert rel in RELATIONSHIP_TYPES, f"{name}: bad relationship {rel!r}"
         assert seeking in SEEKING_OPTIONS, f"{name}: bad seeking {seeking!r}"
         assert 18 <= lo <= hi <= 120, f"{name}: bad age range {lo}-{hi}"
         assert 1 <= radius <= RADIUS_MAX_KM, f"{name}: bad radius {radius}"
         assert location.lower() in CITY_COORDS, f"{name}: unmapped city {location!r}"
+        usernames.add(username)
+
+        # The derived attributes must be values the app would accept, since a
+        # member could open the profile editor and re-save them unchanged.
+        phys = derive_physical(username, age, gender)
+        assert HEIGHT_MIN_CM <= phys["height_cm"] <= HEIGHT_MAX_CM, (
+            f"{name}: height {phys['height_cm']} out of range"
+        )
+        for field, options in (
+            ("body_type", BODY_TYPES),
+            ("fitness_level", FITNESS_LEVELS),
+            ("hair_color", HAIR_COLORS),
+            ("eye_color", EYE_COLORS),
+            ("tattoos", TATTOO_LEVELS),
+        ):
+            assert phys[field] in options, f"{name}: bad {field} {phys[field]!r}"
+
+    for username, prefs in PHYSICAL_PREFS.items():
+        assert username in usernames, f"PHYSICAL_PREFS: unknown member {username!r}"
+        assert set(prefs) <= set(PREF_DEFAULTS), (
+            f"{username}: unknown preference key in {sorted(prefs)}"
+        )
+        lo, hi = prefs.get("pref_height_min"), prefs.get("pref_height_max")
+        if lo is not None or hi is not None:
+            assert lo is not None and hi is not None, (
+                f"{username}: height preference needs both bounds"
+            )
+            assert HEIGHT_MIN_CM <= lo <= hi <= HEIGHT_MAX_CM, (
+                f"{username}: bad height preference {lo}-{hi}"
+            )
+        for bt in (prefs.get("pref_body_types") or "").split(","):
+            assert not bt or bt in BODY_TYPES, f"{username}: bad body type {bt!r}"
+        for field, options in (
+            ("pref_fitness_level", FITNESS_LEVELS),
+            ("pref_hair_color", HAIR_COLORS),
+            ("pref_eye_color", EYE_COLORS),
+            ("pref_tattoos", TATTOO_LEVELS),
+        ):
+            val = prefs.get(field)
+            assert not val or val in options, f"{username}: bad {field} {val!r}"
 
 
 def reset(db):
@@ -149,12 +294,20 @@ def seed(db):
             user_id = row["id"]
             refreshed += 1
 
+        phys = derive_physical(username, age, gender)
+        prefs = {**PREF_DEFAULTS, **PHYSICAL_PREFS.get(username, {})}
+
         db.execute(
             """
             INSERT INTO profiles
                 (user_id, name, age, gender, seeking, location, bio, interests,
-                 hobbies, wants, needs, relationship_type, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                 hobbies, wants, needs, relationship_type,
+                 height_cm, body_type, fitness_level, hair_color, eye_color,
+                 tattoos, pref_height_min, pref_height_max, pref_body_types,
+                 pref_fitness_level, pref_hair_color, pref_eye_color,
+                 pref_tattoos, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, NOW())
             ON CONFLICT(user_id) DO UPDATE SET
                 name = excluded.name, age = excluded.age,
                 gender = excluded.gender, seeking = excluded.seeking,
@@ -162,6 +315,19 @@ def seed(db):
                 interests = excluded.interests, hobbies = excluded.hobbies,
                 wants = excluded.wants, needs = excluded.needs,
                 relationship_type = excluded.relationship_type,
+                height_cm = excluded.height_cm,
+                body_type = excluded.body_type,
+                fitness_level = excluded.fitness_level,
+                hair_color = excluded.hair_color,
+                eye_color = excluded.eye_color,
+                tattoos = excluded.tattoos,
+                pref_height_min = excluded.pref_height_min,
+                pref_height_max = excluded.pref_height_max,
+                pref_body_types = excluded.pref_body_types,
+                pref_fitness_level = excluded.pref_fitness_level,
+                pref_hair_color = excluded.pref_hair_color,
+                pref_eye_color = excluded.pref_eye_color,
+                pref_tattoos = excluded.pref_tattoos,
                 updated_at = NOW()
             """,
             (
@@ -170,6 +336,12 @@ def seed(db):
                            goal=relationship_type.lower()),
                 interests, hobbies,
                 WANTS.format(interests=interests), NEEDS, relationship_type,
+                phys["height_cm"], phys["body_type"], phys["fitness_level"],
+                phys["hair_color"], phys["eye_color"], phys["tattoos"],
+                prefs["pref_height_min"], prefs["pref_height_max"],
+                prefs["pref_body_types"], prefs["pref_fitness_level"],
+                prefs["pref_hair_color"], prefs["pref_eye_color"],
+                prefs["pref_tattoos"],
             ),
         )
 

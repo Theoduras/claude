@@ -824,15 +824,15 @@ def directional_score(seeker, candidate):
             elif attr == "height":
                 reasons.append("Preferred height range")
             elif attr == "body_type":
-                reasons.append(f"Matches body type preference")
+                reasons.append("Matches body type preference")
             elif attr == "fitness":
-                reasons.append(f"Fitness level preference match")
+                reasons.append("Fitness level preference match")
             elif attr == "hair_color":
-                reasons.append(f"Hair color preference")
+                reasons.append("Hair color preference")
             elif attr == "eye_color":
-                reasons.append(f"Eye color preference")
+                reasons.append("Eye color preference")
             elif attr == "tattoos":
-                reasons.append(f"Tattoo preference")
+                reasons.append("Tattoo preference")
             elif attr == "relationship_type":
                 reasons.append(f"You both want: {seeker['relationship_type'].lower()}")
             elif attr == "age":
@@ -840,7 +840,7 @@ def directional_score(seeker, candidate):
                 if gap <= 3:
                     reasons.append("Close in age")
                 else:
-                    reasons.append(f"Within age preference")
+                    reasons.append("Within age preference")
             elif attr == "location":
                 reasons.append(f"Same location: {candidate['location']}")
 
@@ -877,20 +877,39 @@ def edit_profile():
 
     if request.method == "POST":
         values = {f: request.form.get(f, "").strip() for f in PROFILE_FIELDS}
+        # A checkbox group, so it arrives as repeated fields rather than one
+        # value; stored as CSV.
+        values[PREF_BODY_TYPES_FIELD] = ",".join(
+            request.form.getlist(PREF_BODY_TYPES_FIELD)
+        )
         error, age = validate_profile(values)
+        phys_error, phys = validate_physical(values)
+        error = error or phys_error
 
         if error is None:
             db.execute(
                 """
                 UPDATE profiles SET
                     name = ?, age = ?, gender = ?, seeking = ?, location = ?,
+                    height_cm = ?, body_type = ?, fitness_level = ?,
+                    hair_color = ?, eye_color = ?, tattoos = ?,
+                    pref_height_min = ?, pref_height_max = ?,
+                    pref_body_types = ?, pref_fitness_level = ?,
+                    pref_hair_color = ?, pref_eye_color = ?, pref_tattoos = ?,
                     bio = ?, interests = ?, hobbies = ?, wants = ?, needs = ?,
                     relationship_type = ?, updated_at = NOW()
                 WHERE user_id = ?
                 """,
                 (
                     values["name"], age, values["gender"], values["seeking"],
-                    values["location"], values["bio"], values["interests"],
+                    values["location"],
+                    phys["height_cm"], phys["body_type"], phys["fitness_level"],
+                    phys["hair_color"], phys["eye_color"], phys["tattoos"],
+                    phys["pref_height_min"], phys["pref_height_max"],
+                    phys[PREF_BODY_TYPES_FIELD], phys["pref_fitness_level"],
+                    phys["pref_hair_color"], phys["pref_eye_color"],
+                    phys["pref_tattoos"],
+                    values["bio"], values["interests"],
                     values["hobbies"], values["wants"], values["needs"],
                     values["relationship_type"], user_id,
                 ),
@@ -914,6 +933,13 @@ def edit_profile():
         relationship_types=RELATIONSHIP_TYPES,
         genders=GENDERS,
         seeking_options=SEEKING_OPTIONS,
+        body_types=BODY_TYPES,
+        fitness_levels=FITNESS_LEVELS,
+        hair_colors=HAIR_COLORS,
+        eye_colors=EYE_COLORS,
+        tattoo_levels=TATTOO_LEVELS,
+        height_min=HEIGHT_MIN_CM,
+        height_max=HEIGHT_MAX_CM,
     )
 
 
@@ -949,14 +975,20 @@ def admin_new_profile():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         values = {f: request.form.get(f, "").strip() for f in PROFILE_FIELDS}
+        values[PREF_BODY_TYPES_FIELD] = ",".join(
+            request.form.getlist(PREF_BODY_TYPES_FIELD)
+        )
 
         error = None
+        phys = None
         if not username or len(username) < 3:
             error = "Username must be at least 3 characters."
         elif password and len(password) < 8:
             error = "Password must be at least 8 characters (or leave it empty)."
         else:
             error, age = validate_profile(values)
+            phys_error, phys = validate_physical(values)
+            error = error or phys_error
 
         if error is None:
             try:
@@ -974,13 +1006,26 @@ def admin_new_profile():
                 db.execute(
                     """
                     INSERT INTO profiles
-                        (user_id, name, age, gender, seeking, location, bio,
+                        (user_id, name, age, gender, seeking, location,
+                         height_cm, body_type, fitness_level, hair_color,
+                         eye_color, tattoos, pref_height_min, pref_height_max,
+                         pref_body_types, pref_fitness_level, pref_hair_color,
+                         pref_eye_color, pref_tattoos, bio,
                          interests, hobbies, wants, needs, relationship_type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                            ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         new_id, values["name"], age, values["gender"],
-                        values["seeking"], values["location"], values["bio"],
+                        values["seeking"], values["location"],
+                        phys["height_cm"], phys["body_type"],
+                        phys["fitness_level"], phys["hair_color"],
+                        phys["eye_color"], phys["tattoos"],
+                        phys["pref_height_min"], phys["pref_height_max"],
+                        phys[PREF_BODY_TYPES_FIELD],
+                        phys["pref_fitness_level"], phys["pref_hair_color"],
+                        phys["pref_eye_color"], phys["pref_tattoos"],
+                        values["bio"],
                         values["interests"], values["hobbies"], values["wants"],
                         values["needs"], values["relationship_type"],
                     ),
@@ -998,6 +1043,7 @@ def admin_new_profile():
         profile["username"] = username
     else:
         profile = {f: "" for f in PROFILE_FIELDS}
+        profile[PREF_BODY_TYPES_FIELD] = ""
         profile["username"] = ""
 
     return render_template(
@@ -1006,6 +1052,13 @@ def admin_new_profile():
         relationship_types=RELATIONSHIP_TYPES,
         genders=GENDERS,
         seeking_options=SEEKING_OPTIONS,
+        body_types=BODY_TYPES,
+        fitness_levels=FITNESS_LEVELS,
+        hair_colors=HAIR_COLORS,
+        eye_colors=EYE_COLORS,
+        tattoo_levels=TATTOO_LEVELS,
+        height_min=HEIGHT_MIN_CM,
+        height_max=HEIGHT_MAX_CM,
     )
 
 
@@ -1036,35 +1089,14 @@ def genders_compatible(me, other):
 
 
 def match_score(me, other):
-    """Score a candidate: shared keywords, goals, and age proximity."""
-    score = 0
-    reasons = []
+    """Rank a candidate on a 0-100 scale, physical attributes weighted heavily.
 
-    shared = _tokens(me["interests"], me["hobbies"]) & _tokens(
-        other["interests"], other["hobbies"]
-    )
-    if shared:
-        score += 15 * len(shared)
-        reasons.append("Shared interests: " + ", ".join(sorted(shared)))
-
-    if me["relationship_type"] and me["relationship_type"] == other["relationship_type"]:
-        score += 30
-        reasons.append("You both want: " + me["relationship_type"].lower())
-
-    if me["age"] and other["age"]:
-        gap = abs(me["age"] - other["age"])
-        if gap <= 10:
-            score += 10 - gap
-            if gap <= 3:
-                reasons.append("Close in age")
-
-    if me["location"] and other["location"] and (
-        me["location"].strip().lower() == other["location"].strip().lower()
-    ):
-        score += 25
-        reasons.append("Same location: " + other["location"])
-
-    return score, reasons
+    Thin wrapper over mutual_score: the harmonic mean of both directions, so
+    a one-sided attraction cannot outrank genuine mutual compatibility. See
+    WEIGHTS for the per-attribute weighting (physical subtotal is 74 of 100).
+    """
+    score, reasons = mutual_score(me, other)
+    return round(score), reasons
 
 
 MATCH_OPTION_COUNT = 3
