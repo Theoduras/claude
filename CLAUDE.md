@@ -1,13 +1,15 @@
 # Velvet
 
-Flask 3 + SQLite dating app, server-rendered Jinja. Deps: `flask`, `requests` only — no ORM,
-no LLM SDK. Run: `python app.py`. Seed demo data: `python seed_demo.py`.
+Flask 3 + PostgreSQL dating app, server-rendered Jinja. Deps: `flask`, `requests`, `psycopg`,
+`gunicorn` — no ORM, no LLM SDK. Needs a reachable Postgres: `DATABASE_URL`, else the `DB_*`
+parts (default `postgres:postgres@127.0.0.1:5432/velvet`). Run: `python app.py`. Seed demo
+data: `python seed_demo.py`.
 
 ## Layout
 
-- `app.py` — **1,342 lines**, single module: all routes, DB access, and helpers
+- `app.py` — **1,852 lines**, single module: all routes, DB access, and helpers
 - `templates/` — 16 Jinja templates, all extending `base.html`
-- `dating.db` — SQLite; tables `users`, `profiles`, `matches`, `searches`, `messages`
+- PostgreSQL — tables `users`, `profiles`, `matches`, `searches`, `messages`
 - `docs/style-guide.html` — velvet-textured design system
 - `vastai_client.py` — standalone Vast.ai GPU-rental CLI, **not imported by the app**
 
@@ -15,13 +17,13 @@ no LLM SDK. Run: `python app.py`. Seed demo data: `python seed_demo.py`.
 
 | Area | Routes |
 |---|---|
-| auth | `/register` 293, `/login` 335, `/logout` 358 |
-| profile | `/profile/edit` 388, `/profile/<id>` 436, `/admin/profiles/new` 459 |
-| search | `/search` 736, `/search/criteria` 762, `/search/waiting` 895, `/search/status` 920, `/search/cancel` 958 |
-| find | `/find` 971, `/find/results` 997 |
-| matches | `/matches` 1047, `/match/<other_id>` 1106 |
-| chat | `/chats` 1138, `/chat/<match_id>` 1164, `…/messages` 1227, `…/send` 1263 |
-| browse | `/browse` 1314 |
+| auth | `/register` 454, `/login` 495, `/logout` 518 |
+| profile | `/profile/edit` 883, `/profile/<id>` 957, `/admin/profiles/new` 980 |
+| search | `/search` 1266, `/search/criteria` 1292, `/search/waiting` 1425, `/search/status` 1450, `/search/cancel` 1479 |
+| find | `/find` 1492, `/find/results` 1518 |
+| matches | `/matches` 1568, `/match/<other_id>` 1627 |
+| chat | `/chats` 1659, `/chat/<match_id>` 1685, `…/messages` 1741, `…/send` 1767 |
+| browse | `/browse` 1814 |
 
 ## Working rule
 
