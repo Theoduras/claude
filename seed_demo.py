@@ -1,4 +1,4 @@
-"""Populate Heartlink with 20 demo profiles that are all live-searching.
+"""Populate Velvet with 20 demo profiles that are all live-searching.
 
 Every seeded member is placed in the live-search pool as "waiting", so
 when you hit Search yourself there is always a pool to be matched from.
@@ -11,19 +11,19 @@ see the other side of a chat.
 """
 
 import argparse
-import sqlite3
 import sys
 
 from werkzeug.security import generate_password_hash
 
 from app import (
     CITY_COORDS,
-    DATABASE,
     GENDERS,
+    POOL,
     RADIUS_MAX_KM,
     RELATIONSHIP_TYPES,
     SEEKING_OPTIONS,
-    init_db,
+    Db,
+    startup,
 )
 
 DEMO_PASSWORD = "demo12345"
@@ -103,7 +103,7 @@ def reset(db):
     usernames = [m[0] for m in DEMO_MEMBERS]
     placeholders = ",".join("?" * len(usernames))
     ids = [
-        r[0]
+        r["id"]
         for r in db.execute(
             f"SELECT id FROM users WHERE username IN ({placeholders})", usernames
         )
@@ -140,14 +140,13 @@ def seed(db):
         ).fetchone()
 
         if row is None:
-            cur = db.execute(
+            user_id = db.insert_returning_id(
                 "INSERT INTO users (username, password_hash) VALUES (?, ?)",
                 (username, password_hash),
             )
-            user_id = cur.lastrowid
             added += 1
         else:
-            user_id = row[0]
+            user_id = row["id"]
             refreshed += 1
 
         db.execute(
@@ -155,7 +154,7 @@ def seed(db):
             INSERT INTO profiles
                 (user_id, name, age, gender, seeking, location, bio, interests,
                  hobbies, wants, needs, relationship_type, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ON CONFLICT(user_id) DO UPDATE SET
                 name = excluded.name, age = excluded.age,
                 gender = excluded.gender, seeking = excluded.seeking,
@@ -163,7 +162,7 @@ def seed(db):
                 interests = excluded.interests, hobbies = excluded.hobbies,
                 wants = excluded.wants, needs = excluded.needs,
                 relationship_type = excluded.relationship_type,
-                updated_at = datetime('now')
+                updated_at = NOW()
             """,
             (
                 user_id, name, age, gender, seeking, location,
@@ -180,7 +179,7 @@ def seed(db):
             INSERT INTO searches
                 (user_id, seeking, age_min, age_max, relationship_type,
                  interests, location, radius_km, status, match_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, NOW())
             ON CONFLICT(user_id) DO UPDATE SET
                 seeking = excluded.seeking, age_min = excluded.age_min,
                 age_max = excluded.age_max,
@@ -188,7 +187,7 @@ def seed(db):
                 interests = excluded.interests,
                 location = excluded.location, radius_km = excluded.radius_km,
                 status = 'waiting', match_id = NULL,
-                created_at = datetime('now')
+                created_at = NOW()
             """,
             (
                 user_id, seeking, age_min, age_max, relationship_type,
@@ -209,18 +208,18 @@ def main():
     args = parser.parse_args()
 
     validate()
-    init_db()  # make sure the schema exists
+    startup()  # open the pool and make sure the schema exists
 
-    db = sqlite3.connect(DATABASE)
-    if args.reset:
-        removed = reset(db)
-        print(f"Removed {removed} existing demo member(s).")
+    with POOL.connection() as conn:
+        db = Db(conn)
+        if args.reset:
+            removed = reset(db)
+            print(f"Removed {removed} existing demo member(s).")
 
-    added, refreshed = seed(db)
-    waiting = db.execute(
-        "SELECT COUNT(*) FROM searches WHERE status = 'waiting'"
-    ).fetchone()[0]
-    db.close()
+        added, refreshed = seed(db)
+        waiting = db.execute(
+            "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
+        ).fetchone()["n"]
 
     print(f"Added {added} new member(s), refreshed {refreshed}.")
     print(f"{waiting} member(s) are now live-searching at the same time.")
