@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="en" data-colorway="oxblood" data-type="long-read">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Velvet — UI Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ======================================================================
+   VELVET — UI LAB (round 1)
+
+   A self-contained iteration surface. No build step: edit a hex, refresh.
+   Nothing here touches the shipped app; templates/base.html is untouched.
+
+   ----------------------------------------------------------------------
+   PALETTE DERIVATION — Oxblood & Brass
+   ----------------------------------------------------------------------
+   Sampled the same way the violet and teal bolts were: one bolt of crushed
+   oxblood velvet, read at three depths, plus a brass trim.
+
+     depth            oxblood     brass       what it is
+     specular crest   #A32436     #D9B061     where the key light lands
+     mid pile         #6E1220     #B08A3E     the fabric's "true" colour
+     inside a fold    #3A0810     #5C4318     near-black, still tinted
+
+   Grounds are red-biased on purpose (#120709, not #0B0B0B) — the inside of
+   a fold still reads as the fabric's colour. A neutral grey next to these
+   swatches looks like a mistake. Same reasoning as the shipped violet ink.
+
+   Brass (--color-accent, #F0DCB4) is LIGHT, not a third brand colour.
+   It marks values the eye hunts for — a distance, an age range, a count —
+   and it draws the focus ring. It never fills a shape.
+
+   ----------------------------------------------------------------------
+   LIGHTING — one key light, upper-left. No exceptions.
+   ----------------------------------------------------------------------
+   The shipped stylesheet pools violet at 12%/-4% AND teal at 96%/12%: two
+   key lights, so the 3D illusion collapses. Here there is a single source
+   at upper-left. The lower-right is filled by --sh2 bounce ONLY, which is
+   what one-source lighting actually produces. If a highlight ever appears
+   to originate from the upper right, that is a bug.
+
+   ----------------------------------------------------------------------
+   TEXTURE GRADING — driven by --tex, visible on the lab's slider
+   ----------------------------------------------------------------------
+     photos / avatars   full strength   --tex-photo
+     grounds / panels   half strength   --tex-bg / --tex-panel
+     buttons, inputs,
+     tags, bubbles      FLAT            no texture layer exists at all
+
+   The UI elements have no drape layers in the markup, so they cannot pick
+   up grain at any slider setting. At small sizes grain reads as dirt.
+
+   ----------------------------------------------------------------------
+   GRADIENT DISCIPLINE
+   ----------------------------------------------------------------------
+   Dual-tone gradients appear on primary CTAs and sent bubbles. Nowhere
+   else. Tags, choice cards, notices and slider tracks are flat fills with
+   a hairline — a deliberate reversal of the shipped stylesheet, where
+   gradients on every surface are the main source of visual noise.
+   ====================================================================== */
+
+/* ---------- COLORWAY: Oxblood & Brass (default) --------------------- */
+:root,
+:root[data-colorway="oxblood"] {
+  --color-primary-crest:   #A32436;
+  --color-primary:         #6E1220;
+  --color-primary-deep:    #3A0810;
+
+  --color-secondary-crest: #D9B061;
+  --color-secondary:       #B08A3E;
+  --color-secondary-deep:  #5C4318;
+
+  --color-accent:          #F0DCB4;
+
+  --ink:                   #120709;
+  --ink-raised:            #1E0D10;
+  --ink-hairline:          rgba(240, 220, 180, 0.15);
+
+  --text:                  #FBF3EC;
+  --text-muted:            #CBB2AC;
+  --text-faint:            #96786F;
+
+  /* drape shadow + bounce light */
+  --sh1:                   rgba(10, 3, 5, 0.55);
+  --sh2:                   rgba(217, 176, 97, 0.10);
+
+  /* the key light's own colour, warm */
+  --keylight:              rgba(255, 238, 214, 0.13);
+
+  --danger:                #FF8A8A;
+}
+
+/* ---------- COLORWAY: Violet–Teal (shipped incumbent) --------------- */
+/* Carried only so the new direction can be judged against what's live.
+   Values lifted verbatim from templates/base.html. */
+:root[data-colorway="violet-teal"] {
+  --color-primary-crest:   #A855F7;
+  --color-primary:         #8A2BE2;
+  --color-primary-deep:    #3B0B66;
+
+  --color-secondary-crest: #1DA6A2;
+  --color-secondary:       #12807F;
+  --color-secondary-deep:  #06383B;
+
+  --color-accent:          #E8D3A9;
+
+  --ink:                   #0B0713;
+  --ink-raised:            #150C22;
+  --ink-hairline:          rgba(168, 133, 247, 0.16);
+
+  --text:                  #F7F1FB;
+  --text-muted:            #B7A6CB;
+  --text-faint:            #7C6B92;
+
+  --sh1:                   rgba(4, 2, 8, 0.55);
+  --sh2:                   rgba(168, 133, 247, 0.10);
+  --keylight:              rgba(235, 225, 255, 0.13);
+
+  --danger:                #FF7A8A;
+}
+
+/* ---------- TYPE: The Long Read (default) --------------------------- */
+/* Cormorant Garamond earns its contrast only at size — the spec sets a
+   ~18px floor, so nothing serif is allowed below 1.125rem. Karla carries
+   everything a person operates. */
+:root,
+:root[data-type="long-read"] {
+  --serif: "Cormorant Garamond", ui-serif, Georgia, serif;
+  --sans:  "Karla", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --serif-weight: 600;
+  --serif-tracking: -0.005em;
+}
+
+/* ---------- TYPE: System (shipped incumbent) ------------------------ */
+:root[data-type="system"] {
+  --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans:  ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --serif-weight: 500;
+  --serif-tracking: -0.015em;
+}
+
+/* ---------- INVARIANTS ---------------------------------------------- */
+:root {
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --radius: 18px;
+  --radius-sm: 11px;
+  --measure: 60rem;
+
+  /* master texture scale — the lab slider writes this */
+  --tex: 1;
+  --tex-bg:    calc(var(--tex) * 0.50);
+  --tex-panel: calc(var(--tex) * 0.38);
+  --tex-photo: calc(var(--tex) * 1.00);
+
+  --nap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1.62;
+  color: var(--text);
+  background-color: var(--ink);
+  /* LAYER 1 — the pile. One key light, upper-left. The only thing on the
+     right is --sh2 bounce, weak, filling shadow faces. */
+  background-image:
+    radial-gradient(64% 50% at 16% -6%, var(--keylight), transparent 66%),
+    radial-gradient(56% 44% at 24% 8%,  color-mix(in srgb, var(--color-primary-crest) 38%, transparent), transparent 70%),
+    radial-gradient(48% 40% at 40% 34%, color-mix(in srgb, var(--color-primary) 26%, transparent), transparent 72%),
+    radial-gradient(46% 38% at 86% 66%, var(--sh2), transparent 74%),
+    radial-gradient(74% 48% at 52% 104%, color-mix(in srgb, var(--color-primary-deep) 62%, transparent), transparent 76%);
+  background-attachment: fixed;
+}
+
+/* ---------- THE DRAPE ------------------------------------------------
+   Three stacked layers. Folds carry asymmetric crest ramps: a short rise
+   into the crest on the lit side, a long fall into shadow on the other —
+   that asymmetry is what encodes light direction, and it's exactly what
+   the shipped symmetric stops lack. Valleys multiply near-black into the
+   creases, which is what turns a painted pattern into depth. Blur is not
+   optional; it's the difference between cloth and a geometric band.
+   -------------------------------------------------------------------- */
+.drape {
+  position: fixed;
+  inset: -20%;
+  pointer-events: none;
+  z-index: 0;
+}
+.drape-folds {
+  background-image:
+    conic-gradient(from 168deg at 28% 12%,
+      rgba(255,255,255,0.100)   0deg,   /* crest — lit face          */
+      rgba(255,255,255,0.020)  14deg,   /* short ramp off the crest  */
+      rgba(0,0,0,0.220)        70deg,   /* long fall into shadow     */
+      rgba(0,0,0,0.300)       118deg,
+      rgba(0,0,0,0.080)       170deg,
+      rgba(255,255,255,0.055) 212deg,   /* weaker secondary crest    */
+      rgba(255,255,255,0.010) 226deg,
+      rgba(0,0,0,0.240)       300deg,
+      rgba(255,255,255,0.100) 360deg);
+  filter: blur(28px);
+  opacity: var(--tex-bg);
+}
+.drape-valleys {
+  background-image:
+    conic-gradient(from 168deg at 28% 12%,
+      transparent               0deg,
+      transparent              44deg,
+      rgba(6,2,3,0.55)         96deg,
+      rgba(6,2,3,0.62)        124deg,
+      transparent             188deg,
+      transparent             272deg,
+      rgba(6,2,3,0.42)        314deg,
+      transparent             360deg);
+  filter: blur(22px);
+  mix-blend-mode: multiply;
+  opacity: var(--tex-bg);
+}
+.drape-nap {
+  inset: 0;
+  background-image:
+    var(--nap),
+    repeating-linear-gradient(94deg,
+      rgba(255,255,255,0.030) 0 1px,
+      rgba(0,0,0,0.045)       1px 2px,
+      transparent             2px 4px);
+  background-size: 180px 180px, auto;
+  mix-blend-mode: overlay;
+  opacity: calc(var(--tex-bg) * 0.62);
+}
+
+/* ---------- CONTROL BAR (lab chrome — deliberately flat) ------------- */
+.lab-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  flex-wrap: wrap;
+  padding: 0.7rem clamp(1rem, 4vw, 2rem);
+  background: rgba(0,0,0,0.72);
+  border-bottom: 1px solid var(--ink-hairline);
+  backdrop-filter: blur(16px);
+  font-size: 0.8rem;
+}
+.lab-bar .lab-title {
+  font-family: var(--sans);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  color: var(--text-faint);
+  margin-right: auto;
+}
+.lab-field { display: flex; align-items: center; gap: 0.45rem; }
+.lab-field > span {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.lab-bar select {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  color: var(--text);
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--ink-hairline);
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+}
+.lab-bar input[type="range"] { width: 7rem; }
+.lab-bar output {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent);
+  min-width: 2.4rem;
+}
+
+/* ---------- SHELL ---------------------------------------------------- */
+.stage {
+  position: relative;
+  z-index: 1;
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 4vw, 2rem) 5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ---------- TYPE ----------------------------------------------------- */
+h1, h2, h3 {
+  font-family: var(--serif);
+  font-weight: var(--serif-weight);
+  letter-spacing: var(--serif-tracking);
+  line-height: 1.1;
+  text-wrap: balance;
+  margin: 0;
+}
+h1 { font-size: clamp(2rem, 5vw, 3.1rem); }   /* well clear of the 18px serif floor */
+h2 { font-size: 1.4rem; }
+h3 { font-size: 1.125rem; }                   /* the floor itself — never go under */
+
+p { margin: 0; }
+.subtitle {
+  margin: 0.55rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  max-width: 52ch;
+}
+h1 + .subtitle { margin-top: 0.7rem; }
+.eyebrow {
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-faint);
+  margin: 0;
+}
+.muted { color: var(--text-muted); }
+.hint { color: var(--text-faint); font-size: 0.82rem; margin: 0.45rem 0 0; }
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent);
+}
+a { color: var(--color-primary-crest); text-decoration: none; }
+a:hover { color: var(--color-accent); }
+
+/* ---------- PANEL (textured — half strength) ------------------------- */
+.panel {
+  position: relative;
+  padding: clamp(1.25rem, 3vw, 1.9rem);
+  border-radius: var(--radius);
+  border: 1px solid var(--ink-hairline);
+  background-color: var(--ink-raised);
+  background-image:
+    radial-gradient(70% 60% at 14% -10%, var(--keylight), transparent 62%),
+    linear-gradient(158deg,
+      color-mix(in srgb, var(--color-primary-deep) 46%, transparent),
+      color-mix(in srgb, var(--ink) 92%, transparent) 74%);
+  box-shadow:
+    0 26px 70px -28px var(--sh1),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+/* the panel's own fold, running off its upper-left crest */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    conic-gradient(from 176deg at 16% -2%,
+      rgba(255,255,255,0.085)   0deg,
+      rgba(255,255,255,0.012)  16deg,
+      rgba(0,0,0,0.150)        96deg,
+      transparent             184deg);
+  filter: blur(18px);
+  opacity: var(--tex-panel);
+}
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    var(--nap),
+    repeating-linear-gradient(94deg,
+      rgba(255,255,255,0.026) 0 1px,
+      transparent             1px 3px);
+  background-size: 180px 180px, auto;
+  mix-blend-mode: overlay;
+  opacity: var(--tex-panel);
+}
+.panel > * { position: relative; z-index: 1; }
+.narrow { max-width: 27rem; margin-inline: auto; }
+
+/* ---------- AVATAR (textured — FULL strength) ------------------------
+   The only surface that gets the texture at 1.0. Drag the lab slider and
+   watch these move while the buttons and bubbles stay dead flat. */
+.avatar {
+  position: relative;
+  width: 3.2rem;
+  height: 3.2rem;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--ink-hairline);
+  background-color: var(--color-primary-deep);
+  background-image:
+    radial-gradient(80% 70% at 24% 14%, var(--color-primary-crest), transparent 68%),
+    radial-gradient(70% 60% at 70% 82%, var(--color-primary-deep), transparent 70%);
+}
+.avatar::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background-image:
+    conic-gradient(from 168deg at 30% 14%,
+      rgba(255,255,255,0.22)   0deg,
+      rgba(255,255,255,0.04)  16deg,
+      rgba(0,0,0,0.42)         84deg,
+      rgba(0,0,0,0.30)        150deg,
+      rgba(255,255,255,0.10)  216deg,
+      rgba(0,0,0,0.38)        304deg,
+      rgba(255,255,255,0.22)  360deg);
+  filter: blur(7px);
+  opacity: var(--tex-photo);
+}
+.avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--nap);
+  background-size: 90px 90px;
+  mix-blend-mode: overlay;
+  opacity: calc(var(--tex-photo) * 0.5);
+}
+.avatar-lg { width: 4.4rem; height: 4.4rem; }
+
+/* ---------- BUTTONS --------------------------------------------------
+   Primary is the one place a dual-tone gradient is allowed, plus the
+   sheen sweep — brushing velvet changes how it catches light. */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.72rem 1.35rem;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  background-color: var(--color-primary);
+  background-image: linear-gradient(160deg,
+    var(--color-primary-crest), var(--color-primary) 46%, var(--color-primary-deep));
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow:
+    0 12px 30px -12px color-mix(in srgb, var(--color-primary) 85%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.22);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 32%, rgba(255,255,255,0.34) 50%, transparent 68%);
+  transform: translateX(-120%);
+  transition: transform 0.55s ease;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:hover::before { transform: translateX(120%); }
+.btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.btn-block { width: 100%; }
+
+/* secondary + ghost are FLAT — no gradient, hairline only */
+.btn-secondary {
+  color: var(--color-secondary-crest);
+  background-color: transparent;
+  background-image: none;
+  border: 1px solid color-mix(in srgb, var(--color-secondary) 55%, transparent);
+  box-shadow: none;
+}
+.btn-secondary:hover {
+  background-color: color-mix(in srgb, var(--color-secondary) 16%, transparent);
+}
+.btn-ghost {
+  color: var(--text-muted);
+  background-color: transparent;
+  background-image: none;
+  border: 1px solid var(--ink-hairline);
+  box-shadow: none;
+}
+.btn-ghost:hover { color: var(--text); }
+
+/* ---------- FORM CONTROLS (flat, recessed like a seam) --------------- */
+label, .label {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
+  margin-bottom: 0.45rem;
+}
+input[type="text"], select.field, textarea {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  font-family: var(--sans);
+  font-size: 1rem;
+  color: var(--text);
+  background: rgba(0,0,0,0.42);
+  border: 1px solid var(--ink-hairline);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+input::placeholder { color: var(--text-faint); }
+input[type="text"]:focus, select.field:focus, textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 26%, transparent);
+}
+.field-row { margin-bottom: 1.15rem; }
+.slider-value { float: right; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--color-accent); }
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.5rem;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+/* track is a FLAT fill — no gradient */
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 0.3rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 45%, rgba(0,0,0,0.5));
+}
+input[type="range"]::-moz-range-track {
+  height: 0.3rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 45%, rgba(0,0,0,0.5));
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: -0.4rem;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: none;
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: none;
+  cursor: pointer;
+}
+input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+input[type="range"]:focus-visible::-moz-range-thumb { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* ---------- CHOICE CARDS (flat) -------------------------------------- */
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1.05rem;
+  margin-bottom: 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--ink-hairline);
+  background: rgba(0,0,0,0.26);
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+.choice:hover { border-color: color-mix(in srgb, var(--color-primary-crest) 55%, transparent); transform: translateY(-2px); }
+.choice input { accent-color: var(--color-primary-crest); width: auto; margin: 0; }
+.choice-body { display: flex; flex-direction: column; }
+.choice strong { font-family: var(--serif); font-size: 1.125rem; font-weight: var(--serif-weight); }
+.choice-suggested { border-color: color-mix(in srgb, var(--color-primary-crest) 60%, transparent); }
+
+/* ---------- TAGS (flat) ---------------------------------------------- */
+.tag {
+  display: inline-block;
+  padding: 0.24rem 0.7rem;
+  font-family: var(--sans);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  color: var(--color-primary-crest);
+  border: 1px solid color-mix(in srgb, var(--color-primary-crest) 45%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+.tag-live {
+  color: var(--color-secondary-crest);
+  border-color: color-mix(in srgb, var(--color-secondary-crest) 48%, transparent);
+  background: color-mix(in srgb, var(--color-secondary) 14%, transparent);
+}
+
+/* ---------- RESULT CARDS --------------------------------------------- */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr)); gap: 1rem; }
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.result-head { display: flex; align-items: center; gap: 0.8rem; }
+.result h3 { margin: 0; }
+.result .meta { color: var(--text-muted); font-size: 0.82rem; }
+.result ul { margin: 0; padding-left: 1.05rem; font-size: 0.85rem; color: var(--text-muted); }
+.result .actions { margin-top: auto; display: flex; gap: 0.5rem; flex-wrap: wrap; padding-top: 0.5rem; }
+.best { border-color: color-mix(in srgb, var(--color-primary-crest) 50%, transparent); }
+
+/* ---------- WAITING STATE -------------------------------------------- */
+/* One glow per screen, and this screen has earned it. */
+.orb {
+  width: 4.5rem;
+  height: 4.5rem;
+  margin: 0 auto 0.9rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 26%,
+    var(--color-primary-crest), var(--color-primary) 46%, var(--color-primary-deep) 78%);
+  box-shadow: 0 0 60px color-mix(in srgb, var(--color-primary-crest) 55%, transparent);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.07); }
+}
+dl { margin: 0; text-align: left; }
+dt {
+  margin-top: 1rem;
+  font-family: var(--sans);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
+}
+dd { margin: 0.25rem 0 0; }
+
+/* ---------- CHAT ------------------------------------------------------ */
+.chat-log { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 1.15rem; }
+.bubble {
+  max-width: 76%;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  border-radius: 1.1rem;
+}
+.bubble .sender {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin-bottom: 0.15rem;
+}
+/* received — theirs. FLAT: the secondary bolt, one colour. */
+.bubble.left {
+  align-self: flex-start;
+  color: var(--text);
+  background: color-mix(in srgb, var(--color-secondary-deep) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-secondary) 34%, transparent);
+  border-bottom-left-radius: 0.3rem;
+}
+/* sent — yours. The second (and last) place a dual-tone gradient lives. */
+.bubble.right {
+  align-self: flex-end;
+  color: #fff;
+  background-image: linear-gradient(150deg,
+    color-mix(in srgb, var(--color-primary) 92%, transparent),
+    var(--color-primary-deep));
+  border: 1px solid color-mix(in srgb, var(--color-primary-crest) 36%, transparent);
+  border-bottom-right-radius: 0.3rem;
+}
+.chat-head { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1.1rem; }
+.chat-form { display: flex; gap: 0.6rem; align-items: center; }
+.chat-form input[type="text"] { flex: 1; }
+.live-dot {
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: var(--color-secondary-crest);
+  box-shadow: 0 0 10px var(--color-secondary-crest);
+  margin-right: 0.3rem;
+}
+
+/* ---------- MOTION ---------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .orb { animation: none; }
+  .btn::before { transition: none; }
+  .btn:hover, .choice:hover { transform: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="drape drape-folds"></div>
+<div class="drape drape-valleys"></div>
+<div class="drape drape-nap"></div>
+
+<div class="lab-bar">
+  <span class="lab-title">Velvet · UI Lab</span>
+
+  <label class="lab-field" for="ctl-colorway"><span>Colorway</span>
+    <select id="ctl-colorway">
+      <option value="oxblood">Oxblood &amp; Brass</option>
+      <option value="violet-teal">Violet–Teal (shipped)</option>
+    </select>
+  </label>
+
+  <label class="lab-field" for="ctl-type"><span>Type</span>
+    <select id="ctl-type">
+      <option value="long-read">The Long Read</option>
+      <option value="system">System (shipped)</option>
+    </select>
+  </label>
+
+  <label class="lab-field" for="ctl-screen"><span>Screen</span>
+    <select id="ctl-screen">
+      <option value="criteria">Criteria</option>
+      <option value="waiting">Waiting</option>
+      <option value="results">Results</option>
+      <option value="chat">Chat</option>
+    </select>
+  </label>
+
+  <label class="lab-field" for="ctl-tex"><span>Texture</span>
+    <input id="ctl-tex" type="range" min="0" max="100" step="1" value="100">
+    <output id="ctl-tex-out">1.00</output>
+  </label>
+</div>
+
+<main class="stage" id="stage"></main>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ------------------------------------------------------------------
+     SCREENS — the app's real flow, with the app's real copy.
+     Adding a screen is one entry here plus one <option> above.
+     Voice rules hold: no emoji as tone, no exclamation marks, and every
+     failure names the fix rather than shrugging.
+     ------------------------------------------------------------------ */
+  var SCREENS = {
+
+    criteria: function () {
+      return '' +
+      '<div class="panel">' +
+        '<p class="eyebrow">Step 2 of 2</p>' +
+        '<h1>Search for a match now</h1>' +
+        '<p class="subtitle">Looking for <strong>a long-term relationship</strong> · <a href="#">change</a></p>' +
+
+        '<div style="margin-top:1.6rem">' +
+          '<label for="seeking">I am looking for</label>' +
+          '<div class="field-row">' +
+            '<select class="field" id="seeking">' +
+              '<option>Anyone</option><option selected>Women</option><option>Men</option>' +
+            '</select>' +
+          '</div>' +
+
+          '<label>Age range <span class="slider-value" id="age-value">21 – 35 years</span></label>' +
+          '<div class="field-row">' +
+            '<input type="range" id="age-min" min="18" max="120" value="21" aria-label="Minimum age">' +
+            '<input type="range" id="age-max" min="18" max="120" value="35" aria-label="Maximum age">' +
+          '</div>' +
+
+          '<label for="location">Location</label>' +
+          '<div class="field-row"><input id="location" type="text" value="Berlin" placeholder="e.g. Berlin"></div>' +
+
+          '<label for="radius">Search radius <span class="slider-value" id="radius-value">150 km</span></label>' +
+          '<input type="range" id="radius" min="5" max="500" step="5" value="150">' +
+          '<p class="hint" id="radius-hint">Only people within 150 km of your location.</p>' +
+
+          '<div style="margin-top:1.3rem">' +
+            '<label for="interests">Interests (optional)</label>' +
+            '<div class="field-row"><input id="interests" type="text" placeholder="e.g. music, hiking — used to pick the best fit"></div>' +
+          '</div>' +
+
+          '<button class="btn btn-block" type="button">Start searching</button>' +
+          '<p class="hint">You are a man, 29, in Berlin — others\' filters apply to you too, so keep <a href="#">your profile</a> accurate.</p>' +
+        '</div>' +
+      '</div>';
+    },
+
+    waiting: function () {
+      return '' +
+      '<div class="panel narrow" style="text-align:center">' +
+        '<div class="orb"></div>' +
+        '<p class="eyebrow">Searching</p>' +
+        '<h1 style="margin-top:0.5rem">Feeling for a match</h1>' +
+        '<p class="subtitle" style="margin-inline:auto">Looking for someone who fits — and who is looking for you.</p>' +
+
+        '<dl>' +
+          '<dt>Looking for</dt><dd>Women, age <span class="num">21–35</span></dd>' +
+          '<dt>Connection</dt><dd>Long-term relationship</dd>' +
+          '<dt>Where</dt><dd>Berlin · within <span class="num">150 km</span></dd>' +
+          '<dt>Interests</dt><dd>Music, hiking</dd>' +
+        '</dl>' +
+
+        '<p class="muted" style="font-size:0.86rem;margin-top:1.3rem">' +
+          '<span class="num">20</span> people searching right now.</p>' +
+        '<p class="hint">Nobody fits every filter yet. You would match <span class="num">3</span> people if you widen your radius.</p>' +
+
+        '<div style="margin-top:1.4rem;display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap">' +
+          '<button class="btn btn-secondary" type="button">Widen radius</button>' +
+          '<button class="btn btn-ghost" type="button">Stop searching</button>' +
+        '</div>' +
+      '</div>';
+    },
+
+    results: function () {
+      var people = [
+        { name: "Mia, 26", handle: "@mia_b · Women · Berlin", best: true,
+          reasons: ["Wants the same kind of connection", "Three shared interests", "Same city"] },
+        { name: "Ines, 31", handle: "@ines_v · Women · Potsdam", best: false,
+          reasons: ["Wants the same kind of connection", "One shared interest", "34 km away"] },
+        { name: "Salome, 28", handle: "@sal_o · Women · Leipzig", best: false,
+          reasons: ["Wants the same kind of connection", "Two shared interests", "149 km away"] }
+      ];
+
+      var cards = people.map(function (p) {
+        return '' +
+        '<div class="panel result' + (p.best ? ' best' : '') + '">' +
+          (p.best ? '<div><span class="tag">Best fit</span></div>' : '') +
+          '<div class="result-head">' +
+            '<div class="avatar"></div>' +
+            '<div><h3>' + p.name + '</h3><div class="meta">' + p.handle + '</div></div>' +
+          '</div>' +
+          '<ul>' + p.reasons.map(function (r) { return '<li>' + r + '</li>'; }).join('') + '</ul>' +
+          '<div class="actions">' +
+            '<button class="btn" type="button">Match &amp; chat</button>' +
+            '<button class="btn btn-secondary" type="button">View</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      return '' +
+        '<div>' +
+          '<p class="eyebrow">Step 2 of 2</p>' +
+          '<h1>Pick one of your three options</h1>' +
+          '<p class="subtitle">Looking for <strong>a long-term relationship</strong> · <a href="#">change</a></p>' +
+        '</div>' +
+        '<div class="grid">' + cards + '</div>' +
+        '<p class="muted" style="font-size:0.9rem">Showing the top <span class="num">3</span> of <span class="num">11</span> compatible people — match with one, or <a href="#">see all matches</a>.</p>';
+    },
+
+    chat: function () {
+      return '' +
+      '<div class="panel">' +
+        '<div class="chat-head">' +
+          '<div class="avatar avatar-lg"></div>' +
+          '<div>' +
+            '<h2>Mia, 26</h2>' +
+            '<p class="meta muted" style="font-size:0.82rem"><span class="live-dot"></span>live · Berlin</p>' +
+          '</div>' +
+          '<div style="margin-left:auto"><span class="tag tag-live">Live</span></div>' +
+        '</div>' +
+
+        '<div class="chat-log">' +
+          '<div class="bubble left"><span class="sender">Mia</span>You picked the same three things I did. Suspicious.</div>' +
+          '<div class="bubble right"><span class="sender">You</span>Or fate. Drink on Thursday?</div>' +
+          '<div class="bubble left"><span class="sender">Mia</span>Fate it is. The place on Torstraße, the one with no sign.</div>' +
+          '<div class="bubble right"><span class="sender">You</span>Nine. I will be the one reading something pretentious.</div>' +
+        '</div>' +
+
+        '<div class="chat-form">' +
+          '<input type="text" placeholder="Write something">' +
+          '<button class="btn" type="button">Send</button>' +
+        '</div>' +
+        '<p class="hint">Only the two matched members can write here.</p>' +
+      '</div>';
+    }
+  };
+
+  /* ------------------------------------------------------------------
+     Wiring
+     ------------------------------------------------------------------ */
+  var root    = document.documentElement;
+  var stage   = document.getElementById('stage');
+  var elWay   = document.getElementById('ctl-colorway');
+  var elType  = document.getElementById('ctl-type');
+  var elScr   = document.getElementById('ctl-screen');
+  var elTex   = document.getElementById('ctl-tex');
+  var elTexO  = document.getElementById('ctl-tex-out');
+
+  function render() {
+    stage.innerHTML = SCREENS[elScr.value]();
+    if (elScr.value === 'criteria') wireCriteria();
+  }
+
+  /* The criteria screen's sliders behave like the real ones: handles push
+     each other rather than letting the range invert, and the radius states
+     its own consequence at the top of the scale. */
+  function wireCriteria() {
+    var lo   = document.getElementById('age-min');
+    var hi   = document.getElementById('age-max');
+    var out  = document.getElementById('age-value');
+    var rad  = document.getElementById('radius');
+    var radO = document.getElementById('radius-value');
+    var radH = document.getElementById('radius-hint');
+    var radMax = parseInt(rad.max, 10);
+
+    function syncAge(changed) {
+      var a = parseInt(lo.value, 10), b = parseInt(hi.value, 10);
+      if (a > b) {
+        if (changed === 'min') { hi.value = a; } else { lo.value = b; }
+        a = parseInt(lo.value, 10); b = parseInt(hi.value, 10);
+      }
+      out.textContent = a + ' – ' + b + ' years';
+    }
+    function syncRadius() {
+      var km = parseInt(rad.value, 10);
+      if (km >= radMax) {
+        radO.textContent = 'anywhere';
+        radH.textContent = 'Distance is ignored — match with anyone.';
+      } else {
+        radO.textContent = km + ' km';
+        radH.textContent = 'Only people within ' + km + ' km of your location.';
+      }
+    }
+    lo.addEventListener('input', function () { syncAge('min'); });
+    hi.addEventListener('input', function () { syncAge('max'); });
+    rad.addEventListener('input', syncRadius);
+    syncAge(); syncRadius();
+  }
+
+  elWay.addEventListener('change', function () { root.setAttribute('data-colorway', elWay.value); });
+  elType.addEventListener('change', function () { root.setAttribute('data-type', elType.value); });
+  elScr.addEventListener('change', render);
+  elTex.addEventListener('input', function () {
+    var t = (elTex.value / 100).toFixed(2);
+    root.style.setProperty('--tex', t);
+    elTexO.textContent = t;
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
