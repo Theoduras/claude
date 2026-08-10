@@ -69,7 +69,7 @@ because brushing velvet changes how it catches light. All tokens live at the
 top of `templates/base.html`.
 
 **Windows quick start** — paste this into PowerShell; it clones the repo to
-`~\heartlink`, installs dependencies, opens your browser, and starts the app:
+`~\velvet`, installs dependencies, opens your browser, and starts the app:
 
 ```powershell
 iwr -useb https://raw.githubusercontent.com/Theoduras/claude/claude/localhost-login-page-el4mjf/setup.ps1 -OutFile "$env:TEMP\setup.ps1"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\setup.ps1"
