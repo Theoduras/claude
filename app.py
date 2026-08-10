@@ -435,6 +435,341 @@ def validate_profile(values):
     return error, age
 
 
+def validate_physical(values):
+    """Validate and coerce physical attributes and preferences.
+
+    Returns (error, coerced_dict) where error is None on success, else a
+    string. Coerced dict has ints for height fields, validated strings for
+    categories, and CSV for multi-select.
+    """
+    coerced = {}
+
+    # Self-attributes
+    if values.get("height_cm"):
+        try:
+            h = int(values["height_cm"])
+            if not HEIGHT_MIN_CM <= h <= HEIGHT_MAX_CM:
+                return f"Height must be between {HEIGHT_MIN_CM} and {HEIGHT_MAX_CM} cm.", None
+            coerced["height_cm"] = h
+        except (TypeError, ValueError):
+            return "Please enter a valid height.", None
+    else:
+        coerced["height_cm"] = None
+
+    for field, options in [
+        ("body_type", BODY_TYPES),
+        ("fitness_level", FITNESS_LEVELS),
+        ("hair_color", HAIR_COLORS),
+        ("eye_color", EYE_COLORS),
+        ("tattoos", TATTOO_LEVELS),
+    ]:
+        val = values.get(field, "").strip()
+        if val and val not in options:
+            return f"Invalid {field.replace('_', ' ')}.", None
+        coerced[field] = val
+
+    # Preferences: height range
+    pref_h_min_str = values.get("pref_height_min", "").strip()
+    pref_h_max_str = values.get("pref_height_max", "").strip()
+
+    if pref_h_min_str or pref_h_max_str:
+        try:
+            pref_h_min = int(pref_h_min_str) if pref_h_min_str else None
+            pref_h_max = int(pref_h_max_str) if pref_h_max_str else None
+
+            if pref_h_min is None or pref_h_max is None:
+                return "Both height bounds are required if either is set.", None
+            if not (HEIGHT_MIN_CM <= pref_h_min <= HEIGHT_MAX_CM):
+                return f"Minimum height must be between {HEIGHT_MIN_CM} and {HEIGHT_MAX_CM} cm.", None
+            if not (HEIGHT_MIN_CM <= pref_h_max <= HEIGHT_MAX_CM):
+                return f"Maximum height must be between {HEIGHT_MIN_CM} and {HEIGHT_MAX_CM} cm.", None
+            if pref_h_min > pref_h_max:
+                return "Minimum height must not exceed maximum.", None
+
+            coerced["pref_height_min"] = pref_h_min
+            coerced["pref_height_max"] = pref_h_max
+        except (TypeError, ValueError):
+            return "Please enter valid height bounds.", None
+    else:
+        coerced["pref_height_min"] = None
+        coerced["pref_height_max"] = None
+
+    # Preferences: body types (multi-select, CSV)
+    # The caller uses request.form.getlist() separately; we just validate if provided
+    pref_body_csv = values.get(PREF_BODY_TYPES_FIELD, "").strip()
+    if pref_body_csv:
+        selected = [b.strip() for b in pref_body_csv.split(",")]
+        for b in selected:
+            if b and b not in BODY_TYPES:
+                return f"Invalid body type: {b}.", None
+    coerced[PREF_BODY_TYPES_FIELD] = pref_body_csv
+
+    # Preferences: single-select categories
+    for field, options in [
+        ("pref_fitness_level", FITNESS_LEVELS),
+        ("pref_hair_color", HAIR_COLORS),
+        ("pref_eye_color", EYE_COLORS),
+        ("pref_tattoos", TATTOO_LEVELS),
+    ]:
+        val = values.get(field, "").strip()
+        if val and val not in options:
+            return f"Invalid {field.replace('_', ' ')}.", None
+        coerced[field] = val
+
+    return None, coerced
+
+
+# Scoring parameters
+WEIGHTS = {
+    "height": 18,
+    "body_type": 16,
+    "fitness": 14,
+    "hair_color": 8,
+    "eye_color": 8,
+    "tattoos": 10,
+    # physical subtotal = 74
+    "interests": 12,
+    "relationship_type": 8,
+    "age": 4,
+    "location": 2,
+    # total = 100
+}
+
+HEIGHT_TAPER_CM = 15  # taper range for height preference satisfaction
+
+
+def _normalize_numeric(value, pref_min, pref_max, taper_span):
+    """Normalize a numeric attribute to [0, 1] with linear taper outside range.
+
+    Returns None if value or both bounds are missing.
+    1.0 inside [pref_min, pref_max], linear taper to 0 across taper_span outside.
+    """
+    if value is None or pref_min is None or pref_max is None:
+        return None
+
+    if pref_min <= value <= pref_max:
+        return 1.0
+
+    if value < pref_min:
+        gap = pref_min - value
+        if gap >= taper_span:
+            return 0.0
+        return 1.0 - (gap / taper_span)
+    else:  # value > pref_max
+        gap = value - pref_max
+        if gap >= taper_span:
+            return 0.0
+        return 1.0 - (gap / taper_span)
+
+
+def _ordinal_satisfaction(value, target, levels):
+    """Ordinal satisfaction: distance between indices.
+
+    Returns None if either is missing.
+    1.0 for exact match, linear falloff by |idx_diff| / (num_levels - 1).
+    """
+    if value is None or target is None or not value or not target:
+        return None
+
+    if value not in levels or target not in levels:
+        return None
+
+    idx_val = levels.index(value)
+    idx_tgt = levels.index(target)
+    n = len(levels) - 1
+    if n == 0:
+        return 1.0
+    return 1.0 - (abs(idx_val - idx_tgt) / n)
+
+
+def _categorical_satisfaction(value, target):
+    """Exact-match satisfaction: 1.0 for match, 0.0 otherwise.
+
+    Returns None if either is missing.
+    """
+    if value is None or target is None or not value or not target:
+        return None
+
+    return 1.0 if value == target else 0.0
+
+
+def _categorical_multi_satisfaction(value, target_csv):
+    """Multi-select satisfaction: is value in the CSV list?
+
+    Returns None if either is missing or empty.
+    1.0 if value is in target_csv, 0.0 otherwise.
+    """
+    if value is None or target_csv is None or not value or not target_csv:
+        return None
+
+    targets = [t.strip() for t in target_csv.split(",")]
+    return 1.0 if value in targets else 0.0
+
+
+def directional_score(seeker, candidate):
+    """Score a candidate from seeker's perspective: (score_0_100, reasons).
+
+    Computes a weighted harmonic average of attribute satisfactions:
+    - Physical: height, body_type, fitness, hair_color, eye_color, tattoos
+    - Social: interests (token overlap), relationship_type, age, location
+
+    Attributes with missing data (None/"") are skipped; only present values
+    contribute to the average.
+
+    Returns:
+        (float score 0-100, list of reason strings for high-scoring matches)
+    """
+    satisfactions = []  # (weight, satisfaction, attribute_name)
+
+    # Height
+    sat = _normalize_numeric(
+        candidate.get("height_cm"),
+        seeker.get("pref_height_min"),
+        seeker.get("pref_height_max"),
+        HEIGHT_TAPER_CM,
+    )
+    if sat is not None:
+        satisfactions.append((WEIGHTS["height"], sat, "height"))
+
+    # Body type (seeker's preference is CSV)
+    sat = _categorical_multi_satisfaction(
+        candidate.get("body_type"),
+        seeker.get("pref_body_types"),
+    )
+    if sat is not None:
+        satisfactions.append((WEIGHTS["body_type"], sat, "body_type"))
+
+    # Fitness level
+    sat = _ordinal_satisfaction(
+        candidate.get("fitness_level"),
+        seeker.get("pref_fitness_level"),
+        FITNESS_LEVELS,
+    )
+    if sat is not None:
+        satisfactions.append((WEIGHTS["fitness"], sat, "fitness"))
+
+    # Hair color
+    sat = _categorical_satisfaction(
+        candidate.get("hair_color"),
+        seeker.get("pref_hair_color"),
+    )
+    if sat is not None:
+        satisfactions.append((WEIGHTS["hair_color"], sat, "hair_color"))
+
+    # Eye color
+    sat = _categorical_satisfaction(
+        candidate.get("eye_color"),
+        seeker.get("pref_eye_color"),
+    )
+    if sat is not None:
+        satisfactions.append((WEIGHTS["eye_color"], sat, "eye_color"))
+
+    # Tattoos (ordinal like fitness)
+    sat = _ordinal_satisfaction(
+        candidate.get("tattoos"),
+        seeker.get("pref_tattoos"),
+        TATTOO_LEVELS,
+    )
+    if sat is not None:
+        satisfactions.append((WEIGHTS["tattoos"], sat, "tattoos"))
+
+    # Shared interests
+    shared = _tokens(seeker["interests"], seeker["hobbies"]) & _tokens(
+        candidate["interests"], candidate["hobbies"]
+    )
+    if shared:
+        # Cap shared interests at 1.0 by capping the contribution.
+        # Use min(shared_count, max_keywords) to avoid unbounded scores.
+        max_keywords = 5
+        interest_count = min(len(shared), max_keywords)
+        sat = interest_count / max_keywords
+        satisfactions.append((WEIGHTS["interests"], sat, "interests"))
+
+    # Relationship type
+    if (
+        seeker.get("relationship_type")
+        and candidate.get("relationship_type")
+        and seeker["relationship_type"] == candidate["relationship_type"]
+    ):
+        satisfactions.append((WEIGHTS["relationship_type"], 1.0, "relationship_type"))
+
+    # Age proximity
+    if seeker.get("age") and candidate.get("age"):
+        gap = abs(seeker["age"] - candidate["age"])
+        # Linear: 1.0 at gap=0, 0.0 at gap=20+
+        age_sat = max(0.0, 1.0 - (gap / 20.0))
+        satisfactions.append((WEIGHTS["age"], age_sat, "age"))
+
+    # Location
+    if (
+        seeker.get("location")
+        and candidate.get("location")
+        and seeker["location"].strip().lower() == candidate["location"].strip().lower()
+    ):
+        satisfactions.append((WEIGHTS["location"], 1.0, "location"))
+
+    # Compute weighted average
+    if not satisfactions:
+        return 0.0, []
+
+    total_weight = sum(w for w, _, _ in satisfactions)
+    total_satisfaction = sum(w * s for w, s, _ in satisfactions)
+    score = 100.0 * total_satisfaction / total_weight if total_weight > 0 else 0.0
+
+    # Collect reason strings for attributes scoring >= 0.75 at non-trivial weight
+    reasons = []
+    for weight, sat, attr in satisfactions:
+        if sat >= 0.75 and weight >= 5:
+            if attr == "interests" and shared:
+                reasons.append("Shared interests: " + ", ".join(sorted(shared)))
+            elif attr == "height":
+                reasons.append("Preferred height range")
+            elif attr == "body_type":
+                reasons.append(f"Matches body type preference")
+            elif attr == "fitness":
+                reasons.append(f"Fitness level preference match")
+            elif attr == "hair_color":
+                reasons.append(f"Hair color preference")
+            elif attr == "eye_color":
+                reasons.append(f"Eye color preference")
+            elif attr == "tattoos":
+                reasons.append(f"Tattoo preference")
+            elif attr == "relationship_type":
+                reasons.append(f"You both want: {seeker['relationship_type'].lower()}")
+            elif attr == "age":
+                gap = abs(seeker["age"] - candidate["age"])
+                if gap <= 3:
+                    reasons.append("Close in age")
+                else:
+                    reasons.append(f"Within age preference")
+            elif attr == "location":
+                reasons.append(f"Same location: {candidate['location']}")
+
+    return score, reasons
+
+
+def mutual_score(a, b):
+    """Harmonic mean of reciprocal match scores.
+
+    Returns (float score 0-100, list of reasons).
+
+    Computes directional_score(a, b) and directional_score(b, a), then
+    returns 2ab/(a+b) so that one-sided attraction cannot outrank mutual
+    compatibility.
+    """
+    score_a_to_b, reasons_a = directional_score(a, b)
+    score_b_to_a, reasons_b = directional_score(b, a)
+
+    if score_a_to_b == 0 or score_b_to_a == 0:
+        return 0.0, []
+
+    harmonic = (2 * score_a_to_b * score_b_to_a) / (score_a_to_b + score_b_to_a)
+
+    # Combine reasons: use unique strings, avoid duplicates
+    all_reasons = list(set(reasons_a + reasons_b))
+    return harmonic, sorted(all_reasons)
+
+
 @app.route("/profile/edit", methods=["GET", "POST"])
 @login_required
 def edit_profile():
