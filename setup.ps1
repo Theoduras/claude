@@ -1,11 +1,12 @@
 # Velvet one-shot setup for Windows.
-# Clones (or updates) the repo, installs dependencies, and starts the app.
+# Clones (or updates) the repo, starts Postgres in Docker, installs
+# dependencies, seeds demo data, and starts the app.
 # Run from PowerShell:  powershell -ExecutionPolicy Bypass -File setup.ps1
 
 $ErrorActionPreference = "Stop"
 
 $RepoUrl = "https://github.com/Theoduras/claude.git"
-$Branch = "claude/determined-wozniak-orobzv"
+$Branch = "claude/localhost-login-page-el4mjf"
 $TargetDir = Join-Path $HOME "velvet"
 $LegacyDir = Join-Path $HOME "heartlink"
 
@@ -14,20 +15,49 @@ function Fail($msg) {
     exit 1
 }
 
+function Have($name) {
+    return [bool](Get-Command $name -ErrorAction SilentlyContinue)
+}
+
 # Find Python (py launcher first, then python)
 $python = $null
 foreach ($candidate in @("py", "python")) {
-    if (Get-Command $candidate -ErrorAction SilentlyContinue) {
-        $python = $candidate
-        break
-    }
+    if (Have $candidate) { $python = $candidate; break }
 }
 if (-not $python) {
     Fail "Python not found. Install it from https://www.python.org/downloads/ and check 'Add python.exe to PATH', then re-run this script."
 }
 
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+if (-not (Have "git")) {
     Fail "Git not found. Install it from https://git-scm.com/download/win, then re-run this script."
+}
+
+if (-not (Have "docker")) {
+    Fail "Docker not found. Velvet stores its data in PostgreSQL, which this script runs in a container. Install Docker Desktop from https://www.docker.com/products/docker-desktop/, start it, then re-run this script."
+}
+
+# Docker Compose v2 is a subcommand; older standalone docker-compose still works.
+$composeCmd = @("docker", "compose")
+& docker compose version *> $null
+if ($LASTEXITCODE -ne 0) {
+    if (Have "docker-compose") {
+        $composeCmd = @("docker-compose")
+    } else {
+        Fail "Docker is installed but Docker Compose is not available. Update Docker Desktop, then re-run this script."
+    }
+}
+
+function Compose {
+    $exe = $composeCmd[0]
+    $pre = @($composeCmd[1..($composeCmd.Length - 1)])
+    & $exe @($pre + $args)
+}
+
+# Docker Desktop's engine can take a while after login; fail with a clear
+# message rather than a wall of socket errors from compose.
+& docker info *> $null
+if ($LASTEXITCODE -ne 0) {
+    Fail "Docker is installed but its engine isn't running. Start Docker Desktop, wait for it to say 'Engine running', then re-run this script."
 }
 
 # The project used to clone into ~\heartlink; carry that copy over so the
@@ -47,24 +77,30 @@ if (Test-Path (Join-Path $TargetDir ".git")) {
     git clone -b $Branch $RepoUrl $TargetDir
 }
 
-Write-Host "Installing dependencies ..."
-& $python -m pip install --quiet -r (Join-Path $TargetDir "requirements.txt")
-
 Set-Location $TargetDir
 
-# Velvet stores its data in PostgreSQL so it can run across many instances
-# in the cloud; there is no local SQLite file any more.
-if (-not $env:DATABASE_URL) {
-    Write-Host ""
-    Write-Host "DATABASE_URL is not set." -ForegroundColor Yellow
-    Write-Host "Velvet needs a PostgreSQL database. With Docker installed:"
-    Write-Host ""
-    Write-Host '  docker run -d --name velvet-pg -e POSTGRES_PASSWORD=postgres `'
-    Write-Host '    -e POSTGRES_DB=velvet -p 5432:5432 postgres:16'
-    Write-Host '  $env:DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/velvet"'
-    Write-Host ""
-    Write-Host "Then re-run this script. See docs/deploy-gcp.md for details."
-    exit 1
+Write-Host "Installing dependencies ..."
+& $python -m pip install --quiet -r requirements.txt
+
+Write-Host "Starting PostgreSQL in Docker ..."
+Compose up -d
+if ($LASTEXITCODE -ne 0) {
+    Fail "Could not start PostgreSQL. If something else is already using port 5432, stop it (or change the port mapping in docker-compose.yml) and re-run this script."
+}
+
+# The app's connection pool gives up after 30s, so seeding a database that is
+# still starting fails. Wait for the container's own healthcheck instead.
+Write-Host "Waiting for PostgreSQL to accept connections ..." -NoNewline
+$healthy = $false
+foreach ($i in 1..60) {
+    $status = (& docker inspect -f '{{.State.Health.Status}}' velvet-db 2>$null)
+    if ($status -eq "healthy") { $healthy = $true; break }
+    Start-Sleep -Seconds 2
+    Write-Host "." -NoNewline
+}
+Write-Host ""
+if (-not $healthy) {
+    Fail "PostgreSQL did not become ready in time. Check 'docker compose logs db' for details."
 }
 
 Write-Host "Seeding 20 demo members into the live-search pool ..."
@@ -72,5 +108,6 @@ Write-Host "Seeding 20 demo members into the live-search pool ..."
 
 Write-Host ""
 Write-Host "Starting Velvet at http://localhost:5000 (Ctrl+C to stop)" -ForegroundColor Green
+Write-Host "The database keeps running in Docker. Stop it with: docker compose down" -ForegroundColor DarkGray
 Start-Process "http://localhost:5000"
 & $python app.py
