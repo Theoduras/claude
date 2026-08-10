@@ -26,16 +26,8 @@ pass — verify changes by running the app.
 
 ## Environment variables
 
-| Var | Default | Effect |
-| --- | --- | --- |
-| `APP_SECRET_KEY` | random per boot | Sessions survive restarts only if set |
-| `APP_ADMIN_PASSWORD` | `admin12345` | Password for the auto-created `admin` user |
-| `AUTO_LOGIN` | `0` | `1` bypasses login and browses as admin (dev only) |
-| `DATABASE_PATH` | `dating.db` next to `app.py` | SQLite file location |
-| `PORT` | `5000` | Bind port |
-| `FLASK_DEBUG` | `1` | `0` disables reloader/debugger |
-
-Vast.ai client reads `VAST_API_KEY`. Never hardcode or log it.
+Documented in `README.md` under "Configuration" — `APP_SECRET_KEY`,
+`APP_ADMIN_PASSWORD`, `AUTO_LOGIN`, `DATABASE_PATH`, `PORT`, `FLASK_DEBUG`.
 
 ## Architecture notes
 
@@ -47,9 +39,6 @@ Vast.ai client reads `VAST_API_KEY`. Never hardcode or log it.
   `try/except sqlite3.OperationalError`. Adding a column means appending to
   both the `CREATE` block and that migration list — existing `dating.db`
   files are never rebuilt.
-- **Tables:** `users`, `profiles` (1:1 with users), `matches` (enforces
-  `user_a < user_b`), `searches` (one row per member currently live-searching),
-  `messages`.
 - **Matching** is mutual and symmetric — `searches_compatible()` must hold in
   *both* directions (gender preference, age range, radius, relationship goal).
   `try_pair()` is guarded by `SEARCH_LOCK`.
@@ -72,6 +61,8 @@ Vast.ai client reads `VAST_API_KEY`. Never hardcode or log it.
   unsafe to expose publicly as-is.
 - **`create` / `destroy` in the Vast.ai client spend real money and terminate
   real machines.** Test with the read-only `offers` / `instances` commands.
+- **`VAST_API_KEY` is read from the environment.** Never hardcode it in source
+  or write it to logs.
 
 ## Design system
 
