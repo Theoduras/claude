@@ -318,10 +318,26 @@ CREATE TABLE IF NOT EXISTS searches (
     interests TEXT NOT NULL DEFAULT '',
     location TEXT NOT NULL DEFAULT '',
     radius_km INTEGER NOT NULL DEFAULT 500,
+    pref_height_min INTEGER,
+    pref_height_max INTEGER,
+    pref_body_types TEXT NOT NULL DEFAULT '',
+    pref_fitness_level TEXT NOT NULL DEFAULT '',
+    pref_hair_color TEXT NOT NULL DEFAULT '',
+    pref_eye_color TEXT NOT NULL DEFAULT '',
+    pref_tattoos TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'waiting',
     match_id BIGINT REFERENCES matches(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Bring searches created before the physical-trait step existed up to date.
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_height_min INTEGER;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_height_max INTEGER;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_body_types TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_fitness_level TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_hair_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_eye_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_tattoos TEXT NOT NULL DEFAULT '';
 
 -- The pairing pass scans waiting searchers.
 CREATE INDEX IF NOT EXISTS searches_status_idx ON searches (status);
@@ -1134,13 +1150,40 @@ def distance_km(loc_a, loc_b):
     return 2 * 6371.0 * math.asin(math.sqrt(h))
 
 
+def physical_ok(searcher, candidate):
+    """True when a candidate's physical traits satisfy the searcher's step-3 filters.
+
+    Each filter only blocks when the searcher set it AND the candidate has a
+    value for that attribute — an unset filter or an unset candidate
+    attribute is treated as "no preference", same convention as gender/age.
+    """
+    h_min, h_max = searcher.get("pref_height_min"), searcher.get("pref_height_max")
+    if h_min is not None and h_max is not None and candidate.get("height_cm") is not None:
+        if not h_min <= candidate["height_cm"] <= h_max:
+            return False
+
+    body_types = (searcher.get("pref_body_types") or "").strip()
+    if body_types and candidate.get("body_type"):
+        if candidate["body_type"] not in body_types.split(","):
+            return False
+
+    for field in ("fitness_level", "hair_color", "eye_color", "tattoos"):
+        pref = searcher.get("pref_" + field)
+        val = candidate.get(field)
+        if pref and val and pref != val:
+            return False
+
+    return True
+
+
 def searches_compatible(s1, s2):
     """True when two live searches satisfy each other's criteria.
 
     Both directions must hold: each person's gender must be one the other
     is looking for, each person's age must fall inside the other's
-    requested range, and the distance between them must sit inside both
-    radii. Relationship type only blocks when both named one and they
+    requested range, each person's physical traits must satisfy the
+    other's step-3 filters, and the distance between them must sit inside
+    both radii. Relationship type only blocks when both named one and they
     differ. Unset fields are treated as "no preference".
     """
 
@@ -1157,6 +1200,8 @@ def searches_compatible(s1, s2):
     if not (gender_ok(s1, s2["gender"]) and gender_ok(s2, s1["gender"])):
         return False
     if not (age_ok(s1, s2["age"]) and age_ok(s2, s1["age"])):
+        return False
+    if not (physical_ok(s1, s2) and physical_ok(s2, s1)):
         return False
     if (
         s1["relationship_type"]
@@ -1191,7 +1236,7 @@ def try_pair(user_id):
     try:
         mine = db.execute(
             """
-            SELECT s.*, p.gender, p.age FROM searches s
+            SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
             WHERE s.user_id = ?
             """,
@@ -1210,7 +1255,7 @@ def try_pair(user_id):
 
         others = db.execute(
             """
-            SELECT s.*, p.gender, p.age FROM searches s
+            SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
             WHERE s.status = 'waiting' AND s.user_id != ?
             ORDER BY s.created_at
@@ -1331,6 +1376,15 @@ def search_criteria():
             elif not 1 <= radius_km <= RADIUS_MAX_KM:
                 error = f"Radius must be between 1 and {RADIUS_MAX_KM} km."
 
+        phys = {}
+        if error is None:
+            phys_values = dict(request.form)
+            phys_values[PREF_BODY_TYPES_FIELD] = ",".join(
+                request.form.getlist(PREF_BODY_TYPES_FIELD)
+            )
+            phys_error, phys = validate_physical(phys_values)
+            error = error or phys_error
+
         if error:
             flash(error)
         else:
@@ -1338,8 +1392,11 @@ def search_criteria():
                 """
                 INSERT INTO searches
                     (user_id, seeking, age_min, age_max, relationship_type,
-                     interests, location, radius_km, status, match_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, NOW())
+                     interests, location, radius_km,
+                     pref_height_min, pref_height_max, pref_body_types,
+                     pref_fitness_level, pref_hair_color, pref_eye_color,
+                     pref_tattoos, status, match_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, NOW())
                 ON CONFLICT(user_id) DO UPDATE SET
                     seeking = excluded.seeking,
                     age_min = excluded.age_min,
@@ -1348,6 +1405,13 @@ def search_criteria():
                     interests = excluded.interests,
                     location = excluded.location,
                     radius_km = excluded.radius_km,
+                    pref_height_min = excluded.pref_height_min,
+                    pref_height_max = excluded.pref_height_max,
+                    pref_body_types = excluded.pref_body_types,
+                    pref_fitness_level = excluded.pref_fitness_level,
+                    pref_hair_color = excluded.pref_hair_color,
+                    pref_eye_color = excluded.pref_eye_color,
+                    pref_tattoos = excluded.pref_tattoos,
                     status = 'waiting',
                     match_id = NULL,
                     created_at = NOW()
@@ -1355,6 +1419,10 @@ def search_criteria():
                 (
                     user_id, seeking, age_min, age_max, wanted, interests,
                     location, radius_km,
+                    phys["pref_height_min"], phys["pref_height_max"],
+                    phys[PREF_BODY_TYPES_FIELD], phys["pref_fitness_level"],
+                    phys["pref_hair_color"], phys["pref_eye_color"],
+                    phys["pref_tattoos"],
                 ),
             )
             db.commit()
@@ -1373,6 +1441,13 @@ def search_criteria():
         seeking_options=SEEKING_OPTIONS,
         city_choices=CITY_CHOICES,
         radius_max=RADIUS_MAX_KM,
+        body_types=BODY_TYPES,
+        fitness_levels=FITNESS_LEVELS,
+        hair_colors=HAIR_COLORS,
+        eye_colors=EYE_COLORS,
+        tattoo_levels=TATTOO_LEVELS,
+        height_min=HEIGHT_MIN_CM,
+        height_max=HEIGHT_MAX_CM,
     )
 
 
@@ -1385,7 +1460,7 @@ def search_blockers(user_id):
     db = get_db()
     mine = db.execute(
         """
-        SELECT s.*, p.gender, p.age FROM searches s
+        SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
         WHERE s.user_id = ?
         """,
@@ -1396,7 +1471,7 @@ def search_blockers(user_id):
 
     others = db.execute(
         """
-        SELECT s.*, p.gender, p.age FROM searches s
+        SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
         WHERE s.status = 'waiting' AND s.user_id != ?
         """,

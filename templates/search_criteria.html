@@ -1,63 +1,178 @@
 {% extends "base.html" %}
 {% block title %}Search for a match — Velvet{% endblock %}
 {% block content %}
-<div class="card">
+<div class="card narrow">
   <h1>Search for a match now</h1>
   <p class="subtitle">
-    Step 2 of 2 &middot; Looking for <strong>{{ wanted | lower }}</strong> &middot;
+    Looking for <strong>{{ wanted | lower }}</strong> &middot;
     <a href="{{ url_for('live_search') }}">change</a>
   </p>
 
-  <form method="post" action="{{ url_for('search_criteria') }}">
+  <div class="wizard-dots" id="wizard-dots">
+    <span class="dot active"></span><span class="dot"></span><span class="dot"></span>
+  </div>
+
+  <form method="post" action="{{ url_for('search_criteria') }}" id="wizard-form">
     <input type="hidden" name="relationship_type" value="{{ wanted }}">
 
-    <label for="seeking">I'm looking for</label>
-    <select id="seeking" name="seeking">
-      <option value="">Anyone</option>
-      {% for s in seeking_options %}
-        <option value="{{ s }}"
-          {% if (existing and existing['seeking'] == s) or (not existing and me['seeking'] == s) %}selected{% endif %}>
-          {{ s }}
-        </option>
-      {% endfor %}
-    </select>
+    <div class="wizard-stage">
+      <div class="wizard-step active" data-step="1">
+        <p class="eyebrow">Step 1 of 3 &middot; Who</p>
+        <label for="seeking">I'm looking for</label>
+        <select id="seeking" name="seeking">
+          <option value="">Anyone</option>
+          {% for s in seeking_options %}
+            <option value="{{ s }}"
+              {% if (existing and existing['seeking'] == s) or (not existing and me['seeking'] == s) %}selected{% endif %}>
+              {{ s }}
+            </option>
+          {% endfor %}
+        </select>
 
-    <label>Age range <span class="slider-value" id="age-value"></span></label>
-    <div class="slider-pair">
-      <input type="range" id="age_min" name="age_min" min="18" max="120"
-             value="{{ existing['age_min'] if existing else 21 }}"
-             aria-label="Minimum age">
-      <input type="range" id="age_max" name="age_max" min="18" max="120"
-             value="{{ existing['age_max'] if existing else 35 }}"
-             aria-label="Maximum age">
+        <label>Age range <span class="slider-value" id="age-value"></span></label>
+        <div class="slider-pair">
+          <input type="range" id="age_min" name="age_min" min="18" max="120"
+                 value="{{ existing['age_min'] if existing else 21 }}"
+                 aria-label="Minimum age">
+          <input type="range" id="age_max" name="age_max" min="18" max="120"
+                 value="{{ existing['age_max'] if existing else 35 }}"
+                 aria-label="Maximum age">
+        </div>
+
+        <button type="button" class="btn btn-block wizard-next">Next</button>
+      </div>
+
+      <div class="wizard-step" data-step="2">
+        <p class="eyebrow">Step 2 of 3 &middot; Where</p>
+        <label for="location">Location</label>
+        <input id="location" name="location" type="text" list="city-list" autocomplete="off"
+               value="{{ existing['location'] if existing and existing['location'] else me['location'] }}"
+               placeholder="e.g. Berlin">
+        <datalist id="city-list">
+          {% for city in city_choices %}<option value="{{ city }}"></option>{% endfor %}
+        </datalist>
+
+        <label for="radius_km">Search radius <span class="slider-value" id="radius-value"></span></label>
+        <input type="range" id="radius_km" name="radius_km" min="5" max="{{ radius_max }}" step="5"
+               value="{{ existing['radius_km'] if existing else radius_max }}">
+        <p class="hint" id="radius-hint"></p>
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-secondary wizard-back">Back</button>
+          <button type="button" class="btn wizard-next">Next</button>
+        </div>
+      </div>
+
+      <div class="wizard-step" data-step="3">
+        <p class="eyebrow">Step 3 of 3 &middot; What you'll match on</p>
+
+        <label for="interests">Interests (optional)</label>
+        <input id="interests" name="interests" type="text"
+               value="{{ existing['interests'] if existing else me['interests'] }}"
+               placeholder="e.g. music, hiking — used to pick the best fit">
+
+        <div class="field-group" style="margin-top:1.2rem; padding-top:1rem;">
+          <h2>Physical traits (optional)</h2>
+          <p class="subtitle">Only people who fit these get matched to you — leave blank for no preference.</p>
+        </div>
+
+        <div class="field-pair">
+          <div>
+            <label for="pref_height_min">Height from (cm)</label>
+            <input id="pref_height_min" name="pref_height_min" type="number"
+                   min="{{ height_min }}" max="{{ height_max }}"
+                   value="{{ existing['pref_height_min'] if existing and existing['pref_height_min'] else '' }}"
+                   placeholder="{{ height_min }}">
+          </div>
+          <div>
+            <label for="pref_height_max">Height to (cm)</label>
+            <input id="pref_height_max" name="pref_height_max" type="number"
+                   min="{{ height_min }}" max="{{ height_max }}"
+                   value="{{ existing['pref_height_max'] if existing and existing['pref_height_max'] else '' }}"
+                   placeholder="{{ height_max }}">
+          </div>
+        </div>
+
+        {% set chosen_body_types = (existing['pref_body_types'] if existing else '').split(',') %}
+        <label>Body types</label>
+        <div class="checkgroup">
+          {% for bt in body_types %}
+            <label for="pref_body_types_{{ loop.index }}">
+              <input type="checkbox" id="pref_body_types_{{ loop.index }}"
+                     name="pref_body_types" value="{{ bt }}"
+                     {% if bt in chosen_body_types %}checked{% endif %}>
+              {{ bt }}
+            </label>
+          {% endfor %}
+        </div>
+
+        {% for field, label, options in [
+             ('pref_fitness_level', 'Fitness level', fitness_levels),
+             ('pref_hair_color', 'Hair colour', hair_colors),
+             ('pref_eye_color', 'Eye colour', eye_colors),
+             ('pref_tattoos', 'Tattoos', tattoo_levels),
+           ] %}
+          <label for="{{ field }}">{{ label }}</label>
+          <select id="{{ field }}" name="{{ field }}">
+            <option value="">No preference</option>
+            {% for opt in options %}
+              <option value="{{ opt }}" {% if existing and existing[field] == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        {% endfor %}
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-secondary wizard-back">Back</button>
+          <button class="btn" type="submit">&#128269; Start searching</button>
+        </div>
+      </div>
     </div>
-
-    <label for="location">Location</label>
-    <input id="location" name="location" type="text" list="city-list"
-           value="{{ existing['location'] if existing and existing['location'] else me['location'] }}"
-           placeholder="e.g. Berlin">
-    <datalist id="city-list">
-      {% for city in city_choices %}<option value="{{ city }}"></option>{% endfor %}
-    </datalist>
-
-    <label for="radius_km">Search radius <span class="slider-value" id="radius-value"></span></label>
-    <input type="range" id="radius_km" name="radius_km" min="5" max="{{ radius_max }}" step="5"
-           value="{{ existing['radius_km'] if existing else radius_max }}">
-    <p class="hint" id="radius-hint"></p>
-
-    <label for="interests">Interests (optional)</label>
-    <input id="interests" name="interests" type="text"
-           value="{{ existing['interests'] if existing else me['interests'] }}"
-           placeholder="e.g. music, hiking — used to pick the best fit">
-
-    <button class="btn btn-block" type="submit">&#128269; Start searching</button>
   </form>
+
   <p class="hint" style="margin-top: 0.75rem;">
     You are {{ me['gender'] or 'unspecified gender' }}{% if me['age'] %}, {{ me['age'] }}{% endif %}{% if me['location'] %}, in {{ me['location'] }}{% endif %} —
     others' filters apply to you too, so keep
     <a href="{{ url_for('edit_profile') }}">your profile</a> accurate.
   </p>
 </div>
+
+<style>
+  .wizard-dots { display: flex; gap: 0.4rem; margin-bottom: 1.3rem; }
+  .wizard-dots .dot {
+    width: 0.5rem; height: 0.5rem; border-radius: 50%;
+    background: var(--ink-hairline);
+    transition: background 0.25s ease, transform 0.25s ease;
+  }
+  .wizard-dots .dot.active {
+    background: var(--violet-crest);
+    box-shadow: 0 0 10px rgba(168, 85, 247, 0.7);
+    transform: scale(1.25);
+  }
+  .wizard-stage { perspective: 1400px; }
+  .wizard-step {
+    display: none;
+    animation: flip-in 0.45s cubic-bezier(.2,.7,.3,1);
+    transform-style: preserve-3d;
+  }
+  .wizard-step.active { display: block; }
+  .wizard-step.leaving {
+    display: block;
+    animation: flip-out 0.45s cubic-bezier(.2,.7,.3,1);
+  }
+  @keyframes flip-in {
+    from { transform: rotateY(-90deg); opacity: 0; }
+    to   { transform: rotateY(0deg); opacity: 1; }
+  }
+  @keyframes flip-out {
+    from { transform: rotateY(0deg); opacity: 1; }
+    to   { transform: rotateY(90deg); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wizard-step, .wizard-step.leaving { animation: none; }
+  }
+  .wizard-nav { display: flex; gap: 0.7rem; }
+  .wizard-nav .btn { flex: 1; }
+</style>
 
 <script>
 (function () {
@@ -73,7 +188,6 @@
     var lo = parseInt(minEl.value, 10);
     var hi = parseInt(maxEl.value, 10);
     if (lo > hi) {
-      // Push the other handle instead of letting the range invert.
       if (changed === "min") maxEl.value = lo; else minEl.value = hi;
       lo = parseInt(minEl.value, 10);
       hi = parseInt(maxEl.value, 10);
@@ -97,6 +211,34 @@
   radiusEl.addEventListener("input", syncRadius);
   syncAge();
   syncRadius();
+
+  // ---- wizard step flipping ----
+  var steps = Array.prototype.slice.call(document.querySelectorAll(".wizard-step"));
+  var dots = Array.prototype.slice.call(document.querySelectorAll("#wizard-dots .dot"));
+  var current = 0;
+
+  function goTo(index) {
+    var outgoing = steps[current];
+    outgoing.classList.remove("active");
+    outgoing.classList.add("leaving");
+    setTimeout(function () { outgoing.classList.remove("leaving"); }, 450);
+
+    current = index;
+    steps[current].classList.add("active");
+    dots.forEach(function (d, i) { d.classList.toggle("active", i === current); });
+    steps[current].scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  document.querySelectorAll(".wizard-next").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (current < steps.length - 1) goTo(current + 1);
+    });
+  });
+  document.querySelectorAll(".wizard-back").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (current > 0) goTo(current - 1);
+    });
+  });
 })();
 </script>
 {% endblock %}
