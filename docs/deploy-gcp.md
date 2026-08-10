@@ -5,6 +5,16 @@ Velvet runs as a stateless container on **Cloud Run**, with all data in
 demand, and because no state lives in the container, any instance can serve
 any request.
 
+**To do all of this in one command**, run the installer — it performs every
+step below, skipping whatever already exists:
+
+```bash
+./scripts/deploy_gcp.sh --project your-project-id --region us-central1 --seed
+```
+
+Re-running it redeploys. The rest of this page is the same sequence by hand,
+which is what to read when a step fails or you want to vary something.
+
 Set `PROJECT_ID` and `REGION` once and the commands below can be pasted as-is:
 
 ```bash
@@ -36,8 +46,12 @@ gcloud sql instances create "$INSTANCE" \
 
 gcloud sql databases create velvet --instance="$INSTANCE"
 
-# Use a generated password rather than typing one in.
-DB_PASS="$(openssl rand -base64 32)"
+# Use a generated password rather than typing one in. Note the alphabet:
+# `openssl rand -base64` emits "/" and "+", and a "/" in a password breaks any
+# tool that builds a postgresql:// URI by string interpolation — libpq ends the
+# userinfo segment at the slash and reports the password as an invalid "port".
+# token_urlsafe stays within [A-Za-z0-9_-] and avoids the whole class of bug.
+DB_PASS="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32), end="")')"
 gcloud sql users create velvet_app --instance="$INSTANCE" --password="$DB_PASS"
 ```
 
@@ -111,6 +125,50 @@ DATABASE_URL="postgresql://velvet_app:${DB_PASS}@127.0.0.1:5432/velvet" \
 `python seed_demo.py --reset` wipes the demo members and re-adds them.
 Unlike the old setup, this is a **one-off** — the data persists, so it does
 not need re-running after a deploy.
+
+## Cloud Build triggers will undo this
+
+If a Cloud Build trigger deploys the service on push, check what it runs. A
+trigger that calls `gcloud run deploy --image …` **without**
+`--set-env-vars`, `--set-secrets` and `--add-cloudsql-instances` creates a
+revision with no database configuration at all. The app then falls back to
+`127.0.0.1:5432`, every worker dies with `Connection refused`, and the service
+returns 503 — even though the previous revision was healthy and nothing in the
+code changed.
+
+The revision's `managed-by: gcp-cloud-build-deploy-cloud-run` label is the
+tell. Either disable the trigger (Cloud Build → Triggers) and deploy with
+`scripts/deploy_gcp.sh`, or give the trigger's deploy step the same flags used
+in §5. Do not leave both paths active with different configuration.
+
+## Moving the instance to another region
+
+Cloud SQL cannot change an instance's region, and the region is baked into the
+connection name (`PROJECT:REGION:INSTANCE`) the app connects through. Cloud Run
+in one region talking to Cloud SQL in another works, but pays the round trip on
+every query. To move, create a new instance and re-seed — data in the old one
+is not carried across:
+
+```bash
+NEW=velvet-db-eu
+gcloud sql instances create "$NEW" \
+  --database-version=POSTGRES_16 --region="$REGION" \
+  --tier=db-g1-small --storage-auto-increase
+
+gcloud sql databases create velvet --instance="$NEW"
+DB_PASS="$(gcloud secrets versions access latest --secret=velvet-db-pass)"
+gcloud sql users create velvet_app --instance="$NEW" --password="$DB_PASS"
+
+./scripts/deploy_gcp.sh --project "$PROJECT_ID" --region "$REGION" \
+  --instance "$NEW" --seed
+```
+
+Delete the old instance once the new one serves traffic — it bills while it
+exists:
+
+```bash
+gcloud sql instances delete velvet-db
+```
 
 ## Connection budget (the thing that bites at scale)
 

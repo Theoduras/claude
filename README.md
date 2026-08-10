@@ -188,7 +188,9 @@ Set `APP_SECRET_KEY` explicitly in any multi-instance deployment: the
 random per-process fallback would make sessions issued by one instance
 invalid on the next.
 
-Deploying to Cloud Run + Cloud SQL: **[docs/deploy-gcp.md](docs/deploy-gcp.md)**.
+Deploying to Cloud Run + Cloud SQL: `./scripts/deploy_gcp.sh --project <id> --seed`
+provisions and deploys everything in one idempotent command; the manual
+sequence is in **[docs/deploy-gcp.md](docs/deploy-gcp.md)**.
 
 The default admin password and `AUTO_LOGIN` make an unconfigured instance
 unsafe to expose publicly — set `APP_ADMIN_PASSWORD` and leave
