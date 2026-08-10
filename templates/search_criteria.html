@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Search for a match — Velvet{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Search for a match now</h1>
+  <p class="subtitle">
+    Step 2 of 2 &middot; Looking for <strong>{{ wanted | lower }}</strong> &middot;
+    <a href="{{ url_for('live_search') }}">change</a>
+  </p>
+
+  <form method="post" action="{{ url_for('search_criteria') }}">
+    <input type="hidden" name="relationship_type" value="{{ wanted }}">
+
+    <label for="seeking">I'm looking for</label>
+    <select id="seeking" name="seeking">
+      <option value="">Anyone</option>
+      {% for s in seeking_options %}
+        <option value="{{ s }}"
+          {% if (existing and existing['seeking'] == s) or (not existing and me['seeking'] == s) %}selected{% endif %}>
+          {{ s }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <label>Age range <span class="slider-value" id="age-value"></span></label>
+    <div class="slider-pair">
+      <input type="range" id="age_min" name="age_min" min="18" max="120"
+             value="{{ existing['age_min'] if existing else 21 }}"
+             aria-label="Minimum age">
+      <input type="range" id="age_max" name="age_max" min="18" max="120"
+             value="{{ existing['age_max'] if existing else 35 }}"
+             aria-label="Maximum age">
+    </div>
+
+    <label for="location">Location</label>
+    <input id="location" name="location" type="text" list="city-list"
+           value="{{ existing['location'] if existing and existing['location'] else me['location'] }}"
+           placeholder="e.g. Berlin">
+    <datalist id="city-list">
+      {% for city in city_choices %}<option value="{{ city }}"></option>{% endfor %}
+    </datalist>
+
+    <label for="radius_km">Search radius <span class="slider-value" id="radius-value"></span></label>
+    <input type="range" id="radius_km" name="radius_km" min="5" max="{{ radius_max }}" step="5"
+           value="{{ existing['radius_km'] if existing else radius_max }}">
+    <p class="hint" id="radius-hint"></p>
+
+    <label for="interests">Interests (optional)</label>
+    <input id="interests" name="interests" type="text"
+           value="{{ existing['interests'] if existing else me['interests'] }}"
+           placeholder="e.g. music, hiking — used to pick the best fit">
+
+    <button class="btn btn-block" type="submit">&#128269; Start searching</button>
+  </form>
+  <p class="hint" style="margin-top: 0.75rem;">
+    You are {{ me['gender'] or 'unspecified gender' }}{% if me['age'] %}, {{ me['age'] }}{% endif %}{% if me['location'] %}, in {{ me['location'] }}{% endif %} —
+    others' filters apply to you too, so keep
+    <a href="{{ url_for('edit_profile') }}">your profile</a> accurate.
+  </p>
+</div>
+
+<script>
+(function () {
+  var minEl = document.getElementById("age_min");
+  var maxEl = document.getElementById("age_max");
+  var ageOut = document.getElementById("age-value");
+  var radiusEl = document.getElementById("radius_km");
+  var radiusOut = document.getElementById("radius-value");
+  var radiusHint = document.getElementById("radius-hint");
+  var radiusMax = parseInt(radiusEl.max, 10);
+
+  function syncAge(changed) {
+    var lo = parseInt(minEl.value, 10);
+    var hi = parseInt(maxEl.value, 10);
+    if (lo > hi) {
+      // Push the other handle instead of letting the range invert.
+      if (changed === "min") maxEl.value = lo; else minEl.value = hi;
+      lo = parseInt(minEl.value, 10);
+      hi = parseInt(maxEl.value, 10);
+    }
+    ageOut.textContent = lo + " – " + hi + " years";
+  }
+
+  function syncRadius() {
+    var km = parseInt(radiusEl.value, 10);
+    if (km >= radiusMax) {
+      radiusOut.textContent = "anywhere";
+      radiusHint.textContent = "Distance is ignored — match with anyone.";
+    } else {
+      radiusOut.textContent = km + " km";
+      radiusHint.textContent = "Only people within " + km + " km of your location.";
+    }
+  }
+
+  minEl.addEventListener("input", function () { syncAge("min"); });
+  maxEl.addEventListener("input", function () { syncAge("max"); });
+  radiusEl.addEventListener("input", syncRadius);
+  syncAge();
+  syncRadius();
+})();
+</script>
+{% endblock %}

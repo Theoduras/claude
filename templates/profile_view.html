@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ profile['name'] or profile['username'] }} — Velvet{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ profile['name'] or profile['username'] }}{% if profile['age'] %}, {{ profile['age'] }}{% endif %}</h1>
+  <p class="subtitle">
+    @{{ profile['username'] }}
+    {% if profile['gender'] %} &middot; {{ profile['gender'] }}{% endif %}
+    {% if profile['location'] %} &middot; {{ profile['location'] }}{% endif %}
+  </p>
+
+  {% if profile['seeking'] %}
+    <span class="tag">Looking for: {{ profile['seeking'] }}</span>
+  {% endif %}
+  {% if profile['relationship_type'] %}
+    <span class="tag">Wants: {{ profile['relationship_type'] }}</span>
+  {% endif %}
+
+  <dl>
+    {% if profile['bio'] %}<dt>Bio</dt><dd>{{ profile['bio'] }}</dd>{% endif %}
+    {% if profile['interests'] %}<dt>Interests</dt><dd>{{ profile['interests'] }}</dd>{% endif %}
+    {% if profile['hobbies'] %}<dt>Hobbies</dt><dd>{{ profile['hobbies'] }}</dd>{% endif %}
+    {% if profile['wants'] %}<dt>What I want</dt><dd>{{ profile['wants'] }}</dd>{% endif %}
+    {% if profile['needs'] %}<dt>What I need</dt><dd>{{ profile['needs'] }}</dd>{% endif %}
+  </dl>
+
+  {% if is_own %}
+    <p style="margin-top: 1.5rem;">
+      <a class="btn btn-secondary" href="{{ url_for('edit_profile') }}">Edit profile</a>
+    </p>
+  {% endif %}
+</div>
+{% endblock %}

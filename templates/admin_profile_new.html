@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}New profile — Velvet{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Create a new profile</h1>
+  <p class="subtitle">Admin only — adds a new member with a full profile to the database.</p>
+
+  <form method="post" action="{{ url_for('admin_new_profile') }}">
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" minlength="3" required autofocus
+           value="{{ profile['username'] or '' }}" placeholder="unique handle, e.g. maria92">
+
+    <label for="password">Password (optional)</label>
+    <input id="password" name="password" type="password" minlength="8" autocomplete="new-password"
+           placeholder="lets this member log in themselves">
+    <p class="hint">Leave empty to create a profile without login access.</p>
+
+    {% include "_profile_fields.html" %}
+    <button class="btn" type="submit">Create profile</button>
+  </form>
+</div>
+{% endblock %}

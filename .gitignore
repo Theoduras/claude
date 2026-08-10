@@ -8,3 +8,6 @@ venv/
 # Secrets — never commit API keys
 .env
 *.key
+
+# Local database
+dating.db

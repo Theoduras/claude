@@ -1,0 +1,26 @@
+# Render Blueprint for the Velvet dating demo.
+# Deploy: Render dashboard -> New -> Blueprint -> connect this repo/branch.
+# See docs/deploy-render.md for the full walkthrough.
+services:
+  - type: web
+    name: velvet-dating
+    runtime: python
+    plan: free
+    # Free tier: no persistent disk, and the instance spins down after
+    # ~15 min idle. The next request wakes it back up on a fresh
+    # filesystem, so dating.db (SQLite, next to app.py) resets at that
+    # point and on every redeploy — expect data to periodically vanish.
+    # Upgrade to `plan: starter` + a `disk:` block for real persistence;
+    # see docs/deploy-render.md for the exact config.
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 2 --threads 4 -b 0.0.0.0:$PORT app:app
+    healthCheckPath: /login
+    envVars:
+      - key: APP_SECRET_KEY
+        generateValue: true
+      - key: APP_ADMIN_PASSWORD
+        sync: false # set this in the Render dashboard after first deploy
+      - key: AUTO_LOGIN
+        value: "0"
+      - key: FLASK_DEBUG
+        value: "0"

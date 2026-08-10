@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Your options — Velvet{% endblock %}
+{% block content %}
+<h1>Pick one of your {{ options | length }} options</h1>
+<p class="subtitle">
+  Step 2 of 2 &middot; Looking for <strong>{{ wanted | lower }}</strong> &middot;
+  <a href="{{ url_for('find') }}">change</a>
+</p>
+
+{% if options %}
+  <div class="grid">
+    {% for opt in options %}
+      {% set p = opt.profile %}
+      <div class="profile-card {% if loop.first %}best-option{% endif %}">
+        {% if loop.first %}<span class="tag">&#10084; Best fit</span>{% endif %}
+        <h2>{{ p['name'] }}{% if p['age'] %}, {{ p['age'] }}{% endif %}</h2>
+        <div class="meta">
+          @{{ p['username'] }}{% if p['gender'] %} &middot; {{ p['gender'] }}{% endif %}{% if p['location'] %} &middot; {{ p['location'] }}{% endif %}
+        </div>
+        {% if opt.reasons %}
+          <ul style="margin: 0; padding-left: 1.1rem; font-size: 0.85rem;">
+            {% for reason in opt.reasons %}<li>{{ reason }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+        {% if p['bio'] %}<div class="bio">{{ p['bio'] }}</div>{% endif %}
+        <div style="margin-top: auto; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <form method="post" action="{{ url_for('create_match', other_id=p['user_id']) }}">
+            <button class="btn" type="submit">&#10084; Match &amp; chat</button>
+          </form>
+          <a class="btn btn-secondary" href="{{ url_for('view_profile', user_id=p['user_id']) }}">View</a>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if total > options | length %}
+    <p class="muted" style="margin-top: 1rem; font-size: 0.9rem;">
+      Showing the top {{ options | length }} of {{ total }} compatible people —
+      match with one, or <a href="{{ url_for('matches') }}">see all matches</a>.
+    </p>
+  {% endif %}
+{% else %}
+  <div class="card">
+    <p style="margin: 0 0 0.5rem;">No one is looking for {{ wanted | lower }} right now.</p>
+    <p class="muted" style="margin: 0;">
+      Try <a href="{{ url_for('find') }}">another preference</a>, or
+      <a href="{{ url_for('browse') }}">browse everyone</a>.
+    </p>
+  </div>
+{% endif %}
+{% endblock %}

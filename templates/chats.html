@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Chats — Velvet{% endblock %}
+{% block content %}
+<h1>Chatrooms</h1>
+<p class="subtitle">Matched pairs and their conversations.</p>
+
+{% if rooms %}
+  {% for room in rooms %}
+    <div class="card room-row">
+      <div>
+        <strong>{{ room['name_a'] }} &amp; {{ room['name_b'] }}</strong>
+        <div class="muted" style="font-size: 0.85rem;">
+          {% if room['last_message'] %}
+            {{ room['last_message'] | truncate(80) }}
+          {% else %}
+            No messages yet — say hi!
+          {% endif %}
+        </div>
+      </div>
+      <a class="btn btn-secondary" href="{{ url_for('chat', match_id=room['id']) }}">Open chat</a>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="card">
+    <p class="muted" style="margin: 0;">
+      No chatrooms yet. Go to <a href="{{ url_for('matches') }}">Matches</a> and
+      hit &ldquo;Match &amp; chat&rdquo; to start one.
+    </p>
+  </div>
+{% endif %}
+{% endblock %}
