@@ -30,7 +30,7 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: 'velvet-app-505108'
 
       - name: Look up the Cloud SQL connection name
         id: sql
