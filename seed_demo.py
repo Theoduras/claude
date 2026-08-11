@@ -288,13 +288,18 @@ def seed(db):
         ).fetchone()
 
         if row is None:
+            # is_bot marks these as demo members that auto-reply in chat
+            # (see maybe_bot_reply() in app.py) and auto-continue past the
+            # decision phase, so a live-search lifecycle can be exercised
+            # solo against any of them.
             user_id = db.insert_returning_id(
-                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                "INSERT INTO users (username, password_hash, is_bot) VALUES (?, ?, TRUE)",
                 (username, password_hash),
             )
             added += 1
         else:
             user_id = row["id"]
+            db.execute("UPDATE users SET is_bot = TRUE WHERE id = ?", (user_id,))
             refreshed += 1
 
         phys = derive_physical(username, age, gender)
