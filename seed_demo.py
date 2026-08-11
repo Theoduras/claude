@@ -39,54 +39,57 @@ DEMO_PASSWORD = "demo12345"
 # username, name, age, gender, location, relationship_type, interests,
 # hobbies, seeking, age_min, age_max, radius_km
 #
+# Everyone is based in Maastricht, so the distance filter never removes a
+# member and the demo works for a local audience. The radius values are kept
+# as-is: they stay meaningful the moment a member is moved to another city.
+#
 # The first twelve are deliberate "anchors": for every relationship type
-# there is one woman and one man who are open to everyone, any age and any
-# distance. That guarantees a searcher of any gender can find someone for
-# whatever connection they pick. The remaining eight have narrow filters
-# and tight radii, which is what makes the distance/age sliders bite.
+# there is one woman and one man who are open to everyone and any age. That
+# guarantees a searcher of any gender can find someone for whatever
+# connection they pick. The remaining eight have narrow age/gender filters.
 DEMO_MEMBERS = [
     # --- anchors: seeking Everyone, ages 18-99, radius anywhere ---------
-    ("mia_b",      "Mia",     26, "Woman",      "Berlin",    "Long-term relationship",
+    ("mia_b",      "Mia",     26, "Woman",      "Maastricht","Long-term relationship",
      "music, travel, cooking", "salsa, yoga",          "Everyone", 18, 99, 500),
-    ("liam_k",     "Liam",    28, "Man",        "Hamburg",   "Long-term relationship",
+    ("liam_k",     "Liam",    28, "Man",        "Maastricht","Long-term relationship",
      "music, cooking, films",  "guitar, running",      "Everyone", 18, 99, 500),
-    ("paula_o",    "Paula",   30, "Woman",      "Munich",    "Short-term relationship",
+    ("paula_o",    "Paula",   30, "Woman",      "Maastricht","Short-term relationship",
      "whisky, sailing, films", "guitar, yoga",         "Everyone", 18, 99, 500),
-    ("stefan_g",   "Stefan",  32, "Man",        "Cologne",   "Short-term relationship",
+    ("stefan_g",   "Stefan",  32, "Man",        "Maastricht","Short-term relationship",
      "sailing, whisky",        "sailing, guitar",      "Everyone", 18, 99, 500),
-    ("noor_a",     "Noor",    24, "Woman",      "Frankfurt", "Casual dating",
+    ("noor_a",     "Noor",    24, "Woman",      "Maastricht","Casual dating",
      "art, photography",       "painting, cycling",    "Everyone", 18, 99, 500),
-    ("jonas_w",    "Jonas",   25, "Man",        "Stuttgart", "Casual dating",
+    ("jonas_w",    "Jonas",   25, "Man",        "Maastricht","Casual dating",
      "techno, gaming",         "skateboarding",        "Everyone", 18, 99, 500),
-    ("lena_h",     "Lena",    27, "Woman",      "Leipzig",   "Friendship",
+    ("lena_h",     "Lena",    27, "Woman",      "Maastricht","Friendship",
      "books, board games",     "knitting, hiking",     "Everyone", 18, 99, 500),
-    ("kai_n",      "Kai",     23, "Man",        "Dresden",   "Friendship",
+    ("kai_n",      "Kai",     23, "Man",        "Maastricht","Friendship",
      "board games, anime",     "drawing, badminton",   "Everyone", 18, 99, 500),
-    ("ava_s",      "Ava",     31, "Woman",      "Vienna",    "Marriage",
+    ("ava_s",      "Ava",     31, "Woman",      "Maastricht","Marriage",
      "wine, travel, cooking",  "tennis, baking",       "Everyone", 18, 99, 500),
-    ("theo_r",     "Theo",    33, "Man",        "Zurich",    "Marriage",
+    ("theo_r",     "Theo",    33, "Man",        "Maastricht","Marriage",
      "hiking, cooking, wine",  "climbing, chess",      "Everyone", 18, 99, 500),
-    ("ines_l",     "Ines",    29, "Woman",      "Düsseldorf","Not sure yet",
+    ("ines_l",     "Ines",    29, "Woman",      "Maastricht","Not sure yet",
      "cycling, gardening",     "grilling, reading",    "Everyone", 18, 99, 500),
-    ("bruno_c",    "Bruno",   35, "Man",        "Hannover",  "Not sure yet",
+    ("bruno_c",    "Bruno",   35, "Man",        "Maastricht","Not sure yet",
      "cars, cycling",          "motorsport, grilling", "Everyone", 18, 99, 500),
 
     # --- picky ones: narrow ages, one gender, tight radius --------------
-    ("clara_p",    "Clara",   33, "Woman",      "Frankfurt", "Long-term relationship",
+    ("clara_p",    "Clara",   33, "Woman",      "Maastricht","Long-term relationship",
      "jazz, cooking, museums", "pottery, running",     "Men",      29, 42, 80),
-    ("elias_m",    "Elias",   34, "Man",        "Frankfurt", "Long-term relationship",
+    ("elias_m",    "Elias",   34, "Man",        "Maastricht","Long-term relationship",
      "cooking, travel, jazz",  "cycling, pottery",     "Women",    27, 38, 60),
-    ("hana_y",     "Hana",    27, "Woman",      "Berlin",    "Long-term relationship",
+    ("hana_y",     "Hana",    27, "Woman",      "Maastricht","Long-term relationship",
      "languages, food, travel","climbing, cooking",    "Men",      25, 35, 45),
-    ("omar_f",     "Omar",    30, "Man",        "Berlin",    "Long-term relationship",
+    ("omar_f",     "Omar",    30, "Man",        "Maastricht","Long-term relationship",
      "travel, food, languages","surfing, cooking",     "Everyone", 24, 36, 120),
-    ("zoe_t",      "Zoe",     20, "Woman",      "Leipzig",   "Casual dating",
+    ("zoe_t",      "Zoe",     20, "Woman",      "Maastricht","Casual dating",
      "football, festivals",    "gym, dancing",         "Men",      18, 26, 35),
-    ("finn_d",     "Finn",    21, "Man",        "Leipzig",   "Casual dating",
+    ("finn_d",     "Finn",    21, "Man",        "Maastricht","Casual dating",
      "gaming, football",       "fifa, gym",            "Women",    18, 25, 20),
-    ("sam_v",      "Sam",     28, "Non-binary", "Berlin",    "Casual dating",
+    ("sam_v",      "Sam",     28, "Non-binary", "Maastricht","Casual dating",
      "music, poetry, films",   "djing, swimming",      "Everyone", 21, 34, 40),
-    ("robin_e",    "Robin",   25, "Non-binary", "Dresden",   "Friendship",
+    ("robin_e",    "Robin",   25, "Non-binary", "Maastricht","Friendship",
      "anime, board games",     "drawing, hiking",      "Everyone", 20, 32, 90),
 ]
 
