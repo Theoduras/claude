@@ -22,22 +22,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 1. Authenticate to GCP using the exact Provider and Service Account we created
       - id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: 'projects/733528989325/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: '733528989325-compute@developer.gserviceaccount.com'
 
+      # 2. Set the Project ID directly
       - uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: 'velvet-app-505108'
 
+      # 3. Get the Cloud SQL connection string
       - name: Look up the Cloud SQL connection name
         id: sql
         run: |
           conn="$(gcloud sql instances describe "$INSTANCE" --format='value(connectionName)')"
           echo "conn_name=$conn" >> "$GITHUB_OUTPUT"
 
+      # 4. Deploy to Cloud Run
       - name: Deploy
         run: |
           gcloud run deploy "$SERVICE" \
