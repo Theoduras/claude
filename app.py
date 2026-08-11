@@ -26,6 +26,7 @@ import re
 import secrets
 
 import psycopg
+from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -47,31 +48,33 @@ app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
 
 
 def database_url():
-    """Build the Postgres connection string from the environment.
+    """Build the Postgres conninfo from the environment.
 
-    DATABASE_URL wins if set. Otherwise the parts are assembled, which is
-    what the Cloud Run deployment uses: INSTANCE_CONNECTION_NAME makes the
-    app connect over the Cloud SQL unix socket rather than TCP.
+    DATABASE_URL wins if set. Otherwise the parts are assembled with
+    make_conninfo, which quotes every value. Pasting them into a URL by hand
+    does not: a password containing "/" silently swallows the user, the
+    dbname and the port, and a base64 password hits that about half the time.
     """
     url = os.environ.get("DATABASE_URL")
     if url:
         return url
 
-    user = os.environ.get("DB_USER", "postgres")
-    password = os.environ.get("DB_PASS", "postgres")
-    name = os.environ.get("DB_NAME", "velvet")
+    parts = {
+        "user": os.environ.get("DB_USER", "postgres"),
+        "password": os.environ.get("DB_PASS", "postgres"),
+        "dbname": os.environ.get("DB_NAME", "velvet"),
+    }
 
     instance = os.environ.get("INSTANCE_CONNECTION_NAME")
     if instance:
         socket_dir = os.environ.get("DB_SOCKET_DIR", "/cloudsql")
-        return (
-            f"postgresql://{user}:{password}@/{name}"
-            f"?host={socket_dir}/{instance}"
-        )
+        return make_conninfo(**parts, host=f"{socket_dir}/{instance}")
 
-    host = os.environ.get("DB_HOST", "127.0.0.1")
-    port = os.environ.get("DB_PORT", "5432")
-    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+    return make_conninfo(
+        **parts,
+        host=os.environ.get("DB_HOST", "127.0.0.1"),
+        port=os.environ.get("DB_PORT", "5432"),
+    )
 
 
 # Each instance keeps a deliberately small pool: Cloud Run multiplies it by
@@ -329,6 +332,13 @@ CREATE TABLE IF NOT EXISTS searches (
     interests TEXT NOT NULL DEFAULT '',
     location TEXT NOT NULL DEFAULT '',
     radius_km INTEGER NOT NULL DEFAULT 500,
+    pref_height_min INTEGER,
+    pref_height_max INTEGER,
+    pref_body_types TEXT NOT NULL DEFAULT '',
+    pref_fitness_level TEXT NOT NULL DEFAULT '',
+    pref_hair_color TEXT NOT NULL DEFAULT '',
+    pref_eye_color TEXT NOT NULL DEFAULT '',
+    pref_tattoos TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'waiting',
     match_id BIGINT REFERENCES matches(id) ON DELETE SET NULL,
     -- Each filter can be switched off without losing the value behind it, so
@@ -347,6 +357,15 @@ ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_gender BOOLEAN NOT NULL DEFAUL
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_age BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_relationship BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_distance BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Bring searches created before the physical-trait step existed up to date.
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_height_min INTEGER;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_height_max INTEGER;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_body_types TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_fitness_level TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_hair_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_eye_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_tattoos TEXT NOT NULL DEFAULT '';
 
 -- The pairing pass scans waiting searchers.
 CREATE INDEX IF NOT EXISTS searches_status_idx ON searches (status);
@@ -1159,13 +1178,40 @@ def distance_km(loc_a, loc_b):
     return 2 * 6371.0 * math.asin(math.sqrt(h))
 
 
+def physical_ok(searcher, candidate):
+    """True when a candidate's physical traits satisfy the searcher's step-3 filters.
+
+    Each filter only blocks when the searcher set it AND the candidate has a
+    value for that attribute — an unset filter or an unset candidate
+    attribute is treated as "no preference", same convention as gender/age.
+    """
+    h_min, h_max = searcher.get("pref_height_min"), searcher.get("pref_height_max")
+    if h_min is not None and h_max is not None and candidate.get("height_cm") is not None:
+        if not h_min <= candidate["height_cm"] <= h_max:
+            return False
+
+    body_types = (searcher.get("pref_body_types") or "").strip()
+    if body_types and candidate.get("body_type"):
+        if candidate["body_type"] not in body_types.split(","):
+            return False
+
+    for field in ("fitness_level", "hair_color", "eye_color", "tattoos"):
+        pref = searcher.get("pref_" + field)
+        val = candidate.get(field)
+        if pref and val and pref != val:
+            return False
+
+    return True
+
+
 def searches_compatible(s1, s2):
     """True when two live searches satisfy each other's criteria.
 
     Both directions must hold: each person's gender must be one the other
     is looking for, each person's age must fall inside the other's
-    requested range, and the distance between them must sit inside both
-    radii. Relationship type only blocks when both named one and they
+    requested range, each person's physical traits must satisfy the
+    other's step-3 filters, and the distance between them must sit inside
+    both radii. Relationship type only blocks when both named one and they
     differ. Unset fields are treated as "no preference".
 
     Each side can also switch a filter off (searches.use_gender/use_age/
@@ -1193,6 +1239,8 @@ def searches_compatible(s1, s2):
     if not (gender_ok(s1, s2["gender"]) and gender_ok(s2, s1["gender"])):
         return False
     if not (age_ok(s1, s2["age"]) and age_ok(s2, s1["age"])):
+        return False
+    if not (physical_ok(s1, s2) and physical_ok(s2, s1)):
         return False
     if (
         s1.get("use_relationship", True)
@@ -1232,7 +1280,7 @@ def try_pair(user_id):
     try:
         mine = db.execute(
             """
-            SELECT s.*, p.gender, p.age FROM searches s
+            SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
             WHERE s.user_id = ?
             """,
@@ -1251,7 +1299,7 @@ def try_pair(user_id):
 
         others = db.execute(
             """
-            SELECT s.*, p.gender, p.age FROM searches s
+            SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
             WHERE s.status = 'waiting' AND s.user_id != ?
             ORDER BY s.created_at
@@ -1372,6 +1420,15 @@ def search_criteria():
             elif not 1 <= radius_km <= RADIUS_MAX_KM:
                 error = f"Radius must be between 1 and {RADIUS_MAX_KM} km."
 
+        phys = {}
+        if error is None:
+            phys_values = dict(request.form)
+            phys_values[PREF_BODY_TYPES_FIELD] = ",".join(
+                request.form.getlist(PREF_BODY_TYPES_FIELD)
+            )
+            phys_error, phys = validate_physical(phys_values)
+            error = error or phys_error
+
         if error:
             flash(error)
         else:
@@ -1379,8 +1436,11 @@ def search_criteria():
                 """
                 INSERT INTO searches
                     (user_id, seeking, age_min, age_max, relationship_type,
-                     interests, location, radius_km, status, match_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, NOW())
+                     interests, location, radius_km,
+                     pref_height_min, pref_height_max, pref_body_types,
+                     pref_fitness_level, pref_hair_color, pref_eye_color,
+                     pref_tattoos, status, match_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, NOW())
                 ON CONFLICT(user_id) DO UPDATE SET
                     seeking = excluded.seeking,
                     age_min = excluded.age_min,
@@ -1389,6 +1449,13 @@ def search_criteria():
                     interests = excluded.interests,
                     location = excluded.location,
                     radius_km = excluded.radius_km,
+                    pref_height_min = excluded.pref_height_min,
+                    pref_height_max = excluded.pref_height_max,
+                    pref_body_types = excluded.pref_body_types,
+                    pref_fitness_level = excluded.pref_fitness_level,
+                    pref_hair_color = excluded.pref_hair_color,
+                    pref_eye_color = excluded.pref_eye_color,
+                    pref_tattoos = excluded.pref_tattoos,
                     status = 'waiting',
                     match_id = NULL,
                     created_at = NOW()
@@ -1396,6 +1463,10 @@ def search_criteria():
                 (
                     user_id, seeking, age_min, age_max, wanted, interests,
                     location, radius_km,
+                    phys["pref_height_min"], phys["pref_height_max"],
+                    phys[PREF_BODY_TYPES_FIELD], phys["pref_fitness_level"],
+                    phys["pref_hair_color"], phys["pref_eye_color"],
+                    phys["pref_tattoos"],
                 ),
             )
             db.commit()
@@ -1414,6 +1485,13 @@ def search_criteria():
         seeking_options=SEEKING_OPTIONS,
         city_choices=CITY_CHOICES,
         radius_max=RADIUS_MAX_KM,
+        body_types=BODY_TYPES,
+        fitness_levels=FITNESS_LEVELS,
+        hair_colors=HAIR_COLORS,
+        eye_colors=EYE_COLORS,
+        tattoo_levels=TATTOO_LEVELS,
+        height_min=HEIGHT_MIN_CM,
+        height_max=HEIGHT_MAX_CM,
     )
 
 
@@ -1521,7 +1599,7 @@ def _search_pool(user_id):
     db = get_db()
     mine = db.execute(
         """
-        SELECT s.*, p.gender, p.age FROM searches s
+        SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
         WHERE s.user_id = ?
         """,
@@ -1532,7 +1610,7 @@ def _search_pool(user_id):
 
     others = db.execute(
         """
-        SELECT s.*, p.gender, p.age FROM searches s
+        SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
         WHERE s.status = 'waiting' AND s.user_id != ?
         """,
@@ -2154,10 +2232,39 @@ def browse():
     )
 
 
+STARTUP_ERROR = None
+
+
 def startup():
-    """Open the pool and make sure the schema is in place."""
-    POOL.open()
-    init_db()
+    """Open the pool and make sure the schema is in place.
+
+    A failure here must not kill the worker. Gunicorn binds the port before
+    forking, so a worker that dies on import still looks like a healthy
+    deploy — the revision goes live and every request 503s with the real
+    error nowhere in sight. Record it instead and let /healthz report it.
+    """
+    global STARTUP_ERROR
+    try:
+        POOL.open()
+        init_db()
+        STARTUP_ERROR = None
+    except Exception as exc:  # surfaced via /healthz, logged for Cloud Run
+        STARTUP_ERROR = exc
+        app.logger.exception("startup failed: cannot reach the database")
+
+
+@app.get("/healthz")
+def healthz():
+    """Readiness for Cloud Run's startup probe.
+
+    Retries the schema init, so a database that was merely slow to accept
+    connections recovers on its own rather than needing a redeploy.
+    """
+    if STARTUP_ERROR is not None:
+        startup()
+    if STARTUP_ERROR is not None:
+        return f"db unavailable: {STARTUP_ERROR}", 503
+    return "ok", 200
 
 
 startup()

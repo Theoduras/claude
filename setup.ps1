@@ -6,7 +6,7 @@
 $ErrorActionPreference = "Stop"
 
 $RepoUrl = "https://github.com/Theoduras/claude.git"
-$Branch = "claude/localhost-login-page-el4mjf"
+$Branch = "main"
 $TargetDir = Join-Path $HOME "velvet"
 $LegacyDir = Join-Path $HOME "heartlink"
 
