@@ -2,12 +2,16 @@
 {% block title %}Edit profile — Velvet{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Your profile</h1>
-  <p class="subtitle">Tell others who you are and what you're looking for.</p>
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem;">
+    <div>
+      <p class="eyebrow" style="margin-bottom:0.3rem;">Profile</p>
+      <h1>Your profile</h1>
+    </div>
+  </div>
 
   <form method="post" action="{{ url_for('edit_profile') }}">
     {% include "_profile_fields.html" %}
-    <button class="btn" type="submit">Save profile</button>
+    <button class="btn btn-block" type="submit" style="margin-top:0.5rem;">Save changes</button>
   </form>
 </div>
 {% endblock %}

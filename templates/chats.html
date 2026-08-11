@@ -1,15 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Chats — Velvet{% endblock %}
 {% block content %}
-<h1>Chatrooms</h1>
-<p class="subtitle">Matched pairs and their conversations.</p>
+<p class="eyebrow" style="margin-bottom:0.35rem;">Chats</p>
+<h1 style="margin-bottom:0.5rem;">Your chatrooms</h1>
+<p class="subtitle" style="margin-bottom:1.5rem;">Matched pairs and their conversations.</p>
 
 {% if rooms %}
   {% for room in rooms %}
-    <div class="card room-row">
-      <div>
-        <strong>{{ room['name_a'] }} &amp; {{ room['name_b'] }}</strong>
-        <div class="muted" style="font-size: 0.85rem;">
+    <div class="card room-row" style="animation-delay: {{ loop.index0 * 0.06 }}s;">
+      <div style="flex:1; min-width:0;">
+        <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.25rem;">
+          <span class="live-dot" style="margin:0; flex-shrink:0;"></span>
+          <strong style="font-family:var(--serif); font-weight:500; font-size:1.05rem;">
+            {{ room['name_a'] }} &amp; {{ room['name_b'] }}
+          </strong>
+        </div>
+        <div class="muted" style="font-size: 0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
           {% if room['last_message'] %}
             {{ room['last_message'] | truncate(80) }}
           {% else %}
@@ -17,7 +23,7 @@
           {% endif %}
         </div>
       </div>
-      <a class="btn btn-secondary" href="{{ url_for('chat', match_id=room['id']) }}">Open chat</a>
+      <a class="btn btn-secondary" style="flex-shrink:0;" href="{{ url_for('chat', match_id=room['id']) }}">Open</a>
     </div>
   {% endfor %}
 {% else %}

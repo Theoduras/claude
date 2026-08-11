@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Browse — Velvet{% endblock %}
 {% block content %}
-<h1>Browse profiles</h1>
-<p class="subtitle">People looking to connect.</p>
+<p class="eyebrow" style="margin-bottom:0.35rem;">Browse</p>
+<h1 style="margin-bottom:0.4rem;">Browse profiles</h1>
+<p class="subtitle" style="margin-bottom:1.5rem;">People looking to connect.</p>
 
 {% if profile_incomplete %}
   <div class="flash">
@@ -14,7 +15,7 @@
 {% if profiles %}
   <div class="grid">
     {% for p in profiles %}
-      <div class="profile-card">
+      <div class="profile-card" style="animation-delay: {{ loop.index0 * 0.05 }}s;">
         <h2>{{ p['name'] }}{% if p['age'] %}, {{ p['age'] }}{% endif %}</h2>
         <div class="meta">
           @{{ p['username'] }}{% if p['gender'] %} &middot; {{ p['gender'] }}{% endif %}{% if p['location'] %} &middot; {{ p['location'] }}{% endif %}
@@ -24,7 +25,7 @@
         {% endif %}
         {% if p['bio'] %}<div class="bio">{{ p['bio'] }}</div>{% endif %}
         <div style="margin-top: auto;">
-          <a class="btn btn-secondary" href="{{ url_for('view_profile', user_id=p['user_id']) }}">View profile</a>
+          <a class="btn btn-secondary btn-small" href="{{ url_for('view_profile', user_id=p['user_id']) }}">View profile</a>
         </div>
       </div>
     {% endfor %}

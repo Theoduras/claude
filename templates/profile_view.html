@@ -2,72 +2,106 @@
 {% block title %}{{ profile['name'] or profile['username'] }} — Velvet{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>{{ profile['name'] or profile['username'] }}{% if profile['age'] %}, {{ profile['age'] }}{% endif %}</h1>
-  <p class="subtitle">
-    @{{ profile['username'] }}
-    {% if profile['gender'] %} &middot; {{ profile['gender'] }}{% endif %}
-    {% if profile['location'] %} &middot; {{ profile['location'] }}{% endif %}
-  </p>
 
-  {% if profile['seeking'] %}
-    <span class="tag">Looking for: {{ profile['seeking'] }}</span>
+  {# Hero header — mirrors design 2e #}
+  <div class="profile-hero">
+    <div class="profile-hero-text">
+      <h1 style="font-size: clamp(1.9rem, 5vw, 2.8rem); margin-bottom:0.3rem;">
+        {{ profile['name'] or profile['username'] }}{% if profile['age'] %}, {{ profile['age'] }}{% endif %}
+      </h1>
+      <p style="margin:0; font-size:0.88rem; color:var(--text-muted);">
+        @{{ profile['username'] }}
+        {% if profile['gender'] %} &middot; {{ profile['gender'] }}{% endif %}
+        {% if profile['location'] %} &middot; {{ profile['location'] }}{% endif %}
+      </p>
+    </div>
+  </div>
+
+  {# Tags #}
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem;">
+    {% if profile['seeking'] %}
+      <span class="tag">Looking for: {{ profile['seeking'] }}</span>
+    {% endif %}
+    {% if profile['relationship_type'] %}
+      <span class="tag">Wants: {{ profile['relationship_type'] }}</span>
+    {% endif %}
+  </div>
+
+  {# Bio in serif #}
+  {% if profile['bio'] %}
+    <p style="font-family:var(--serif); font-size:1.12rem; line-height:1.5; color:var(--text); margin: 0 0 1.25rem;">
+      &ldquo;{{ profile['bio'] }}&rdquo;
+    </p>
   {% endif %}
-  {% if profile['relationship_type'] %}
-    <span class="tag">Wants: {{ profile['relationship_type'] }}</span>
-  {% endif %}
 
-  <dl>
-    {% if profile['bio'] %}<dt>Bio</dt><dd>{{ profile['bio'] }}</dd>{% endif %}
-    {% if profile['interests'] %}<dt>Interests</dt><dd>{{ profile['interests'] }}</dd>{% endif %}
-    {% if profile['hobbies'] %}<dt>Hobbies</dt><dd>{{ profile['hobbies'] }}</dd>{% endif %}
-    {% if profile['wants'] %}<dt>What I want</dt><dd>{{ profile['wants'] }}</dd>{% endif %}
-    {% if profile['needs'] %}<dt>What I need</dt><dd>{{ profile['needs'] }}</dd>{% endif %}
+  {# Fact rows — matches mockup 2e layout #}
+  <div class="profile-facts" style="margin-bottom:1rem;">
+    {% if profile['interests'] %}
+      <div class="fact-row"><span class="fact-key">Interests</span><span class="fact-val">{{ profile['interests'] }}</span></div>
+    {% endif %}
+    {% if profile['hobbies'] %}
+      <div class="fact-row"><span class="fact-key">Hobbies</span><span class="fact-val">{{ profile['hobbies'] }}</span></div>
+    {% endif %}
+    {% if profile['wants'] %}
+      <div class="fact-row"><span class="fact-key">What I want</span><span class="fact-val">{{ profile['wants'] }}</span></div>
+    {% endif %}
+    {% if profile['needs'] %}
+      <div class="fact-row"><span class="fact-key">What I need</span><span class="fact-val">{{ profile['needs'] }}</span></div>
+    {% endif %}
+    {% if profile['height_cm'] %}
+      <div class="fact-row"><span class="fact-key">Height</span><span class="fact-val">{{ profile['height_cm'] }} cm</span></div>
+    {% endif %}
+    {% if profile['body_type'] %}
+      <div class="fact-row"><span class="fact-key">Body type</span><span class="fact-val">{{ profile['body_type'] }}</span></div>
+    {% endif %}
+    {% if profile['fitness_level'] %}
+      <div class="fact-row"><span class="fact-key">Fitness</span><span class="fact-val">{{ profile['fitness_level'] }}</span></div>
+    {% endif %}
+    {% if profile['hair_color'] or profile['eye_color'] %}
+      <div class="fact-row">
+        <span class="fact-key">Hair · Eyes</span>
+        <span class="fact-val">{{ profile['hair_color'] or '—' }} · {{ profile['eye_color'] or '—' }}</span>
+      </div>
+    {% endif %}
+    {% if profile['tattoos'] %}
+      <div class="fact-row"><span class="fact-key">Tattoos</span><span class="fact-val">{{ profile['tattoos'] }}</span></div>
+    {% endif %}
+  </div>
 
-    {% if profile['height_cm'] %}<dt>Height</dt><dd>{{ profile['height_cm'] }} cm</dd>{% endif %}
-    {% if profile['body_type'] %}<dt>Body type</dt><dd>{{ profile['body_type'] }}</dd>{% endif %}
-    {% if profile['fitness_level'] %}<dt>Fitness</dt><dd>{{ profile['fitness_level'] }}</dd>{% endif %}
-    {% if profile['hair_color'] %}<dt>Hair</dt><dd>{{ profile['hair_color'] }}</dd>{% endif %}
-    {% if profile['eye_color'] %}<dt>Eyes</dt><dd>{{ profile['eye_color'] }}</dd>{% endif %}
-    {% if profile['tattoos'] %}<dt>Tattoos</dt><dd>{{ profile['tattoos'] }}</dd>{% endif %}
-  </dl>
-
-  {# Only the owner sees their own stated preferences -- these drive ranking,
-     and showing them to others would invite gaming the score. #}
+  {# Private prefs (owner only) #}
   {% if is_own %}
     {% set has_prefs = profile['pref_height_min'] or profile['pref_body_types']
        or profile['pref_fitness_level'] or profile['pref_hair_color']
        or profile['pref_eye_color'] or profile['pref_tattoos'] %}
     {% if has_prefs %}
-      <h2 style="margin-top: 1.75rem;">Looking for (physical)</h2>
-      <p class="subtitle">Only you can see this. It counts both ways when ranking matches.</p>
-      <dl>
-        {% if profile['pref_height_min'] and profile['pref_height_max'] %}
-          <dt>Height</dt>
-          <dd>{{ profile['pref_height_min'] }}–{{ profile['pref_height_max'] }} cm</dd>
-        {% endif %}
-        {% if profile['pref_body_types'] %}
-          <dt>Body types</dt><dd>{{ profile['pref_body_types'].replace(',', ', ') }}</dd>
-        {% endif %}
-        {% if profile['pref_fitness_level'] %}
-          <dt>Fitness</dt><dd>{{ profile['pref_fitness_level'] }}</dd>
-        {% endif %}
-        {% if profile['pref_hair_color'] %}
-          <dt>Hair</dt><dd>{{ profile['pref_hair_color'] }}</dd>
-        {% endif %}
-        {% if profile['pref_eye_color'] %}
-          <dt>Eyes</dt><dd>{{ profile['pref_eye_color'] }}</dd>
-        {% endif %}
-        {% if profile['pref_tattoos'] %}
-          <dt>Tattoos</dt><dd>{{ profile['pref_tattoos'] }}</dd>
-        {% endif %}
-      </dl>
+      <div style="margin: 1.5rem 0 1rem; padding-top: 1.25rem; border-top: 1px solid var(--ink-hairline);">
+        <h2 style="font-size:1rem; margin-bottom:0.25rem;">Looking for (physical)</h2>
+        <p class="muted" style="font-size:0.82rem; margin: 0 0 0.75rem;">Only you can see this — it drives match ranking.</p>
+        <div class="profile-facts">
+          {% if profile['pref_height_min'] and profile['pref_height_max'] %}
+            <div class="fact-row"><span class="fact-key">Height</span><span class="fact-val">{{ profile['pref_height_min'] }}–{{ profile['pref_height_max'] }} cm</span></div>
+          {% endif %}
+          {% if profile['pref_body_types'] %}
+            <div class="fact-row"><span class="fact-key">Body types</span><span class="fact-val">{{ profile['pref_body_types'].replace(',', ', ') }}</span></div>
+          {% endif %}
+          {% if profile['pref_fitness_level'] %}
+            <div class="fact-row"><span class="fact-key">Fitness</span><span class="fact-val">{{ profile['pref_fitness_level'] }}</span></div>
+          {% endif %}
+          {% if profile['pref_hair_color'] %}
+            <div class="fact-row"><span class="fact-key">Hair</span><span class="fact-val">{{ profile['pref_hair_color'] }}</span></div>
+          {% endif %}
+          {% if profile['pref_eye_color'] %}
+            <div class="fact-row"><span class="fact-key">Eyes</span><span class="fact-val">{{ profile['pref_eye_color'] }}</span></div>
+          {% endif %}
+          {% if profile['pref_tattoos'] %}
+            <div class="fact-row"><span class="fact-key">Tattoos</span><span class="fact-val">{{ profile['pref_tattoos'] }}</span></div>
+          {% endif %}
+        </div>
+      </div>
     {% endif %}
+
+    <a class="btn btn-secondary" href="{{ url_for('edit_profile') }}" style="margin-top:0.5rem;">Edit profile</a>
   {% endif %}
 
-  {% if is_own %}
-    <p style="margin-top: 1.5rem;">
-      <a class="btn btn-secondary" href="{{ url_for('edit_profile') }}">Edit profile</a>
-    </p>
-  {% endif %}
 </div>
 {% endblock %}

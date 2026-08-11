@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Live search — Velvet{% endblock %}
 {% block content %}
-<h1>What are you looking for?</h1>
-<p class="subtitle">Step 1 of 2 &middot; Choose the kind of connection, then set your filters.</p>
+<p class="eyebrow" style="margin-bottom:0.35rem;">Live search</p>
+<h1 style="margin-bottom:0.4rem;">What are you looking for?</h1>
+<p class="subtitle" style="margin-bottom:1.5rem;">Choose the kind of connection, then set your filters.</p>
 
 <form method="post" action="{{ url_for('live_search') }}">
-  <div class="grid">
+  <div class="grid" style="margin-bottom:1rem;">
     {% for rt in relationship_types %}
       <label class="choice {% if existing and existing['relationship_type'] == rt %}choice-suggested{% endif %}">
         <input type="radio" name="relationship_type" value="{{ rt }}"
@@ -13,12 +14,12 @@
         <span>
           <strong>{{ rt }}</strong>
           {% if existing and existing['relationship_type'] == rt %}
-            <span class="muted" style="font-size: 0.8rem;">your last search</span>
+            <span class="muted" style="font-size:0.78rem;">your last search</span>
           {% endif %}
         </span>
       </label>
     {% endfor %}
   </div>
-  <button class="btn" type="submit" style="margin-top: 1rem;">Continue &rarr;</button>
+  <button class="btn" type="submit">Continue &rarr;</button>
 </form>
 {% endblock %}

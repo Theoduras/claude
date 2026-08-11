@@ -3,23 +3,21 @@
 {% block content %}
 <div class="card narrow" style="text-align: center;">
   <div class="pulse-heart"></div>
-  <p class="eyebrow" style="margin-bottom: 0.6rem;">Searching</p>
-  <h1>Feeling for a match</h1>
-  <p class="subtitle" style="margin-inline: auto;" id="status-line">
+  <p class="eyebrow" style="margin: 0.75rem 0 0.4rem;">Searching</p>
+  <h1 style="margin-bottom:0.5rem;">Feeling for a match</h1>
+  <p class="subtitle" style="margin-inline: auto; margin-bottom:0.5rem;" id="status-line">
     Looking for someone who fits — and who's looking for you.
   </p>
 
-  <p class="muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;">
-    {{ waiting }} {{ 'person' if waiting == 1 else 'people' }} searching right now
+  <p style="font: 400 0.78rem var(--mono); letter-spacing:0.1em; color:var(--champagne); margin: 0.5rem 0 0.25rem;">
+    {{ waiting }} SEARCHING
     {% if blockers.current_count is defined %}
-      &middot; {{ blockers.current_count }} {{ 'person' if blockers.current_count == 1 else 'people' }}
-      fit everything below right now
+      &nbsp;&middot;&nbsp;{{ blockers.current_count }} FIT EVERYTHING BELOW
     {% endif %}
   </p>
 
-  <p class="filter-note" style="text-align: left; margin: 0.3rem 0 0.9rem;">
-    These are your own filters. Turning one off only relaxes your side —
-    the other person's filters still apply, so it doesn't guarantee a match.
+  <p class="filter-note" style="text-align: left; margin: 0.6rem 0 0.5rem;">
+    Turning one off only relaxes your side — the other person's filters still apply.
   </p>
 
   <div class="filter-list">
@@ -42,34 +40,32 @@
           {% endif %}
         </div>
         {% if row.enabled != false and row.constrains and row.suggestion %}
-          <div class="filter-row" style="padding-top: 0;">
-            <div class="filter-fix" style="width: 100%;">
-              {% if row.key == 'age' %}
-                <span class="tag tag-teal">
-                  Widen to {{ row.suggestion.age_min }}–{{ row.suggestion.age_max }}
-                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                </span>
-              {% elif row.key == 'distance' %}
-                <span class="tag tag-teal">
-                  Widen to {{ row.suggestion.radius_km }} km
-                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                </span>
-              {% elif row.key == 'relationship' %}
-                <span class="tag tag-teal">
-                  Switch to {{ row.suggestion.relationship_type }}
-                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                </span>
-              {% elif row.key == 'gender' %}
-                <span class="tag tag-teal">
-                  Switch to {{ row.suggestion.seeking }}
-                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                </span>
-              {% endif %}
-              <form method="post" action="{{ url_for('search_filters_apply') }}">
-                <input type="hidden" name="filter" value="{{ row.key }}">
-                <button class="btn btn-secondary btn-small" type="submit">Fix</button>
-              </form>
-            </div>
+          <div class="filter-fix">
+            {% if row.key == 'age' %}
+              <span class="tag tag-teal">
+                Widen to {{ row.suggestion.age_min }}–{{ row.suggestion.age_max }}
+                &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+              </span>
+            {% elif row.key == 'distance' %}
+              <span class="tag tag-teal">
+                Widen to {{ row.suggestion.radius_km }} km
+                &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+              </span>
+            {% elif row.key == 'relationship' %}
+              <span class="tag tag-teal">
+                Switch to {{ row.suggestion.relationship_type }}
+                &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+              </span>
+            {% elif row.key == 'gender' %}
+              <span class="tag tag-teal">
+                Switch to {{ row.suggestion.seeking }}
+                &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+              </span>
+            {% endif %}
+            <form method="post" action="{{ url_for('search_filters_apply') }}">
+              <input type="hidden" name="filter" value="{{ row.key }}">
+              <button class="btn btn-secondary btn-small" type="submit">Fix</button>
+            </form>
           </div>
         {% endif %}
       </div>
@@ -77,18 +73,18 @@
   </div>
 
   {% if blockers.pool and blockers.current_count == 0 and blockers.if_all_relaxed == 0 %}
-    <div class="flash" style="text-align: left;">
+    <div class="flash" style="text-align: left; margin-bottom:0.75rem;">
       Nobody in the pool fits even with every filter above turned off. Try a
       different connection type, or check back once more people are searching.
     </div>
   {% endif %}
 
-  <p style="margin-top: 1.1rem;">
-    <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Change values in the full form instead</a>
+  <p style="margin: 0.75rem 0 1rem; font-size:0.84rem; color:var(--text-faint);">
+    <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Change values in the full form</a>
   </p>
 
   <form method="post" action="{{ url_for('search_cancel') }}">
-    <button class="btn btn-secondary" type="submit">Stop searching</button>
+    <button class="btn btn-ghost btn-block" type="submit">Stop searching</button>
   </form>
 </div>
 
@@ -96,12 +92,7 @@
 (function () {
   var statusLine = document.getElementById("status-line");
   var statusUrl = "{{ url_for('search_status') }}";
-
-  // Short-poll loop — see the note in chat.html. Each poll also re-runs
-  // the pairing attempt server-side, so a partner who starts searching
-  // after this page loaded is still picked up.
-  var POLL_MS = 1500;
-  var RETRY_MS = 4000;
+  var POLL_MS = 1500, RETRY_MS = 4000;
 
   function listen() {
     fetch(statusUrl, { headers: { "Accept": "application/json" } })
@@ -111,8 +102,10 @@
       })
       .then(function (data) {
         if (data.status === "matched" && data.chat_url) {
-          statusLine.textContent = "It's a match! Opening your chat…";
-          window.location.href = data.chat_url;
+          statusLine.textContent = "It’s a match! Opening your chat…";
+          statusLine.style.color = "var(--champagne)";
+          // Brief celebration pause before navigating
+          setTimeout(function() { window.location.href = data.chat_url; }, 800);
           return;
         }
         if (data.status === "none" || data.status === "cancelled") {

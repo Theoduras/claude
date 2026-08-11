@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Your options — Velvet{% endblock %}
 {% block content %}
-<h1>Pick one of your {{ options | length }} options</h1>
-<p class="subtitle">
-  Step 2 of 2 &middot; Looking for <strong>{{ wanted | lower }}</strong> &middot;
+<p class="eyebrow" style="margin-bottom:0.35rem;">Find</p>
+<h1 style="margin-bottom:0.4rem;">
+  {% if options %}{{ options | length }} option{{ 's' if options | length != 1 else '' }}{% else %}No options yet{% endif %}
+</h1>
+<p class="subtitle" style="margin-bottom:1.5rem;">
+  Looking for <strong style="color:var(--text);">{{ wanted | lower }}</strong> &middot;
   <a href="{{ url_for('find') }}">change</a>
 </p>
 
@@ -11,34 +14,35 @@
   <div class="grid">
     {% for opt in options %}
       {% set p = opt.profile %}
-      <div class="profile-card {% if loop.first %}best-option{% endif %}">
-        {% if loop.first %}<span class="tag">&#10084; Best fit</span>{% endif %}
+      <div class="profile-card {% if loop.first %}best-option{% endif %}" style="animation-delay: {{ loop.index0 * 0.06 }}s;">
+        {% if loop.first %}<span class="tag" style="margin-bottom:0.5rem; display:inline-block;">♥ Best fit</span>{% endif %}
         <h2>{{ p['name'] }}{% if p['age'] %}, {{ p['age'] }}{% endif %}</h2>
         <div class="meta">
           @{{ p['username'] }}{% if p['gender'] %} &middot; {{ p['gender'] }}{% endif %}{% if p['location'] %} &middot; {{ p['location'] }}{% endif %}
         </div>
         {% if opt.reasons %}
-          <ul style="margin: 0; padding-left: 1.1rem; font-size: 0.85rem;">
+          <ul style="margin: 0; padding-left: 1.1rem; font-size: 0.85rem; color:var(--text-muted);">
             {% for reason in opt.reasons %}<li>{{ reason }}</li>{% endfor %}
           </ul>
         {% endif %}
         {% if p['bio'] %}<div class="bio">{{ p['bio'] }}</div>{% endif %}
         <div style="margin-top: auto; display: flex; gap: 0.5rem; flex-wrap: wrap;">
           <form method="post" action="{{ url_for('create_match', other_id=p['user_id']) }}">
-            <button class="btn" type="submit">&#10084; Match &amp; chat</button>
+            <button class="btn btn-small" type="submit">♥ Match &amp; chat</button>
           </form>
-          <a class="btn btn-secondary" href="{{ url_for('view_profile', user_id=p['user_id']) }}">View</a>
+          <a class="btn btn-secondary btn-small" href="{{ url_for('view_profile', user_id=p['user_id']) }}">View</a>
         </div>
       </div>
     {% endfor %}
   </div>
 
   {% if total > options | length %}
-    <p class="muted" style="margin-top: 1rem; font-size: 0.9rem;">
+    <p class="muted" style="margin-top: 1rem; font-size: 0.88rem;">
       Showing the top {{ options | length }} of {{ total }} compatible people —
       match with one, or <a href="{{ url_for('matches') }}">see all matches</a>.
     </p>
   {% endif %}
+
 {% else %}
   <div class="card">
     <p style="margin: 0 0 0.5rem;">No one is looking for {{ wanted | lower }} right now.</p>
