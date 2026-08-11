@@ -11,7 +11,7 @@ on:
 env:
   REGION: ${{ vars.GCP_REGION || 'europe-west4' }}
   SERVICE: velvet
-  INSTANCE: velvet-db
+  INSTANCE: velvet-db-eu
 
 jobs:
   deploy:
