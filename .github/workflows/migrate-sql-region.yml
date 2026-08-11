@@ -1,0 +1,100 @@
+name: Migrate Cloud SQL to europe-west4
+
+# One-off, re-runnable. Cloud SQL instance regions are immutable, so the
+# us-central1 velvet-db instance cannot be moved — this creates its
+# europe-west4 replacement and repoints the DB_PASS secret at it.
+#
+# It deliberately does NOT delete the old instance and does NOT touch
+# velvet-admin-pass:
+#   - the old instance is the only rollback until the new one is serving;
+#   - velvet-admin-pass is read only when init_db() first creates the admin
+#     row, so changing it here would silently reset the admin login.
+#
+# Every step is idempotent, so a failed run can simply be re-run.
+on:
+  workflow_dispatch:
+    inputs:
+      new_instance:
+        description: Name of the replacement instance
+        default: velvet-db-eu
+        required: true
+      region:
+        description: Region for the replacement instance
+        default: europe-west4
+        required: true
+
+env:
+  PROJECT: velvet-app-505108
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/733528989325/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: '733528989325-compute@developer.gserviceaccount.com'
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # Creation takes several minutes; skipped entirely on a re-run.
+      - name: Create the replacement instance
+        run: |
+          set -euo pipefail
+          I="${{ inputs.new_instance }}"
+          if gcloud sql instances describe "$I" --project="$PROJECT" >/dev/null 2>&1; then
+            echo "instance $I already exists — skipping create"
+          else
+            gcloud sql instances create "$I" \
+              --project="$PROJECT" \
+              --database-version=POSTGRES_16 \
+              --region="${{ inputs.region }}" \
+              --tier=db-g1-small \
+              --storage-auto-increase
+          fi
+
+      - name: Create the database, the app user, and rotate DB_PASS
+        run: |
+          set -euo pipefail
+          I="${{ inputs.new_instance }}"
+
+          if gcloud sql databases list --instance="$I" --project="$PROJECT" \
+               --format='value(name)' | grep -qx velvet; then
+            echo "database velvet already exists — skipping create"
+          else
+            gcloud sql databases create velvet --instance="$I" --project="$PROJECT"
+          fi
+
+          # URL-safe by construction: the seeding path in docs/deploy-gcp.md
+          # still builds a DATABASE_URL by hand, where a "/" would truncate
+          # the credentials.
+          DB_PASS="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32), end="")')"
+          echo "::add-mask::$DB_PASS"
+
+          if gcloud sql users list --instance="$I" --project="$PROJECT" \
+               --format='value(name)' | grep -qx velvet_app; then
+            gcloud sql users set-password velvet_app --instance="$I" \
+              --project="$PROJECT" --password="$DB_PASS"
+          else
+            gcloud sql users create velvet_app --instance="$I" \
+              --project="$PROJECT" --password="$DB_PASS"
+          fi
+
+          # The deploy pins velvet-db-pass:latest, so a new version is all
+          # that is needed to repoint it.
+          printf '%s' "$DB_PASS" | gcloud secrets versions add velvet-db-pass \
+            --data-file=- --project="$PROJECT"
+
+      - name: Report the new connection name
+        run: |
+          set -euo pipefail
+          conn="$(gcloud sql instances describe "${{ inputs.new_instance }}" \
+            --project="$PROJECT" --format='value(connectionName)')"
+          echo "### Replacement instance ready" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$conn" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
