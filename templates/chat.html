@@ -3,50 +3,68 @@
 {% block content %}
 {% set left = profiles[0] %}
 {% set right = profiles[1] %}
-<div class="card">
-  <h1 style="font-size: 1.25rem;">
-    &#10084; {{ left['name'] }} &amp; {{ right['name'] }}
-  </h1>
-  <p class="subtitle">
-    Matched chatroom &middot;
-    <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">@{{ left['username'] }}</a>
-    and
-    <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">@{{ right['username'] }}</a>
-    &middot; <span class="muted" id="live-status">live</span>
-  </p>
+{% set partner = right if (is_participant and left['user_id'] == me_id) else left %}
 
-  <div class="chat-log" id="chat-log"
-       data-me="{{ me_id }}"
-       data-left="{{ left['user_id'] }}"
-       data-participant="{{ 1 if is_participant else 0 }}"
-       data-messages-url="{{ url_for('chat_messages', match_id=match['id']) }}"
-       data-send-url="{{ url_for('send_message', match_id=match['id']) }}">
-    {% for msg in messages %}
-      {% if is_participant %}
-        {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
-      {% else %}
-        {% set side = 'left' if msg['sender_id'] == left['user_id'] else 'right' %}
-      {% endif %}
-      <div class="bubble {{ side }}" data-id="{{ msg['id'] }}">
-        <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
+<div class="card" style="padding: clamp(1rem, 3vw, 1.5rem);">
+  <div class="chat-wrapper">
+
+    <div class="chat-header">
+      <div class="chat-avatar">{{ (partner['name'] or partner['username'] or '?')[0] | upper }}</div>
+      <div class="chat-header-info">
+        <div class="chat-header-name">
+          {{ partner['name'] or partner['username'] }}{% if partner['age'] %}, {{ partner['age'] }}{% endif %}
+        </div>
+        <div class="chat-header-sub">
+          <span class="live-dot" style="margin:0;flex-shrink:0"></span>
+          <span id="live-status">Live</span>
+          {% if is_participant %}&nbsp;&middot; matched room{% endif %}
+        </div>
       </div>
-    {% endfor %}
-    <p class="muted" id="empty-note" {% if messages %}hidden{% endif %} style="margin: 0;">
-      No messages yet — break the ice!
-    </p>
-  </div>
+      {% if is_participant %}
+        <span class="tag">Best fit</span>
+      {% endif %}
+    </div>
 
-  {% if is_participant %}
-    <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
-      <input type="text" name="body" id="chat-input" placeholder="Type a message..."
-             autofocus required autocomplete="off">
-      <button class="btn" type="submit">Send</button>
-    </form>
-  {% else %}
-    <p class="hint" style="margin-top: 0.5rem;">
-      You're viewing this chatroom as admin — only the two matched members can write here.
-    </p>
-  {% endif %}
+    <div class="chat-log" id="chat-log"
+         data-me="{{ me_id }}"
+         data-left="{{ left['user_id'] }}"
+         data-participant="{{ 1 if is_participant else 0 }}"
+         data-messages-url="{{ url_for('chat_messages', match_id=match['id']) }}"
+         data-send-url="{{ url_for('send_message', match_id=match['id']) }}">
+
+      <div class="chat-log-timestamp">MATCHED</div>
+
+      {% for msg in messages %}
+        {% if is_participant %}
+          {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
+        {% else %}
+          {% set side = 'left' if msg['sender_id'] == left['user_id'] else 'right' %}
+        {% endif %}
+        <div class="bubble {{ side }}" data-id="{{ msg['id'] }}">
+          <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
+        </div>
+      {% endfor %}
+
+      <p class="muted" id="empty-note" {% if messages %}hidden{% endif %}
+         style="margin: 0; font-size:0.9rem; text-align:center; align-self:center; padding: 1rem 0;">
+        No messages yet — break the ice!
+      </p>
+    </div>
+
+    {% if is_participant %}
+      <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
+        <input type="text" name="body" id="chat-input"
+               placeholder="Say something before the clock runs…"
+               autofocus required autocomplete="off">
+        <button class="btn chat-send-btn" type="submit" aria-label="Send">↑</button>
+      </form>
+    {% else %}
+      <p class="hint" style="margin-top: 0.5rem; padding-top: 0.75rem; border-top: 1px solid var(--ink-hairline);">
+        Viewing as admin — only the two matched members can write here.
+      </p>
+    {% endif %}
+
+  </div>
 </div>
 
 <script>
@@ -63,18 +81,12 @@
     lastId = Math.max(lastId, parseInt(b.dataset.id, 10));
   });
 
-  function scrollDown() {
-    log.scrollTop = log.scrollHeight;
-  }
+  function scrollDown() { log.scrollTop = log.scrollHeight; }
 
   function addMessage(msg) {
     if (log.querySelector('.bubble[data-id="' + msg.id + '"]')) return;
-    var side;
-    if (isParticipant) {
-      side = msg.sender_id === meId ? "right" : "left";
-    } else {
-      side = msg.sender_id === leftId ? "left" : "right";
-    }
+    var side = isParticipant ? (msg.sender_id === meId ? "right" : "left")
+                              : (msg.sender_id === leftId ? "left" : "right");
     var bubble = document.createElement("div");
     bubble.className = "bubble " + side;
     bubble.dataset.id = msg.id;
@@ -89,12 +101,7 @@
     scrollDown();
   }
 
-  // Short-poll loop. The app runs across many stateless instances, so the
-  // one that stores a message is usually not the one serving this browser
-  // — there is no open request for it to release. Polling on a tick is what
-  // works in that setting; POLL_MS is the delivery latency.
-  var POLL_MS = 1500;
-  var RETRY_MS = 4000;
+  var POLL_MS = 1500, RETRY_MS = 4000;
 
   function listen() {
     fetch(log.dataset.messagesUrl + "?after=" + lastId, {
@@ -106,11 +113,13 @@
       })
       .then(function (data) {
         data.messages.forEach(addMessage);
-        status.textContent = "live";
+        status.textContent = "Live";
+        status.style.color = "";
         setTimeout(listen, POLL_MS);
       })
       .catch(function () {
-        status.textContent = "reconnecting…";
+        status.textContent = "Reconnecting…";
+        status.style.color = "var(--champagne)";
         setTimeout(listen, RETRY_MS);
       });
   }
@@ -139,13 +148,11 @@
           if (!res.ok) throw new Error(res.status);
           return res.json();
         })
-        .then(function (data) {
-          addMessage(data.message);
-        })
+        .then(function (data) { addMessage(data.message); })
         .catch(function () {
-          // Restore the text so nothing is lost; next poll may still show it.
           input.value = body;
-          status.textContent = "send failed — retry";
+          status.textContent = "Send failed — retry";
+          status.style.color = "var(--danger)";
         });
     });
   }

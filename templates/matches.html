@@ -1,43 +1,55 @@
 {% extends "base.html" %}
 {% block title %}Matches — Velvet{% endblock %}
 {% block content %}
-<h1>Your matches</h1>
-<p class="subtitle">Compatible profiles, best match first.</p>
+<p class="eyebrow" style="margin-bottom:0.35rem;">Matches</p>
+<h1 style="margin-bottom:0.4rem;">Your matches</h1>
+<p class="subtitle" style="margin-bottom:1.5rem;">Compatible profiles, best match first.</p>
 
 {% if top %}
   {% set p = top.profile %}
-  <div class="card best-option">
-    <span class="tag">&#10084; Top match{% if top.score %} &middot; {{ top.score }}% mutual fit{% endif %}</span>
-    <h2 style="margin: 0.75rem 0 0.25rem;">
-      {{ p['name'] }}{% if p['age'] %}, {{ p['age'] }}{% endif %}
-    </h2>
-    <p class="subtitle" style="margin-bottom: 0.75rem;">
-      @{{ p['username'] }}
-      {% if p['gender'] %} &middot; {{ p['gender'] }}{% endif %}
-      {% if p['location'] %} &middot; {{ p['location'] }}{% endif %}
-    </p>
+  <div class="card best-option" style="margin-bottom:1rem;">
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:0.75rem; margin-bottom:0.85rem;">
+      <div>
+        <span class="tag" style="margin-bottom:0.6rem; display:inline-block;">
+          ♥ Top match{% if top.score %} &middot; {{ top.score }}% mutual fit{% endif %}
+        </span>
+        <h2 style="font-size:1.55rem; margin:0 0 0.2rem;">
+          {{ p['name'] }}{% if p['age'] %}, {{ p['age'] }}{% endif %}
+        </h2>
+        <p style="margin:0; font-size:0.85rem; color:var(--text-muted);">
+          @{{ p['username'] }}
+          {% if p['gender'] %} &middot; {{ p['gender'] }}{% endif %}
+          {% if p['location'] %} &middot; {{ p['location'] }}{% endif %}
+        </p>
+      </div>
+    </div>
+
     {% if top.reasons %}
-      <ul style="margin: 0 0 1rem; padding-left: 1.25rem;">
+      <ul style="margin: 0 0 0.85rem; padding-left: 1.25rem; font-size:0.9rem; color:var(--text-muted);">
         {% for reason in top.reasons %}
           <li>{{ reason }}</li>
         {% endfor %}
       </ul>
     {% endif %}
-    {% if p['bio'] %}<p class="bio" style="margin-top: 0;">{{ p['bio'] }}</p>{% endif %}
+    {% if p['bio'] %}
+      <p style="font-family:var(--serif); font-size:1.05rem; line-height:1.5; margin: 0 0 1rem; color:var(--text-muted);">
+        &ldquo;{{ p['bio'] | truncate(180) }}&rdquo;
+      </p>
+    {% endif %}
     <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
       <form method="post" action="{{ url_for('create_match', other_id=p['user_id']) }}">
-        <button class="btn" type="submit">&#10084; Match &amp; chat</button>
+        <button class="btn" type="submit">♥ Match &amp; chat</button>
       </form>
       <a class="btn btn-secondary" href="{{ url_for('view_profile', user_id=p['user_id']) }}">View profile</a>
     </div>
   </div>
 
   {% if others %}
-    <h2 style="font-size: 1.15rem; margin: 1.5rem 0 0.75rem;">More matches</h2>
+    <h2 style="font-size:1rem; font-family:var(--sans); font-weight:700; letter-spacing:0.04em; color:var(--text-faint); text-transform:uppercase; margin: 0.5rem 0 0.75rem;">More matches</h2>
     <div class="grid">
       {% for m in others %}
         {% set p = m.profile %}
-        <div class="profile-card">
+        <div class="profile-card" style="animation-delay: {{ loop.index0 * 0.07 }}s;">
           <h2>{{ p['name'] }}{% if p['age'] %}, {{ p['age'] }}{% endif %}</h2>
           <div class="meta">
             @{{ p['username'] }}
@@ -50,14 +62,15 @@
           {% endif %}
           <div style="margin-top: auto; display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <form method="post" action="{{ url_for('create_match', other_id=p['user_id']) }}">
-              <button class="btn" type="submit">&#10084; Match</button>
+              <button class="btn btn-small" type="submit">♥ Match</button>
             </form>
-            <a class="btn btn-secondary" href="{{ url_for('view_profile', user_id=p['user_id']) }}">View profile</a>
+            <a class="btn btn-secondary btn-small" href="{{ url_for('view_profile', user_id=p['user_id']) }}">View</a>
           </div>
         </div>
       {% endfor %}
     </div>
   {% endif %}
+
 {% else %}
   <div class="card">
     <p class="muted" style="margin: 0;">

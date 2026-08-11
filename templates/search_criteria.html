@@ -2,22 +2,25 @@
 {% block title %}Search for a match — Velvet{% endblock %}
 {% block content %}
 <div class="card narrow">
-  <h1>Search for a match now</h1>
-  <p class="subtitle">
-    Looking for <strong>{{ wanted | lower }}</strong> &middot;
+  <h1 style="margin-bottom:0.4rem;">Search for a match now</h1>
+  <p class="subtitle" style="margin-bottom:1.25rem;">
+    Looking for <strong style="color:var(--text);">{{ wanted | lower }}</strong> &middot;
     <a href="{{ url_for('live_search') }}">change</a>
   </p>
 
   <div class="wizard-dots" id="wizard-dots">
-    <span class="dot active"></span><span class="dot"></span><span class="dot"></span>
+    <span class="dot active"></span>
+    <span class="dot"></span>
+    <span class="dot"></span>
   </div>
 
   <form method="post" action="{{ url_for('search_criteria') }}" id="wizard-form">
     <input type="hidden" name="relationship_type" value="{{ wanted }}">
 
     <div class="wizard-stage">
+
       <div class="wizard-step active" data-step="1">
-        <p class="eyebrow">Step 1 of 3 &middot; Who</p>
+        <p class="eyebrow" style="margin-bottom:1rem;">Step 1 of 3 &middot; Who</p>
         <label for="seeking">I'm looking for</label>
         <select id="seeking" name="seeking">
           <option value="">Anyone</option>
@@ -43,7 +46,7 @@
       </div>
 
       <div class="wizard-step" data-step="2">
-        <p class="eyebrow">Step 2 of 3 &middot; Where</p>
+        <p class="eyebrow" style="margin-bottom:1rem;">Step 2 of 3 &middot; Where</p>
         <label for="location">Location</label>
         <input id="location" name="location" type="text" list="city-list" autocomplete="off"
                value="{{ existing['location'] if existing and existing['location'] else me['location'] }}"
@@ -64,7 +67,7 @@
       </div>
 
       <div class="wizard-step" data-step="3">
-        <p class="eyebrow">Step 3 of 3 &middot; What you'll match on</p>
+        <p class="eyebrow" style="margin-bottom:1rem;">Step 3 of 3 &middot; What you'll match on</p>
 
         <label for="interests">Interests (optional)</label>
         <input id="interests" name="interests" type="text"
@@ -123,9 +126,10 @@
 
         <div class="wizard-nav">
           <button type="button" class="btn btn-secondary wizard-back">Back</button>
-          <button class="btn" type="submit">&#128269; Start searching</button>
+          <button class="btn" type="submit">Start searching</button>
         </div>
       </div>
+
     </div>
   </form>
 
@@ -137,35 +141,34 @@
 </div>
 
 <style>
-  .wizard-dots { display: flex; gap: 0.4rem; margin-bottom: 1.3rem; }
+  .wizard-dots { display: flex; gap: 0.4rem; margin-bottom: 1.5rem; }
   .wizard-dots .dot {
     width: 0.5rem; height: 0.5rem; border-radius: 50%;
     background: var(--ink-hairline);
-    transition: background 0.25s ease, transform 0.25s ease;
+    transition: background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
   }
   .wizard-dots .dot.active {
     background: var(--violet-crest);
-    box-shadow: 0 0 10px rgba(168, 85, 247, 0.7);
-    transform: scale(1.25);
+    box-shadow: 0 0 10px rgba(168,85,247,.7);
+    transform: scale(1.3);
   }
   .wizard-stage { perspective: 1400px; }
   .wizard-step {
     display: none;
-    animation: flip-in 0.45s cubic-bezier(.2,.7,.3,1);
-    transform-style: preserve-3d;
+    animation: step-in 0.4s cubic-bezier(.2,.7,.3,1) both;
   }
   .wizard-step.active { display: block; }
   .wizard-step.leaving {
     display: block;
-    animation: flip-out 0.45s cubic-bezier(.2,.7,.3,1);
+    animation: step-out 0.35s cubic-bezier(.2,.7,.3,1) both;
   }
-  @keyframes flip-in {
-    from { transform: rotateY(-90deg); opacity: 0; }
-    to   { transform: rotateY(0deg); opacity: 1; }
+  @keyframes step-in {
+    from { opacity: 0; transform: translateX(22px); }
+    to   { opacity: 1; transform: translateX(0); }
   }
-  @keyframes flip-out {
-    from { transform: rotateY(0deg); opacity: 1; }
-    to   { transform: rotateY(90deg); opacity: 0; }
+  @keyframes step-out {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(-22px); }
   }
   @media (prefers-reduced-motion: reduce) {
     .wizard-step, .wizard-step.leaving { animation: none; }
@@ -212,16 +215,16 @@
   syncAge();
   syncRadius();
 
-  // ---- wizard step flipping ----
+  // Wizard step navigation
   var steps = Array.prototype.slice.call(document.querySelectorAll(".wizard-step"));
-  var dots = Array.prototype.slice.call(document.querySelectorAll("#wizard-dots .dot"));
+  var dots  = Array.prototype.slice.call(document.querySelectorAll("#wizard-dots .dot"));
   var current = 0;
 
   function goTo(index) {
     var outgoing = steps[current];
     outgoing.classList.remove("active");
     outgoing.classList.add("leaving");
-    setTimeout(function () { outgoing.classList.remove("leaving"); }, 450);
+    setTimeout(function () { outgoing.classList.remove("leaving"); }, 380);
 
     current = index;
     steps[current].classList.add("active");

@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Find a match — Velvet{% endblock %}
 {% block content %}
-<h1>Find a match</h1>
-<p class="subtitle">Step 1 of 2 &middot; What kind of connection are you looking for?</p>
+<p class="eyebrow" style="margin-bottom:0.35rem;">Find</p>
+<h1 style="margin-bottom:0.4rem;">Find a match</h1>
+<p class="subtitle" style="margin-bottom:1.5rem;">What kind of connection are you looking for?</p>
 
 <form method="post" action="{{ url_for('find') }}">
-  <div class="grid">
+  <div class="grid" style="margin-bottom:1rem;">
     {% for rt in relationship_types %}
       <label class="choice {% if current_choice == rt %}choice-suggested{% endif %}">
         <input type="radio" name="relationship_type" value="{{ rt }}"
@@ -13,12 +14,12 @@
         <span>
           <strong>{{ rt }}</strong>
           {% if current_choice == rt %}
-            <span class="muted" style="font-size: 0.8rem;">from your profile</span>
+            <span class="muted" style="font-size:0.78rem;">from your profile</span>
           {% endif %}
         </span>
       </label>
     {% endfor %}
   </div>
-  <button class="btn" type="submit" style="margin-top: 1rem;">Show me matches &rarr;</button>
+  <button class="btn" type="submit">Show me matches &rarr;</button>
 </form>
 {% endblock %}

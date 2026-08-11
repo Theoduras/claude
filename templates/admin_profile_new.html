@@ -2,8 +2,9 @@
 {% block title %}New profile — Velvet{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Create a new profile</h1>
-  <p class="subtitle">Admin only — adds a new member with a full profile to the database.</p>
+  <p class="eyebrow" style="margin-bottom:0.4rem;">Admin</p>
+  <h1 style="margin-bottom:0.4rem;">Create a new profile</h1>
+  <p class="subtitle" style="margin-bottom:1.5rem;">Adds a new member with a full profile to the database.</p>
 
   <form method="post" action="{{ url_for('admin_new_profile') }}">
     <label for="username">Username</label>

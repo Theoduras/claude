@@ -1,25 +1,136 @@
 {% extends "base.html" %}
 {% block title %}Sign in — Velvet{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <p class="eyebrow">Velvet</p>
-  <h1 style="margin-top: 0.5rem;">Something softer<br>than swiping.</h1>
-  <p class="subtitle" style="margin-bottom: 1.6rem;">
-    Sign in and search — we pair you the moment someone is looking for you too.
-  </p>
+<style>
+  .landing-hero {
+    position: relative;
+    min-height: calc(100vh - 4rem);
+    display: flex;
+    flex-direction: column;
+    padding: clamp(2rem, 6vw, 3.5rem) 0 2rem;
+  }
+  .landing-wordmark {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: clamp(3rem, 10vw, 7rem);
+  }
+  .landing-wordmark .mark {
+    width: 0.65rem; height: 0.65rem;
+    border-radius: 50%;
+    background: radial-gradient(circle at 32% 28%, #A855F7, #8A2BE2 55%, #3B0B66);
+    box-shadow: 0 0 20px rgba(168,85,247,.85);
+    flex-shrink: 0;
+  }
+  .landing-wordmark span {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .landing-headline {
+    font-family: var(--serif);
+    font-size: clamp(2.8rem, 8vw, 4.4rem);
+    font-weight: 500;
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    text-shadow: 0 2px 30px rgba(0,0,0,.5);
+    margin: 0 0 1rem;
+  }
+  .landing-sub {
+    font-size: 1.05rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+    max-width: 22ch;
+    margin: 0 0 2rem;
+  }
+  .live-count {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font: 700 0.68rem var(--sans);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 0.9rem;
+  }
+  .landing-actions {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 27rem;
+  }
+  .landing-actions .btn { height: 3.2rem; font-size: 0.96rem; }
+  .landing-divider {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-faint);
+    padding: 0.25rem 0;
+  }
+  .signin-card {
+    display: none;
+    max-width: 27rem;
+    margin-top: 1.5rem;
+  }
+  .signin-card.visible { display: block; }
+  @keyframes card-drop {
+    from { opacity: 0; transform: translateY(-10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .signin-card.visible { animation: card-drop 0.3s cubic-bezier(.2,.7,.3,1) both; }
+</style>
 
-  <form method="post" action="{{ url_for('login') }}">
-    <label for="username">Username</label>
-    <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+<div class="landing-hero">
+  <div class="landing-wordmark">
+    <span class="mark"></span>
+    <span>Velvet</span>
+  </div>
 
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <h1 class="landing-headline">Something<br>softer than<br>swiping.</h1>
+  <p class="landing-sub">Sign in and search — we pair you the moment someone is looking for you too.</p>
 
-    <button class="btn btn-block" type="submit">Sign in</button>
-  </form>
+  <div class="landing-actions">
+    <div class="live-count">
+      <span class="live-dot" style="margin:0"></span>
+      People searching right now
+    </div>
 
-  <p class="hint" style="margin: 1.1rem 0 0; text-align: center;">
-    New to Velvet? <a href="{{ url_for('register') }}">Create an account</a>
-  </p>
+    <button class="btn btn-block" id="show-signin-btn" onclick="showSignin()">Sign in</button>
+
+    <div class="signin-card card" id="signin-card">
+      <form method="post" action="{{ url_for('login') }}">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+        <button class="btn btn-block" type="submit">Sign in</button>
+      </form>
+    </div>
+
+    <a class="btn btn-secondary btn-block" href="{{ url_for('register') }}">Create an account</a>
+
+    <p style="text-align:center; font-size:0.78rem; color:var(--text-faint); margin:0.25rem 0 0;">
+      Nobody matches you unless you match them back.
+    </p>
+  </div>
 </div>
+
+<script>
+function showSignin() {
+  var btn = document.getElementById('show-signin-btn');
+  var card = document.getElementById('signin-card');
+  btn.style.display = 'none';
+  card.classList.add('visible');
+  setTimeout(function() {
+    var f = card.querySelector('input');
+    if (f) f.focus();
+  }, 50);
+}
+// If there were flash errors, auto-show the form
+{% with messages = get_flashed_messages() %}{% if messages %}showSignin();{% endif %}{% endwith %}
+</script>
 {% endblock %}
