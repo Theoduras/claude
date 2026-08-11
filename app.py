@@ -134,6 +134,15 @@ CITY_COORDS = {
     "amsterdam": (52.370, 4.895),
     "basel": (47.560, 7.588),
     "salzburg": (47.809, 13.055),
+    "maastricht": (50.851, 5.691),
+    "rotterdam": (51.924, 4.478),
+    "utrecht": (52.092, 5.104),
+    "eindhoven": (51.441, 5.478),
+    "the hague": (52.070, 4.301),
+    "den haag": (52.070, 4.301),
+    "groningen": (53.219, 6.567),
+    "nijmegen": (51.812, 5.837),
+    "arnhem": (51.985, 5.899),
 }
 
 # Offered in the location picker, nicely cased.
@@ -141,6 +150,8 @@ CITY_CHOICES = [
     "Berlin", "Hamburg", "Munich", "Cologne", "Frankfurt", "Stuttgart",
     "Düsseldorf", "Leipzig", "Dresden", "Hannover", "Bremen", "Nuremberg",
     "Essen", "Dortmund", "Vienna", "Zurich", "Amsterdam", "Basel", "Salzburg",
+    "Maastricht", "Rotterdam", "Utrecht", "Eindhoven", "The Hague",
+    "Groningen", "Nijmegen", "Arnhem",
 ]
 
 RADIUS_MAX_KM = 500  # slider maximum; at the top it means "anywhere"
@@ -320,8 +331,22 @@ CREATE TABLE IF NOT EXISTS searches (
     radius_km INTEGER NOT NULL DEFAULT 500,
     status TEXT NOT NULL DEFAULT 'waiting',
     match_id BIGINT REFERENCES matches(id) ON DELETE SET NULL,
+    -- Each filter can be switched off without losing the value behind it, so
+    -- a searcher can widen their net and put it back afterwards. These govern
+    -- only this searcher's own side of the check: the other person's filters
+    -- still apply, which is why turning one off does not guarantee a match.
+    use_gender BOOLEAN NOT NULL DEFAULT TRUE,
+    use_age BOOLEAN NOT NULL DEFAULT TRUE,
+    use_relationship BOOLEAN NOT NULL DEFAULT TRUE,
+    use_distance BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Bring databases created before the per-filter toggles existed up to date.
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_gender BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_age BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_relationship BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_distance BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- The pairing pass scans waiting searchers.
 CREATE INDEX IF NOT EXISTS searches_status_idx ON searches (status);
@@ -1142,14 +1167,25 @@ def searches_compatible(s1, s2):
     requested range, and the distance between them must sit inside both
     radii. Relationship type only blocks when both named one and they
     differ. Unset fields are treated as "no preference".
+
+    Each side can also switch a filter off (searches.use_gender/use_age/
+    use_relationship/use_distance), which relaxes only that side's own
+    check — the other person's filter still applies, so disabling one
+    filter does not by itself guarantee a match. Missing keys (hand-built
+    dicts, pre-migration rows) default to "on" via .get(key, True), which
+    matches the column's own DEFAULT TRUE.
     """
 
     def gender_ok(searcher, candidate_gender):
+        if not searcher.get("use_gender", True):
+            return True
         if not searcher["seeking"] or not candidate_gender:
             return True
         return candidate_gender in SEEKING_MATCHES[searcher["seeking"]]
 
     def age_ok(searcher, candidate_age):
+        if not searcher.get("use_age", True):
+            return True
         if candidate_age is None:
             return True
         return searcher["age_min"] <= candidate_age <= searcher["age_max"]
@@ -1159,17 +1195,22 @@ def searches_compatible(s1, s2):
     if not (age_ok(s1, s2["age"]) and age_ok(s2, s1["age"])):
         return False
     if (
-        s1["relationship_type"]
+        s1.get("use_relationship", True)
+        and s2.get("use_relationship", True)
+        and s1["relationship_type"]
         and s2["relationship_type"]
         and s1["relationship_type"] != s2["relationship_type"]
     ):
         return False
 
     # Distance must fit inside both people's radius. An unknown city or a
-    # radius at the maximum means "anywhere".
+    # radius at the maximum means "anywhere". A side with use_distance off
+    # is simply skipped from the per-searcher loop below.
     gap = distance_km(s1["location"], s2["location"])
     if gap is not None:
         for search in (s1, s2):
+            if not search.get("use_distance", True):
+                continue
             if search["radius_km"] < RADIUS_MAX_KM and gap > search["radius_km"]:
                 return False
     return True
@@ -1376,11 +1417,106 @@ def search_criteria():
     )
 
 
-def search_blockers(user_id):
-    """Explain why a waiting search hasn't matched: what each rule rejects.
+def _minimal_age_suggestion(mine, others):
+    """Smallest age-range widening that admits at least one waiting person.
 
-    Returns counts of pool members that would match if a single filter were
-    relaxed, so the waiting page can suggest a concrete fix.
+    For each candidate, the minimal range that would include them is
+    (min(my_lo, their_age), max(my_hi, their_age)) — widening any less
+    still excludes them, so this is the least possible change per
+    candidate. The smallest such span across all candidates is reported,
+    but only if it is verified compatible on every OTHER filter too, via
+    a real searches_compatible() call rather than by assumption.
+    """
+    best = None
+    for o in others:
+        cand_age = o["age"]
+        if cand_age is None:
+            continue
+        lo = min(mine["age_min"], cand_age)
+        hi = max(mine["age_max"], cand_age)
+        if lo == mine["age_min"] and hi == mine["age_max"]:
+            continue  # already inside range; some other filter is blocking them
+        trial = dict(mine)
+        trial["age_min"], trial["age_max"] = lo, hi
+        if not searches_compatible(trial, o):
+            continue
+        span = hi - lo
+        if best is None or span < best[0]:
+            best = (span, lo, hi)
+
+    if best is None:
+        return None
+    _, lo, hi = best
+    trial = dict(mine)
+    trial["age_min"], trial["age_max"] = lo, hi
+    count = sum(1 for o in others if searches_compatible(trial, o))
+    return {"age_min": lo, "age_max": hi, "count": count}
+
+
+def _minimal_distance_suggestion(mine, others):
+    """Smallest radius that admits at least one waiting person, verified
+    the same way as the age suggestion above."""
+    best = None
+    for o in others:
+        gap = distance_km(mine["location"], o["location"])
+        if gap is None or gap <= mine["radius_km"]:
+            continue
+        radius = min(math.ceil(gap), RADIUS_MAX_KM)
+        trial = dict(mine)
+        trial["radius_km"] = radius
+        if not searches_compatible(trial, o):
+            continue
+        if best is None or radius < best:
+            best = radius
+
+    if best is None:
+        return None
+    trial = dict(mine)
+    trial["radius_km"] = best
+    count = sum(1 for o in others if searches_compatible(trial, o))
+    return {"radius_km": best, "count": count}
+
+
+def _relationship_suggestions(mine, others):
+    """Which other relationship types, if switched to, would open up
+    matches — each verified through searches_compatible(), most people
+    admitted first."""
+    results, seen = [], set()
+    for o in others:
+        rt = o["relationship_type"]
+        if not rt or rt == mine["relationship_type"] or rt in seen:
+            continue
+        seen.add(rt)
+        trial = dict(mine)
+        trial["relationship_type"] = rt
+        count = sum(1 for x in others if searches_compatible(trial, x))
+        if count:
+            results.append({"relationship_type": rt, "count": count})
+    results.sort(key=lambda r: -r["count"])
+    return results
+
+
+def _gender_suggestions(mine, others):
+    """Which "looking for" options, if switched to, would open up
+    matches, same verification and ordering as relationship."""
+    results = []
+    for opt in SEEKING_OPTIONS:
+        if opt == mine["seeking"]:
+            continue
+        trial = dict(mine)
+        trial["seeking"] = opt
+        count = sum(1 for o in others if searches_compatible(trial, o))
+        if count:
+            results.append({"seeking": opt, "count": count})
+    results.sort(key=lambda r: -r["count"])
+    return results
+
+
+def _search_pool(user_id):
+    """Return (mine, others) as dicts, or (None, []) if not searching.
+
+    others is every other waiting searcher, joined with the profile fields
+    searches_compatible() needs (gender, age).
     """
     db = get_db()
     mine = db.execute(
@@ -1392,7 +1528,7 @@ def search_blockers(user_id):
         (user_id,),
     ).fetchone()
     if mine is None:
-        return {}
+        return None, []
 
     others = db.execute(
         """
@@ -1402,48 +1538,144 @@ def search_blockers(user_id):
         """,
         (user_id,),
     ).fetchall()
+    return dict(mine), [dict(o) for o in others]
+
+
+def search_blockers(mine, others):
+    """Explain why a waiting search hasn't matched, filter by filter.
+
+    Returns pool size, a per-filter "if you turned this off, N more people
+    would fit" count (computed by actually disabling that use_* flag, so
+    it is exactly what the toggle button would do), and a concrete
+    suggested value for each filter that is currently blocking someone —
+    every suggestion verified against the pool through searches_compatible(),
+    never assumed.
+    """
+    if mine is None:
+        return {}
 
     def relaxed(**overrides):
         loosened = dict(mine)
         loosened.update(overrides)
         return sum(1 for o in others if searches_compatible(loosened, o))
 
+    current_count = sum(1 for o in others if searches_compatible(mine, o))
+
     return {
         "pool": len(others),
-        "if_any_distance": relaxed(radius_km=RADIUS_MAX_KM),
-        "if_any_age": relaxed(age_min=18, age_max=120),
-        "if_any_connection": relaxed(relationship_type=""),
-        "if_any_gender": relaxed(seeking=""),
-        # When no single change is enough, say what dropping every filter
-        # except gender would give.
+        "current_count": current_count,
+        "if_any_gender": relaxed(use_gender=False),
+        "if_any_age": relaxed(use_age=False),
+        "if_any_connection": relaxed(use_relationship=False),
+        "if_any_distance": relaxed(use_distance=False),
         "if_all_relaxed": relaxed(
-            radius_km=RADIUS_MAX_KM, age_min=18, age_max=120, relationship_type=""
+            use_gender=False, use_age=False, use_relationship=False, use_distance=False
         ),
+        "age_suggestion": _minimal_age_suggestion(mine, others),
+        "distance_suggestion": _minimal_distance_suggestion(mine, others),
+        "relationship_suggestions": _relationship_suggestions(mine, others),
+        "gender_suggestions": _gender_suggestions(mine, others),
     }
+
+
+def search_filter_rows(mine, others, blockers):
+    """One dict per filter parameter, for a uniform template loop.
+
+    Each row: key, label, value_text, enabled (None when not toggleable),
+    constrains (does this filter currently reject someone?), note (an
+    honest caveat, if any), and suggestion (the concrete fix, if any).
+    Interests is included but is NOT a filter — searches_compatible()
+    never reads it, it only breaks ties in try_pair() — so it is shown
+    read-only with a note saying exactly that.
+    """
+    rows = []
+
+    rows.append({
+        "key": "gender",
+        "label": "Who I'm looking for",
+        "value_text": mine["seeking"] or "Anyone",
+        "enabled": mine.get("use_gender", True),
+        "constrains": blockers["if_any_gender"] > blockers["current_count"],
+        "note": None,
+        "suggestion": blockers["gender_suggestions"][0]
+            if blockers["gender_suggestions"] else None,
+    })
+
+    rows.append({
+        "key": "age",
+        "label": "Age range",
+        "value_text": f"{mine['age_min']}–{mine['age_max']}",
+        "enabled": mine.get("use_age", True),
+        "constrains": blockers["if_any_age"] > blockers["current_count"],
+        "note": None,
+        "suggestion": blockers["age_suggestion"],
+    })
+
+    rows.append({
+        "key": "relationship",
+        "label": "Connection",
+        "value_text": mine["relationship_type"] or "Anything",
+        "enabled": mine.get("use_relationship", True),
+        "constrains": blockers["if_any_connection"] > blockers["current_count"],
+        "note": None,
+        "suggestion": blockers["relationship_suggestions"][0]
+            if blockers["relationship_suggestions"] else None,
+    })
+
+    if not mine["location"]:
+        distance_value = "Anywhere"
+        distance_note = None
+    elif mine["radius_km"] >= RADIUS_MAX_KM:
+        distance_value = f"{mine['location']} · any distance"
+        distance_note = None
+    else:
+        distance_value = f"{mine['location']} · within {mine['radius_km']} km"
+        distance_note = None
+    if mine["location"] and city_coords(mine["location"]) is None:
+        distance_note = "We don't recognise this city, so distance isn't being applied."
+    rows.append({
+        "key": "distance",
+        "label": "Distance",
+        "value_text": distance_value,
+        "enabled": mine.get("use_distance", True),
+        "constrains": blockers["if_any_distance"] > blockers["current_count"],
+        "note": distance_note,
+        "suggestion": blockers["distance_suggestion"],
+    })
+
+    rows.append({
+        "key": "interests",
+        "label": "Interests",
+        "value_text": mine["interests"] or "None listed",
+        "enabled": None,
+        "constrains": False,
+        "note": "Not a filter — only used to rank who you're paired with first.",
+        "suggestion": None,
+    })
+
+    return rows
 
 
 @app.route("/search/waiting")
 @login_required
 def search_waiting():
-    row = get_db().execute(
-        "SELECT * FROM searches WHERE user_id = ?", (session["user_id"],)
-    ).fetchone()
+    user_id = session["user_id"]
+    mine, others = _search_pool(user_id)
 
-    if row is None or row["status"] == "cancelled":
+    if mine is None or mine["status"] == "cancelled":
         return redirect(url_for("live_search"))
-    if row["status"] == "matched" and row["match_id"]:
-        return redirect(url_for("chat", match_id=row["match_id"]))
+    if mine["status"] == "matched" and mine["match_id"]:
+        return redirect(url_for("chat", match_id=mine["match_id"]))
 
-    waiting_count = get_db().execute(
-        "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
-    ).fetchone()["n"]
+    blockers = search_blockers(mine, others)
 
     return render_template(
         "search_waiting.html",
-        search=row,
-        waiting=waiting_count,
+        search=mine,
+        waiting=len(others),
         radius_max=RADIUS_MAX_KM,
-        blockers=search_blockers(session["user_id"]),
+        blockers=blockers,
+        filter_rows=search_filter_rows(mine, others, blockers),
     )
 
 
@@ -1487,6 +1719,93 @@ def search_cancel():
     db.commit()
     flash("Search stopped.")
     return redirect(url_for("live_search"))
+
+
+# Whitelisted so the toggle route can build SQL identifiers from a request
+# value without ever interpolating the value itself — only the mapped
+# column name (one of these four fixed strings) reaches the query.
+FILTER_TOGGLE_COLUMNS = {
+    "gender": "use_gender",
+    "age": "use_age",
+    "relationship": "use_relationship",
+    "distance": "use_distance",
+}
+
+
+@app.route("/search/filters/toggle", methods=["POST"])
+@login_required
+def search_filters_toggle():
+    """Flip one filter on/off without touching the value behind it."""
+    user_id = session["user_id"]
+    column = FILTER_TOGGLE_COLUMNS.get(request.form.get("filter", ""))
+    if column is None:
+        flash("Unknown filter.")
+        return redirect(url_for("search_waiting"))
+
+    db = get_db()
+    db.execute(
+        f"UPDATE searches SET {column} = NOT {column} "
+        "WHERE user_id = ? AND status = 'waiting'",
+        (user_id,),
+    )
+    db.commit()
+    # Disabling a filter can immediately make an existing waiting searcher
+    # compatible, so retry pairing now rather than waiting for the next poll.
+    try_pair(user_id)
+    return redirect(url_for("search_waiting"))
+
+
+@app.route("/search/filters/apply", methods=["POST"])
+@login_required
+def search_filters_apply():
+    """Apply the current suggested fix for one filter.
+
+    The suggestion is recomputed here from the live pool rather than
+    trusted from the submitted form, so a stale page can't write a value
+    that no longer helps (or never did).
+    """
+    user_id = session["user_id"]
+    key = request.form.get("filter", "")
+
+    mine, others = _search_pool(user_id)
+    if mine is None or mine["status"] != "waiting":
+        return redirect(url_for("search_waiting"))
+    blockers = search_blockers(mine, others)
+
+    db = get_db()
+    if key == "age" and blockers["age_suggestion"]:
+        sug = blockers["age_suggestion"]
+        db.execute(
+            "UPDATE searches SET age_min = ?, age_max = ? "
+            "WHERE user_id = ? AND status = 'waiting'",
+            (sug["age_min"], sug["age_max"], user_id),
+        )
+    elif key == "distance" and blockers["distance_suggestion"]:
+        sug = blockers["distance_suggestion"]
+        db.execute(
+            "UPDATE searches SET radius_km = ? WHERE user_id = ? AND status = 'waiting'",
+            (sug["radius_km"], user_id),
+        )
+    elif key == "relationship" and blockers["relationship_suggestions"]:
+        sug = blockers["relationship_suggestions"][0]
+        db.execute(
+            "UPDATE searches SET relationship_type = ? "
+            "WHERE user_id = ? AND status = 'waiting'",
+            (sug["relationship_type"], user_id),
+        )
+    elif key == "gender" and blockers["gender_suggestions"]:
+        sug = blockers["gender_suggestions"][0]
+        db.execute(
+            "UPDATE searches SET seeking = ? WHERE user_id = ? AND status = 'waiting'",
+            (sug["seeking"], user_id),
+        )
+    else:
+        flash("That suggestion is no longer available — refresh and try again.")
+        return redirect(url_for("search_waiting"))
+
+    db.commit()
+    try_pair(user_id)
+    return redirect(url_for("search_waiting"))
 
 
 @app.route("/find", methods=["GET", "POST"])
