@@ -52,4 +52,5 @@ jobs:
             --set-secrets="DB_PASS=velvet-db-pass:latest,APP_SECRET_KEY=velvet-secret-key:latest,APP_ADMIN_PASSWORD=velvet-admin-pass:latest" \
             --min-instances=0 \
             --max-instances=10 \
-            --concurrency=80
+            --concurrency=80 \
+            --startup-probe=httpGet.path=/healthz,periodSeconds=5,timeoutSeconds=5,failureThreshold=6

@@ -26,6 +26,7 @@ import re
 import secrets
 
 import psycopg
+from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -47,31 +48,33 @@ app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
 
 
 def database_url():
-    """Build the Postgres connection string from the environment.
+    """Build the Postgres conninfo from the environment.
 
-    DATABASE_URL wins if set. Otherwise the parts are assembled, which is
-    what the Cloud Run deployment uses: INSTANCE_CONNECTION_NAME makes the
-    app connect over the Cloud SQL unix socket rather than TCP.
+    DATABASE_URL wins if set. Otherwise the parts are assembled with
+    make_conninfo, which quotes every value. Pasting them into a URL by hand
+    does not: a password containing "/" silently swallows the user, the
+    dbname and the port, and a base64 password hits that about half the time.
     """
     url = os.environ.get("DATABASE_URL")
     if url:
         return url
 
-    user = os.environ.get("DB_USER", "postgres")
-    password = os.environ.get("DB_PASS", "postgres")
-    name = os.environ.get("DB_NAME", "velvet")
+    parts = {
+        "user": os.environ.get("DB_USER", "postgres"),
+        "password": os.environ.get("DB_PASS", "postgres"),
+        "dbname": os.environ.get("DB_NAME", "velvet"),
+    }
 
     instance = os.environ.get("INSTANCE_CONNECTION_NAME")
     if instance:
         socket_dir = os.environ.get("DB_SOCKET_DIR", "/cloudsql")
-        return (
-            f"postgresql://{user}:{password}@/{name}"
-            f"?host={socket_dir}/{instance}"
-        )
+        return make_conninfo(**parts, host=f"{socket_dir}/{instance}")
 
-    host = os.environ.get("DB_HOST", "127.0.0.1")
-    port = os.environ.get("DB_PORT", "5432")
-    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+    return make_conninfo(
+        **parts,
+        host=os.environ.get("DB_HOST", "127.0.0.1"),
+        port=os.environ.get("DB_PORT", "5432"),
+    )
 
 
 # Each instance keeps a deliberately small pool: Cloud Run multiplies it by
@@ -1910,10 +1913,39 @@ def browse():
     )
 
 
+STARTUP_ERROR = None
+
+
 def startup():
-    """Open the pool and make sure the schema is in place."""
-    POOL.open()
-    init_db()
+    """Open the pool and make sure the schema is in place.
+
+    A failure here must not kill the worker. Gunicorn binds the port before
+    forking, so a worker that dies on import still looks like a healthy
+    deploy — the revision goes live and every request 503s with the real
+    error nowhere in sight. Record it instead and let /healthz report it.
+    """
+    global STARTUP_ERROR
+    try:
+        POOL.open()
+        init_db()
+        STARTUP_ERROR = None
+    except Exception as exc:  # surfaced via /healthz, logged for Cloud Run
+        STARTUP_ERROR = exc
+        app.logger.exception("startup failed: cannot reach the database")
+
+
+@app.get("/healthz")
+def healthz():
+    """Readiness for Cloud Run's startup probe.
+
+    Retries the schema init, so a database that was merely slow to accept
+    connections recovers on its own rather than needing a redeploy.
+    """
+    if STARTUP_ERROR is not None:
+        startup()
+    if STARTUP_ERROR is not None:
+        return f"db unavailable: {STARTUP_ERROR}", 503
+    return "ok", 200
 
 
 startup()
