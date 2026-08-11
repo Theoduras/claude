@@ -1611,15 +1611,17 @@ def search_filter_rows(mine, others, blockers):
             if blockers["relationship_suggestions"] else None,
     })
 
-    if mine["location"] and city_coords(mine["location"]) is None:
-        distance_value = mine["location"]
-        distance_note = "We don't recognise this city, so distance isn't being applied."
+    if not mine["location"]:
+        distance_value = "Anywhere"
+        distance_note = None
     elif mine["radius_km"] >= RADIUS_MAX_KM:
-        distance_value = "any distance"
+        distance_value = f"{mine['location']} · any distance"
         distance_note = None
     else:
-        distance_value = f"within {mine['radius_km']} km"
+        distance_value = f"{mine['location']} · within {mine['radius_km']} km"
         distance_note = None
+    if mine["location"] and city_coords(mine["location"]) is None:
+        distance_note = "We don't recognise this city, so distance isn't being applied."
     rows.append({
         "key": "distance",
         "label": "Distance",
