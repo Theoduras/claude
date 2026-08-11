@@ -9,10 +9,16 @@ Set `PROJECT_ID` and `REGION` once and the commands below can be pasted as-is:
 
 ```bash
 export PROJECT_ID=your-project-id
-export REGION=us-central1
+export REGION=europe-west4
 export INSTANCE=velvet-db
 gcloud config set project "$PROJECT_ID"
 ```
+
+Use the **same region for Cloud Run and Cloud SQL**. Cross-region works — the
+Cloud SQL socket is reachable either way — but every query then pays a
+transatlantic round trip. A Cloud SQL instance's region is **immutable**, so
+correcting a mismatch later means creating a second instance and migrating the
+data, not moving the one you have.
 
 ## 1. Enable the APIs
 
@@ -36,8 +42,10 @@ gcloud sql instances create "$INSTANCE" \
 
 gcloud sql databases create velvet --instance="$INSTANCE"
 
-# Use a generated password rather than typing one in.
-DB_PASS="$(openssl rand -base64 32)"
+# Generate a URL-safe password. Do NOT use `openssl rand -base64 32`: its
+# alphabet includes "/", and step 6 below pastes this value straight into a
+# DATABASE_URL, where a single "/" silently truncates the credentials.
+DB_PASS="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32), end="")')"
 gcloud sql users create velvet_app --instance="$INSTANCE" --password="$DB_PASS"
 ```
 
@@ -51,13 +59,23 @@ be added later; neither requires an application change.
 printf '%s' "$DB_PASS" | gcloud secrets create velvet-db-pass --data-file=-
 python3 -c 'import secrets; print(secrets.token_hex(32), end="")' \
   | gcloud secrets create velvet-secret-key --data-file=-
-printf '%s' 'choose-a-real-admin-password' \
+python3 -c 'import secrets; print(secrets.token_urlsafe(18), end="")' \
   | gcloud secrets create velvet-admin-pass --data-file=-
 ```
 
 `APP_SECRET_KEY` **must** be set here rather than left to the app's random
 fallback: with more than one instance running, a per-instance random key
 would mean a session cookie issued by one instance is rejected by the next.
+
+`velvet-admin-pass` is only consulted the **first** time the app reaches an
+empty database: `init_db()` sets the admin password when it creates the row,
+and every later boot just re-asserts `is_admin = TRUE` (`app.py`). Changing
+the secret afterwards does not change the login — you have to update the hash
+in the database. Read the value back with:
+
+```bash
+gcloud secrets versions access latest --secret=velvet-admin-pass
+```
 
 ## 4. Grant the service account access
 
@@ -74,6 +92,17 @@ for s in velvet-db-pass velvet-secret-key velvet-admin-pass; do
 done
 ```
 
+`--source` deploys additionally upload a build context to a `run-sources-*`
+GCS bucket, which needs bucket-create rights. Grant them or the deploy fails
+with `does not have storage.buckets.create access`:
+
+```bash
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${SA}" --role=roles/storage.admin
+```
+
+Do not assume these are already in place — see the note in **CI deploy** below.
+
 ## 5. Deploy
 
 ```bash
@@ -88,11 +117,22 @@ gcloud run deploy velvet \
   --set-secrets="DB_PASS=velvet-db-pass:latest,APP_SECRET_KEY=velvet-secret-key:latest,APP_ADMIN_PASSWORD=velvet-admin-pass:latest" \
   --min-instances=0 \
   --max-instances=10 \
-  --concurrency=80
+  --concurrency=80 \
+  --startup-probe=httpGet.path=/healthz,periodSeconds=5,timeoutSeconds=5,failureThreshold=6
 ```
 
 The app creates its schema and the admin account on boot, guarded by a
 Postgres advisory lock so simultaneous instance starts don't collide.
+
+**Keep the startup probe.** Gunicorn binds the port before forking workers, so
+Cloud Run's default TCP probe passes the instant the master starts — before any
+worker has touched the database. Without an HTTP probe, a revision that cannot
+reach Cloud SQL still reports *"deployed and is serving 100 percent of
+traffic"* and then returns `Service Unavailable` on every request, with the
+real error visible only in the runtime logs. `/healthz` returns 503 (and
+retries the schema init, so a database that was merely slow recovers on its
+own) until the app can actually query, which turns that silent failure into a
+failed deploy.
 
 Deploy again with the same command to ship changes — Cloud Run keeps the
 URL and rolls traffic to the new revision.
@@ -177,11 +217,13 @@ gcloud iam workload-identity-pools providers describe "github-provider" \
   --workload-identity-pool="github-pool" --format="value(name)"
 ```
 
-The default compute SA already carries the roles this deploy needs (granted
-in step 4 above, plus `cloudbuild.builds.editor` and
-`secretmanager.secretAccessor`); a dedicated `velvet-deployer` account isn't
-necessary unless you want CI's identity separated from the app's runtime
-identity.
+The default compute SA does **not** automatically carry everything this deploy
+needs — an earlier version of this document claimed it did, and the first CI
+runs failed on exactly that (`does not have storage.buckets.create access`).
+Grant step 4's roles explicitly, and confirm the SA also has
+`roles/cloudbuild.builds.editor` and `roles/artifactregistry.writer` for
+`--source` builds. A dedicated `velvet-deployer` account isn't necessary unless
+you want CI's identity separated from the app's runtime identity.
 
 Then in the repo's **Settings → Secrets and variables → Actions**, add:
 
@@ -190,7 +232,7 @@ Then in the repo's **Settings → Secrets and variables → Actions**, add:
 - `GCP_SERVICE_ACCOUNT` — `$SA` from above
 - `GCP_PROJECT_ID` — your `$PROJECT_ID`
 - `GCP_REGION` (optional, as a **variable** not a secret) — defaults to
-  `us-central1` if unset
+  `europe-west4` if unset, matching the fallback in the workflow's `env:` block
 
 Both grants (`iam.workloadIdentityPoolAdmin` to create the pool/provider,
 `iam.serviceAccountKeyAdmin` if you experiment with keys instead) are
