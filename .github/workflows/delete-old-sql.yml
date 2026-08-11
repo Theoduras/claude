@@ -1,0 +1,60 @@
+name: Delete the old us-central1 Cloud SQL instance
+
+# One-off and DESTRUCTIVE. Removes velvet-db (us-central1), which was
+# replaced by velvet-db-eu in europe-west4. Only run this once the deploy
+# against the replacement is green — with the /healthz startup probe in
+# place, a green deploy means the app genuinely connected.
+#
+# Triggered by pushing a change to this file.
+on:
+  push:
+    branches:
+      - claude/local-dev-workflow-plan-p8bfzv
+    paths:
+      - .github/workflows/delete-old-sql.yml
+  workflow_dispatch: {}
+
+env:
+  PROJECT: velvet-app-505108
+  OLD_INSTANCE: velvet-db
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Needed by the guard below, which reads deploy-gcp.yml.
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/733528989325/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: '733528989325-compute@developer.gserviceaccount.com'
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Delete the old instance
+        run: |
+          set -euo pipefail
+          I="${OLD_INSTANCE}"
+
+          if ! gcloud sql instances describe "$I" --project="$PROJECT" >/dev/null 2>&1; then
+            echo "instance $I is already gone — nothing to do"
+            exit 0
+          fi
+
+          # Refuse to delete anything the deploy is still pointed at.
+          if grep -q "INSTANCE: ${I}\$" .github/workflows/deploy-gcp.yml 2>/dev/null; then
+            echo "deploy-gcp.yml still targets $I — aborting" >&2
+            exit 1
+          fi
+
+          # Deletion protection is on by default on newer instances.
+          gcloud sql instances patch "$I" --project="$PROJECT" \
+            --no-deletion-protection --quiet || true
+
+          gcloud sql instances delete "$I" --project="$PROJECT" --quiet
+          echo "deleted $I"
