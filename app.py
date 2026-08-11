@@ -297,6 +297,10 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_fitness_level TEXT NOT NULL D
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_hair_color TEXT NOT NULL DEFAULT '';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_eye_color TEXT NOT NULL DEFAULT '';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_tattoos TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_gender BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_age BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_relationship BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_distance BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE TABLE IF NOT EXISTS matches (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -319,6 +323,14 @@ CREATE TABLE IF NOT EXISTS searches (
     radius_km INTEGER NOT NULL DEFAULT 500,
     status TEXT NOT NULL DEFAULT 'waiting',
     match_id BIGINT REFERENCES matches(id) ON DELETE SET NULL,
+    -- Each filter can be switched off without losing the value behind it, so
+    -- a searcher can widen their net and put it back afterwards. These govern
+    -- only this searcher's own side of the check: the other person's filters
+    -- still apply, which is why turning one off does not guarantee a match.
+    use_gender BOOLEAN NOT NULL DEFAULT TRUE,
+    use_age BOOLEAN NOT NULL DEFAULT TRUE,
+    use_relationship BOOLEAN NOT NULL DEFAULT TRUE,
+    use_distance BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
