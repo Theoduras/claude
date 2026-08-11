@@ -11,20 +11,22 @@ name: Migrate Cloud SQL to europe-west4
 #     row, so changing it here would silently reset the admin login.
 #
 # Every step is idempotent, so a failed run can simply be re-run.
+#
+# Triggered by pushing a change to this file. workflow_dispatch is kept for
+# once this lands on the default branch — GitHub only offers manual dispatch
+# for workflows present on the default branch, so it does nothing from here.
 on:
-  workflow_dispatch:
-    inputs:
-      new_instance:
-        description: Name of the replacement instance
-        default: velvet-db-eu
-        required: true
-      region:
-        description: Region for the replacement instance
-        default: europe-west4
-        required: true
+  push:
+    branches:
+      - claude/local-dev-workflow-plan-p8bfzv
+    paths:
+      - .github/workflows/migrate-sql-region.yml
+  workflow_dispatch: {}
 
 env:
   PROJECT: velvet-app-505108
+  NEW_INSTANCE: velvet-db-eu
+  NEW_REGION: europe-west4
 
 jobs:
   migrate:
@@ -45,14 +47,14 @@ jobs:
       - name: Create the replacement instance
         run: |
           set -euo pipefail
-          I="${{ inputs.new_instance }}"
+          I="${NEW_INSTANCE}"
           if gcloud sql instances describe "$I" --project="$PROJECT" >/dev/null 2>&1; then
             echo "instance $I already exists — skipping create"
           else
             gcloud sql instances create "$I" \
               --project="$PROJECT" \
               --database-version=POSTGRES_16 \
-              --region="${{ inputs.region }}" \
+              --region="${NEW_REGION}" \
               --tier=db-g1-small \
               --storage-auto-increase
           fi
@@ -60,7 +62,7 @@ jobs:
       - name: Create the database, the app user, and rotate DB_PASS
         run: |
           set -euo pipefail
-          I="${{ inputs.new_instance }}"
+          I="${NEW_INSTANCE}"
 
           if gcloud sql databases list --instance="$I" --project="$PROJECT" \
                --format='value(name)' | grep -qx velvet; then
@@ -92,7 +94,7 @@ jobs:
       - name: Report the new connection name
         run: |
           set -euo pipefail
-          conn="$(gcloud sql instances describe "${{ inputs.new_instance }}" \
+          conn="$(gcloud sql instances describe "${NEW_INSTANCE}" \
             --project="$PROJECT" --format='value(connectionName)')"
           echo "### Replacement instance ready" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
