@@ -31,10 +31,11 @@ Keep replies concise; prefer the smallest diff that does the job.
 
 ## Layout
 
-- `app.py` — **1,852 lines**, single module: all routes, DB access, and helpers
+- `app.py` — **~3,000 lines**, single module: all routes, DB access, and helpers
 - `templates/` — 16 Jinja templates, all extending `base.html`
 - `docs/style-guide.html` — velvet-textured design system; `docs/deploy-gcp.md` — Cloud Run
-- `seed_demo.py` — 20 demo members, all live-searching. Idempotent; `--reset` to rebuild
+- `seed_demo.py` — 20 demo members, all live-searching and `is_bot=TRUE` so they reply in
+  chat. Idempotent; `--reset` to rebuild
 - `smoke.py`, `dev.ps1`, `docker-compose.yml` — local dev only, not deployed
 - `vastai_client.py` — standalone Vast.ai GPU-rental CLI, **not imported by the app**
 
@@ -50,24 +51,39 @@ admin account. It runs at import time, so importing `app` bootstraps a fresh dat
 A shim gives psycopg connections the old sqlite3 shape (`app.py:195`) — `?` placeholders
 in query strings are rewritten, so **write `?`, not `%s`**, in `db.execute(...)` calls.
 
-Tables: `users`, `profiles`, `matches`, `searches`, `messages`.
+Tables: `users` (+`is_bot`), `profiles`, `matches` (+`status`/`paired_at`/`decision_a`/
+`decision_b`/`ended_at`), `searches` (+`lat`/`lng`), `messages`, `photos`.
+
+`matches.status` is `'active'` by default — every `/find` match and pre-existing row is a
+permanent chat, unchanged. Only `try_pair()` writes `status='timed'` with `paired_at`,
+which kicks off a computed lifecycle (`match_phase()`, `app.py:~2470`): 20s reveal → 5min
+timed chat → decision → `active` (both Continue) or `ended` (either Unmatch, or the grace
+window lapses). No background job — phases are derived from `paired_at` on each poll.
+`send_message()` gates on phase server-side; the browser countdown is cosmetic only.
+
+`photos` (bytea) is visible only to the owner, admins, or a matched user once that match is
+`active` — see `can_view_photos()` and `/photo/<id>` (`app.py:~2935`). Demo members
+(`is_bot=TRUE`) auto-reply in chat via a canned engine (no LLM) and auto-continue past the
+decision phase — see `maybe_bot_reply()`.
 
 ## Route map (`app.py`)
 
+Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on every edit.
+
 | Area | Routes |
 |---|---|
-| misc | `/lab` 440, `/` 447 |
-| auth | `/register` 454, `/login` 495, `/logout` 518 |
-| profile | `/profile/edit` 883, `/profile/<id>` 957, `/admin/profiles/new` 980 |
-| search | `/search` 1266, `/search/criteria` 1292, `/search/waiting` 1425, `/search/status` 1450, `/search/cancel` 1479 |
-| find | `/find` 1492, `/find/results` 1518 |
-| matches | `/matches` 1568, `/match/<other_id>` 1627 |
-| chat | `/chats` 1659, `/chat/<id>` 1685, `…/messages` 1741, `…/send` 1767 |
-| browse | `/browse` 1814 |
+| misc | `/lab`, `/` |
+| auth | `/register`, `/login`, `/logout` |
+| profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
+| search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/status`, `/search/cancel`, `/search/filters/toggle`, `/search/filters/apply` |
+| find | `/find`, `/find/results` |
+| matches | `/matches`, `/match/<other_id>`, `/match/<id>/state`, `/match/<id>/decide` |
+| chat | `/chats`, `/chat/<id>`, `…/messages`, `…/send` |
+| browse | `/browse` |
 
 ## Working rule
 
-`app.py` is ~18k tokens. **Never read it whole** — grep for the symbol, then read with
+`app.py` is large. **Never read it whole** — grep for the symbol, then read with
 `offset`/`limit` around the hit. Use the table above to jump straight to a feature.
 
 Line numbers drift on every edit. Regenerate the map with:

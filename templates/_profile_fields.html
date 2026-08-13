@@ -1,11 +1,24 @@
-<label for="name">Name</label>
+{% if sample_profile is defined %}
+  <p style="margin-bottom: 1rem;">
+    <button type="button" class="btn btn-secondary btn-small" id="fill-all-btn">Fill everything</button>
+  </p>
+  <script id="sample-profile-data" type="application/json">{{ sample_profile | tojson }}</script>
+{% endif %}
+
+<label for="name">Name
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="name">Fill</button></span>{% endif %}
+</label>
 <input id="name" name="name" type="text" value="{{ profile['name'] or '' }}" required>
 
-<label for="age">Age</label>
+<label for="age">Age
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="age">Fill</button></span>{% endif %}
+</label>
 <input id="age" name="age" type="number" min="18" max="120"
        value="{{ profile['age'] or '' }}" required>
 
-<label for="gender">Gender</label>
+<label for="gender">Gender
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="gender">Fill</button></span>{% endif %}
+</label>
 <select id="gender" name="gender">
   <option value="">— Select —</option>
   {% for g in genders %}
@@ -13,7 +26,9 @@
   {% endfor %}
 </select>
 
-<label for="seeking">Looking for</label>
+<label for="seeking">Looking for
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="seeking">Fill</button></span>{% endif %}
+</label>
 <select id="seeking" name="seeking">
   <option value="">— Select —</option>
   {% for s in seeking_options %}
@@ -21,26 +36,40 @@
   {% endfor %}
 </select>
 
-<label for="location">Location</label>
+<label for="location">Location
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="location">Fill</button></span>{% endif %}
+</label>
 <input id="location" name="location" type="text" value="{{ profile['location'] or '' }}"
        placeholder="e.g. Berlin, Germany">
 
-<label for="bio">Bio</label>
+<label for="bio">Bio
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="bio">Fill</button></span>{% endif %}
+</label>
 <textarea id="bio" name="bio" placeholder="A few sentences about yourself...">{{ profile['bio'] or '' }}</textarea>
 
-<label for="interests">Interests</label>
+<label for="interests">Interests
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="interests">Fill</button></span>{% endif %}
+</label>
 <textarea id="interests" name="interests" placeholder="e.g. music, travel, cooking">{{ profile['interests'] or '' }}</textarea>
 
-<label for="hobbies">Hobbies</label>
+<label for="hobbies">Hobbies
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="hobbies">Fill</button></span>{% endif %}
+</label>
 <textarea id="hobbies" name="hobbies" placeholder="e.g. hiking, gaming, painting">{{ profile['hobbies'] or '' }}</textarea>
 
-<label for="wants">What I want</label>
+<label for="wants">What I want
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="wants">Fill</button></span>{% endif %}
+</label>
 <textarea id="wants" name="wants" placeholder="What you're hoping to find...">{{ profile['wants'] or '' }}</textarea>
 
-<label for="needs">What I need</label>
+<label for="needs">What I need
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="needs">Fill</button></span>{% endif %}
+</label>
 <textarea id="needs" name="needs" placeholder="What matters most to you in a partner...">{{ profile['needs'] or '' }}</textarea>
 
-<label for="relationship_type">Relationship type</label>
+<label for="relationship_type">Relationship type
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="relationship_type">Fill</button></span>{% endif %}
+</label>
 <select id="relationship_type" name="relationship_type">
   <option value="">— Select —</option>
   {% for rt in relationship_types %}
@@ -48,12 +77,29 @@
   {% endfor %}
 </select>
 
+{% if allow_photos is defined and allow_photos %}
+  <div class="field-group">
+    <h2>Photos</h2>
+    <p class="subtitle">
+      Only visible to someone else once you've both chosen to continue a match.
+      JPEG, PNG, or WebP, up to 2 MB each, {{ photo_max_per_user }} total.
+    </p>
+  </div>
+  <label for="profile_picture">Profile picture</label>
+  <input id="profile_picture" name="profile_picture" type="file" accept="image/jpeg,image/png,image/webp">
+
+  <label for="photos">More photos</label>
+  <input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+{% endif %}
+
 <div class="field-group">
   <h2>Physical attributes</h2>
   <p class="subtitle">All optional — anything you leave blank is simply skipped when matching.</p>
 </div>
 
-<label for="height_cm">Height (cm)</label>
+<label for="height_cm">Height (cm)
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="height_cm">Fill</button></span>{% endif %}
+</label>
 <input id="height_cm" name="height_cm" type="number"
        min="{{ height_min }}" max="{{ height_max }}"
        value="{{ profile['height_cm'] or '' }}" placeholder="e.g. 175">
@@ -65,7 +111,9 @@
      ('eye_color', 'Eye colour', eye_colors),
      ('tattoos', 'Tattoos', tattoo_levels),
    ] %}
-  <label for="{{ field }}">{{ label }}</label>
+  <label for="{{ field }}">{{ label }}
+    {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="{{ field }}">Fill</button></span>{% endif %}
+  </label>
   <select id="{{ field }}" name="{{ field }}">
     <option value="">— Select —</option>
     {% for opt in options %}
@@ -99,7 +147,9 @@
 <p class="hint">Set both or neither. Leave empty for no height preference.</p>
 
 {% set chosen_body_types = (profile['pref_body_types'] or '').split(',') %}
-<label>Body types I'm drawn to</label>
+<label>Body types I'm drawn to
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="pref_body_types">Fill</button></span>{% endif %}
+</label>
 <div class="checkgroup">
   {% for bt in body_types %}
     <label for="pref_body_types_{{ loop.index }}">
@@ -118,7 +168,9 @@
      ('pref_eye_color', 'Preferred eye colour', eye_colors),
      ('pref_tattoos', 'Preferred tattoos', tattoo_levels),
    ] %}
-  <label for="{{ field }}">{{ label }}</label>
+  <label for="{{ field }}">{{ label }}
+    {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="{{ field }}">Fill</button></span>{% endif %}
+  </label>
   <select id="{{ field }}" name="{{ field }}">
     <option value="">No preference</option>
     {% for opt in options %}
@@ -126,3 +178,77 @@
     {% endfor %}
   </select>
 {% endfor %}
+
+{% if sample_profile is defined %}
+<script>
+(function () {
+  var sample = JSON.parse(document.getElementById("sample-profile-data").textContent);
+
+  function pick(list) {
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  // Deterministic-enough per click; this is a testing convenience, not part
+  // of the matching engine, so plain Math.random() is fine here (unlike the
+  // bot reply engine, which must stay reproducible).
+  function fillField(name, force) {
+    var data = sample[name];
+    if (data === undefined) return;
+
+    if (name === "pref_height_min" || name === "pref_height_max") {
+      var minEl = document.getElementById("pref_height_min");
+      var maxEl = document.getElementById("pref_height_max");
+      if (!minEl || !maxEl) return;
+      if ((minEl.value || maxEl.value) && !force) return;
+      var minData = sample.pref_height_min, maxData = sample.pref_height_max;
+      var lo = Math.floor(minData.min + Math.random() * (minData.max - minData.min + 1));
+      var hi = Math.floor(lo + Math.random() * (maxData.max - lo + 1));
+      minEl.value = lo;
+      maxEl.value = hi;
+      return;
+    }
+
+    if (name === "pref_body_types") {
+      var boxes = document.querySelectorAll('input[name="pref_body_types"]');
+      var already = Array.prototype.some.call(boxes, function (b) { return b.checked; });
+      if (already && !force) return;
+      boxes.forEach(function (b) { b.checked = false; });
+      var subset = data.filter(function () { return Math.random() < 0.4; });
+      if (subset.length === 0) subset = [pick(data)];
+      boxes.forEach(function (b) {
+        if (subset.indexOf(b.value) !== -1) b.checked = true;
+      });
+      return;
+    }
+
+    var el = document.getElementById(name);
+    if (!el) return;
+    if (el.value && !force) return;
+
+    if (el.tagName === "SELECT" || el.type === "text" || el.tagName === "TEXTAREA") {
+      el.value = pick(data);
+    } else if (el.type === "number") {
+      var lo = data.min, hi = data.max;
+      el.value = Math.floor(lo + Math.random() * (hi - lo + 1));
+    }
+  }
+
+  document.querySelectorAll("button[data-fill]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      fillField(btn.dataset.fill, true);
+    });
+  });
+
+  var fillAll = document.getElementById("fill-all-btn");
+  if (fillAll) {
+    var clickedOnce = false;
+    fillAll.addEventListener("click", function () {
+      Object.keys(sample).forEach(function (name) {
+        fillField(name, clickedOnce);
+      });
+      clickedOnce = true;
+    });
+  }
+})();
+</script>
+{% endif %}

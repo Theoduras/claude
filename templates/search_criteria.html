@@ -9,15 +9,19 @@
   </p>
 
   <div class="wizard-dots" id="wizard-dots">
-    <span class="dot active"></span><span class="dot"></span><span class="dot"></span>
+    <span class="dot active"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
   </div>
 
   <form method="post" action="{{ url_for('search_criteria') }}" id="wizard-form">
     <input type="hidden" name="relationship_type" value="{{ wanted }}">
+    <input type="hidden" name="location_lat" id="location_lat"
+           value="{{ existing['lat'] if existing and existing['lat'] is not none else '' }}">
+    <input type="hidden" name="location_lng" id="location_lng"
+           value="{{ existing['lng'] if existing and existing['lng'] is not none else '' }}">
 
     <div class="wizard-stage">
       <div class="wizard-step active" data-step="1">
-        <p class="eyebrow">Step 1 of 3 &middot; Who</p>
+        <p class="eyebrow">Step 1 of 4 &middot; Who</p>
         <label for="seeking">I'm looking for</label>
         <select id="seeking" name="seeking">
           <option value="">Anyone</option>
@@ -30,7 +34,9 @@
         </select>
 
         <label>Age range <span class="slider-value" id="age-value"></span></label>
-        <div class="slider-pair">
+        <div class="range-dual">
+          <div class="range-dual-track"></div>
+          <div class="range-dual-fill" id="age-fill"></div>
           <input type="range" id="age_min" name="age_min" min="18" max="120"
                  value="{{ existing['age_min'] if existing else 21 }}"
                  aria-label="Minimum age">
@@ -43,11 +49,15 @@
       </div>
 
       <div class="wizard-step" data-step="2">
-        <p class="eyebrow">Step 2 of 3 &middot; Where</p>
+        <p class="eyebrow">Step 2 of 4 &middot; Where</p>
         <label for="location">Location</label>
-        <input id="location" name="location" type="text" list="city-list" autocomplete="off"
-               value="{{ existing['location'] if existing and existing['location'] else me['location'] }}"
-               placeholder="e.g. Berlin">
+        <div class="ac-wrap">
+          <input id="location" name="location" type="text" autocomplete="off" list="city-list"
+                 value="{{ existing['location'] if existing and existing['location'] else me['location'] }}"
+                 placeholder="e.g. Berlin" role="combobox" aria-expanded="false"
+                 aria-controls="location-ac-list" aria-autocomplete="list">
+          <ul class="ac-list" id="location-ac-list" role="listbox"></ul>
+        </div>
         <datalist id="city-list">
           {% for city in city_choices %}<option value="{{ city }}"></option>{% endfor %}
         </datalist>
@@ -64,7 +74,7 @@
       </div>
 
       <div class="wizard-step" data-step="3">
-        <p class="eyebrow">Step 3 of 3 &middot; What you'll match on</p>
+        <p class="eyebrow">Step 3 of 4 &middot; What you'll match on</p>
 
         <label for="interests">Interests (optional)</label>
         <input id="interests" name="interests" type="text"
@@ -120,6 +130,21 @@
             {% endfor %}
           </select>
         {% endfor %}
+
+        <div class="wizard-nav">
+          <button type="button" class="btn btn-secondary wizard-back">Back</button>
+          <button type="button" class="btn wizard-next" id="to-review">Review</button>
+        </div>
+      </div>
+
+      <div class="wizard-step" data-step="4">
+        <p class="eyebrow">Step 4 of 4 &middot; Review</p>
+        <dl class="review-list" id="review-list"></dl>
+
+        <div class="review-pool" id="review-pool">
+          <span class="muted">Checking the pool…</span>
+        </div>
+        <div id="review-suggestions"></div>
 
         <div class="wizard-nav">
           <button type="button" class="btn btn-secondary wizard-back">Back</button>
@@ -179,10 +204,14 @@
   var minEl = document.getElementById("age_min");
   var maxEl = document.getElementById("age_max");
   var ageOut = document.getElementById("age-value");
+  var ageFill = document.getElementById("age-fill");
+  var ageLo = parseInt(minEl.min, 10), ageHi = parseInt(minEl.max, 10);
   var radiusEl = document.getElementById("radius_km");
   var radiusOut = document.getElementById("radius-value");
   var radiusHint = document.getElementById("radius-hint");
   var radiusMax = parseInt(radiusEl.max, 10);
+
+  function pct(v) { return ((v - ageLo) / (ageHi - ageLo)) * 100; }
 
   function syncAge(changed) {
     var lo = parseInt(minEl.value, 10);
@@ -193,6 +222,12 @@
       hi = parseInt(maxEl.value, 10);
     }
     ageOut.textContent = lo + " – " + hi + " years";
+    ageFill.style.left = pct(lo) + "%";
+    ageFill.style.width = (pct(hi) - pct(lo)) + "%";
+    // Whichever thumb is behind gets priority so overlapping handles can
+    // still be pulled apart.
+    minEl.style.zIndex = changed === "max" ? 2 : 3;
+    maxEl.style.zIndex = changed === "max" ? 3 : 2;
   }
 
   function syncRadius() {
@@ -212,6 +247,99 @@
   syncAge();
   syncRadius();
 
+  // ---- location combobox (Photon suggestions via /api/places) ----
+  var locInput = document.getElementById("location");
+  var locList = document.getElementById("location-ac-list");
+  var latEl = document.getElementById("location_lat");
+  var lngEl = document.getElementById("location_lng");
+  var acTimer = null;
+  var acController = null;
+  var acActive = -1;
+  var acItems = [];
+
+  function closeAc() {
+    locList.innerHTML = "";
+    acItems = [];
+    acActive = -1;
+    locInput.setAttribute("aria-expanded", "false");
+  }
+
+  function renderAc(results) {
+    locList.innerHTML = "";
+    acItems = results;
+    acActive = -1;
+    results.forEach(function (r, i) {
+      var li = document.createElement("li");
+      li.className = "ac-option";
+      li.id = "ac-opt-" + i;
+      li.setAttribute("role", "option");
+      li.textContent = r.label;
+      li.addEventListener("mousedown", function (ev) {
+        ev.preventDefault();
+        selectAc(i);
+      });
+      locList.appendChild(li);
+    });
+    locInput.setAttribute("aria-expanded", results.length ? "true" : "false");
+  }
+
+  function selectAc(i) {
+    var r = acItems[i];
+    if (!r) return;
+    locInput.value = r.label;
+    latEl.value = r.lat;
+    lngEl.value = r.lng;
+    closeAc();
+  }
+
+  locInput.addEventListener("input", function () {
+    // A stale coordinate must never survive a re-type of the text.
+    latEl.value = "";
+    lngEl.value = "";
+    var q = locInput.value.trim();
+    clearTimeout(acTimer);
+    if (q.length < 2) { closeAc(); return; }
+    acTimer = setTimeout(function () {
+      if (acController) acController.abort();
+      acController = new AbortController();
+      fetch("{{ url_for('api_places') }}?q=" + encodeURIComponent(q), {
+        headers: { "Accept": "application/json" },
+        signal: acController.signal
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) { renderAc(data.results || []); })
+        .catch(function () { /* offline: free text still works */ });
+    }, 250);
+  });
+
+  locInput.addEventListener("keydown", function (ev) {
+    if (!acItems.length) return;
+    if (ev.key === "ArrowDown") {
+      ev.preventDefault();
+      acActive = Math.min(acActive + 1, acItems.length - 1);
+    } else if (ev.key === "ArrowUp") {
+      ev.preventDefault();
+      acActive = Math.max(acActive - 1, 0);
+    } else if (ev.key === "Enter" && acActive >= 0) {
+      ev.preventDefault();
+      selectAc(acActive);
+      return;
+    } else if (ev.key === "Escape") {
+      closeAc();
+      return;
+    } else {
+      return;
+    }
+    Array.prototype.forEach.call(locList.children, function (li, i) {
+      li.classList.toggle("active", i === acActive);
+    });
+    locInput.setAttribute("aria-activedescendant", "ac-opt-" + acActive);
+  });
+
+  locInput.addEventListener("blur", function () {
+    setTimeout(closeAc, 120);
+  });
+
   // ---- wizard step flipping ----
   var steps = Array.prototype.slice.call(document.querySelectorAll(".wizard-step"));
   var dots = Array.prototype.slice.call(document.querySelectorAll("#wizard-dots .dot"));
@@ -227,6 +355,8 @@
     steps[current].classList.add("active");
     dots.forEach(function (d, i) { d.classList.toggle("active", i === current); });
     steps[current].scrollIntoView({ block: "nearest", behavior: "smooth" });
+
+    if (index === 3) loadReview();
   }
 
   document.querySelectorAll(".wizard-next").forEach(function (btn) {
@@ -239,6 +369,114 @@
       if (current > 0) goTo(current - 1);
     });
   });
+
+  // ---- step 4: review card ----
+  var reviewList = document.getElementById("review-list");
+  var reviewPool = document.getElementById("review-pool");
+  var reviewSuggestions = document.getElementById("review-suggestions");
+  var form = document.getElementById("wizard-form");
+
+  var bodyTypeLabels = {{ body_types | tojson }};
+
+  function selectedBodyTypes() {
+    return Array.prototype.slice.call(document.querySelectorAll('input[name="pref_body_types"]:checked'))
+      .map(function (b) { return b.value; });
+  }
+
+  function addRow(label, value) {
+    if (!value) return;
+    var row = document.createElement("div");
+    row.className = "review-row";
+    var dt = document.createElement("dt");
+    dt.textContent = label;
+    var dd = document.createElement("dd");
+    dd.textContent = value;
+    row.appendChild(dt);
+    row.appendChild(dd);
+    reviewList.appendChild(row);
+  }
+
+  function renderSummary() {
+    reviewList.innerHTML = "";
+    addRow("Connection type", "{{ wanted }}");
+    addRow("Looking for", document.getElementById("seeking").value || "Anyone");
+    addRow("Age range", minEl.value + " – " + maxEl.value + " years");
+    var loc = locInput.value.trim();
+    var radiusTxt = radiusEl.value >= radiusMax ? "anywhere" : radiusEl.value + " km";
+    addRow("Location", loc ? (loc + " · within " + radiusTxt) : "Not set");
+    addRow("Interests", document.getElementById("interests").value.trim());
+
+    var h1 = document.getElementById("pref_height_min").value;
+    var h2 = document.getElementById("pref_height_max").value;
+    if (h1 && h2) addRow("Height", h1 + "–" + h2 + " cm");
+
+    var bts = selectedBodyTypes();
+    if (bts.length) addRow("Body types", bts.join(", "));
+
+    ["pref_fitness_level", "pref_hair_color", "pref_eye_color", "pref_tattoos"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el.value) addRow(el.previousElementSibling.textContent.trim(), el.value);
+    });
+  }
+
+  function loadReview() {
+    renderSummary();
+    reviewPool.innerHTML = '<span class="muted">Checking the pool…</span>';
+    reviewSuggestions.innerHTML = "";
+
+    var data = new FormData(form);
+    fetch("{{ url_for('search_preview') }}", {
+      method: "POST",
+      headers: { "Accept": "application/json" },
+      body: data
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (result) {
+        if (result.error) {
+          reviewPool.innerHTML = '<span class="muted">Could not check the pool right now.</span>';
+          return;
+        }
+        var total = result.total_waiting;
+        var compatible = result.compatible_count;
+        reviewPool.innerHTML =
+          '<span class="tag">' + total + ' ' + (total === 1 ? "person" : "people") + ' searching right now</span>' +
+          '<span class="tag tag-teal">' + compatible + ' ' + (compatible === 1 ? "person fits" : "people fit") + ' everything you picked</span>';
+
+        reviewSuggestions.innerHTML = "";
+        (result.suggestions || []).forEach(function (s) {
+          var chip = document.createElement("span");
+          chip.className = "tag tag-teal";
+          chip.style.cursor = "pointer";
+          chip.style.marginRight = "0.5rem";
+          var text = "", targetStep = 0;
+          if (s.key === "age") {
+            text = "Widen to " + s.age_min + "–" + s.age_max + " · " + s.count + (s.count === 1 ? " person" : " people");
+            targetStep = 0;
+          } else if (s.key === "distance") {
+            text = "Widen to " + s.radius_km + " km · " + s.count + (s.count === 1 ? " person" : " people");
+            targetStep = 1;
+          } else if (s.key === "relationship") {
+            text = "Switch to " + s.relationship_type + " · " + s.count + (s.count === 1 ? " person" : " people");
+            targetStep = 0;
+          } else if (s.key === "gender") {
+            text = "Switch to " + s.seeking + " · " + s.count + (s.count === 1 ? " person" : " people");
+            targetStep = 0;
+          }
+          chip.textContent = text;
+          chip.addEventListener("click", function () {
+            if (s.key === "age") { minEl.value = s.age_min; maxEl.value = s.age_max; syncAge(); }
+            else if (s.key === "distance") { radiusEl.value = s.radius_km; syncRadius(); }
+            else if (s.key === "relationship") { /* relationship type is fixed per this wizard */ }
+            else if (s.key === "gender") { document.getElementById("seeking").value = s.seeking; }
+            goTo(targetStep);
+          });
+          reviewSuggestions.appendChild(chip);
+        });
+      })
+      .catch(function () {
+        reviewPool.innerHTML = '<span class="muted">Could not check the pool right now.</span>';
+      });
+  }
 })();
 </script>
 {% endblock %}
