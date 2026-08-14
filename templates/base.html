@@ -138,7 +138,11 @@
     h1 { font-size: clamp(1.9rem, 4.2vw, 2.9rem); }
     h2 { font-size: 1.3rem; }
 
-    h1 + .subtitle, h2 + .subtitle { margin-top: -0.7rem; }
+    /* h1's clamp(1.9rem, 4.2vw, 2.9rem) leaves a lot of unused
+       line-height above the subtitle; h2's 1.3rem doesn't, so the same
+       pull-up overlaps its text instead of just tightening the gap. */
+    h1 + .subtitle { margin-top: -0.7rem; }
+    h2 + .subtitle { margin-top: 0.35rem; }
     .subtitle {
       margin: 0.5rem 0 0;
       color: var(--text-muted);
