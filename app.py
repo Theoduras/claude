@@ -1198,21 +1198,49 @@ def edit_profile():
                     error = error or f"You can have at most {PHOTO_MAX_PER_USER} photos."
 
         if error is None:
+            # An UPSERT rather than a bare UPDATE: user_id is profiles' own
+            # primary key, so a row always exists for a normal registration
+            # or admin-created account (both insert one up front) — but a
+            # save must still land even if that row is ever missing, rather
+            # than silently affecting zero rows and reporting success anyway.
             db.execute(
                 """
-                UPDATE profiles SET
-                    name = ?, age = ?, gender = ?, seeking = ?, location = ?,
-                    height_cm = ?, body_type = ?, fitness_level = ?,
-                    hair_color = ?, eye_color = ?, tattoos = ?,
-                    pref_height_min = ?, pref_height_max = ?,
-                    pref_body_types = ?, pref_fitness_level = ?,
-                    pref_hair_color = ?, pref_eye_color = ?, pref_tattoos = ?,
-                    bio = ?, interests = ?, hobbies = ?, wants = ?, needs = ?,
-                    relationship_type = ?, updated_at = NOW()
-                WHERE user_id = ?
+                INSERT INTO profiles
+                    (user_id, name, age, gender, seeking, location,
+                     height_cm, body_type, fitness_level,
+                     hair_color, eye_color, tattoos,
+                     pref_height_min, pref_height_max,
+                     pref_body_types, pref_fitness_level,
+                     pref_hair_color, pref_eye_color, pref_tattoos,
+                     bio, interests, hobbies, wants, needs,
+                     relationship_type, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, NOW())
+                ON CONFLICT (user_id) DO UPDATE SET
+                    name = excluded.name, age = excluded.age,
+                    gender = excluded.gender, seeking = excluded.seeking,
+                    location = excluded.location,
+                    height_cm = excluded.height_cm,
+                    body_type = excluded.body_type,
+                    fitness_level = excluded.fitness_level,
+                    hair_color = excluded.hair_color,
+                    eye_color = excluded.eye_color,
+                    tattoos = excluded.tattoos,
+                    pref_height_min = excluded.pref_height_min,
+                    pref_height_max = excluded.pref_height_max,
+                    pref_body_types = excluded.pref_body_types,
+                    pref_fitness_level = excluded.pref_fitness_level,
+                    pref_hair_color = excluded.pref_hair_color,
+                    pref_eye_color = excluded.pref_eye_color,
+                    pref_tattoos = excluded.pref_tattoos,
+                    bio = excluded.bio, interests = excluded.interests,
+                    hobbies = excluded.hobbies, wants = excluded.wants,
+                    needs = excluded.needs,
+                    relationship_type = excluded.relationship_type,
+                    updated_at = NOW()
                 """,
                 (
-                    values["name"], age, values["gender"], values["seeking"],
+                    user_id, values["name"], age, values["gender"], values["seeking"],
                     values["location"],
                     phys["height_cm"], phys["body_type"], phys["fitness_level"],
                     phys["hair_color"], phys["eye_color"], phys["tattoos"],
@@ -1222,7 +1250,7 @@ def edit_profile():
                     phys["pref_tattoos"],
                     values["bio"], values["interests"],
                     values["hobbies"], values["wants"], values["needs"],
-                    values["relationship_type"], user_id,
+                    values["relationship_type"],
                 ),
             )
             for is_primary, mime, data in uploads:
@@ -1239,11 +1267,16 @@ def edit_profile():
         flash(error)
         profile = dict(values)
     else:
-        profile = dict(
-            db.execute(
-                "SELECT * FROM profiles WHERE user_id = ?", (user_id,)
-            ).fetchone()
-        )
+        row = db.execute(
+            "SELECT * FROM profiles WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        # Every account gets a profiles row at creation (register() and
+        # admin_new_profile() both insert one), so this is a defensive
+        # fallback rather than the normal path — but the edit form should
+        # render blank and let a save recreate the row instead of 500ing.
+        profile = dict(row) if row is not None else {f: "" for f in PROFILE_FIELDS} | {
+            PREF_BODY_TYPES_FIELD: ""
+        }
 
     # Shown as tiles so you can see what you already have while editing.
     photos = db.execute(
