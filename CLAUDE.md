@@ -34,10 +34,13 @@ Keep replies concise; prefer the smallest diff that does the job.
 - `app.py` — **~3,000 lines**, single module: all routes, DB access, and helpers
 - `templates/` — 16 Jinja templates, all extending `base.html`
 - `docs/style-guide.html` — velvet-textured design system; `docs/deploy-gcp.md` — Cloud Run
-- `seed_demo.py` — 20 demo members, all live-searching and `is_bot=TRUE` so they reply in
+- `seed_demo.py` — 40 demo members, all live-searching and `is_bot=TRUE` so they reply in
   chat. Idempotent; `--reset` to rebuild
 - `smoke.py`, `dev.ps1`, `docker-compose.yml` — local dev only, not deployed
 - `vastai_client.py` — standalone Vast.ai GPU-rental CLI, **not imported by the app**
+- `make_search_avatars.py` — regenerates the four placeholder-avatar PNGs inside
+  `static/velvet-searching.lottie` (the `/search/waiting` animation) in the app's
+  palette; standalone, **not imported by the app**
 
 ## Database
 
