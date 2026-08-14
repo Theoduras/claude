@@ -243,12 +243,19 @@
     gap: 0.5rem;
     margin-top: 0.7rem;
   }
-  .criteria-nav { display: flex; gap: 0.7rem; margin-top: 1.5rem; }
-  .criteria-nav .btn { text-align: center; white-space: nowrap; }
+  /* wrap rather than nowrap: below roughly 340px the two labels can't share a
+     row, and forcing them to was pushing the whole card past the viewport */
+  .criteria-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 1.5rem;
+  }
+  .criteria-nav .btn { text-align: center; }
   /* Back is a way out, not a peer of the primary action, so it takes only
      the width of its own label instead of half the row. */
   .criteria-nav .btn-secondary { flex: 0 0 auto; }
-  .criteria-nav .btn:last-child { flex: 1; }
+  .criteria-nav .btn:last-child { flex: 1 1 12rem; white-space: nowrap; }
   /* the row a suggestion just edited, so the change is visible from the chip */
   .toggle-row.flash { animation: row-flash 0.9s ease; }
   @keyframes row-flash {

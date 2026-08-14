@@ -402,8 +402,13 @@
     .switch-track::before {
       content: "";
       position: absolute;
-      top: 2px;
-      left: 2px;
+      /* Track is 1.5rem tall, thumb 1.1rem, so (1.5 - 1.1) / 2 centres it —
+         and the checked state's translateX(1.1rem) is exactly the travel
+         left over. rem rather than px or em so the whole switch scales as
+         one piece; em would resolve against whatever font-size it inherits,
+         which is not the scale the track is drawn on. */
+      top: 0.2rem;
+      left: 0.2rem;
       width: 1.1rem;
       height: 1.1rem;
       border-radius: 50%;
@@ -1012,7 +1017,7 @@
     .ac-option {
       padding: 0.55rem 0.7rem;
       font-size: 0.9rem;
-      border-radius: 8px;
+      border-radius: 0.5rem;
       cursor: pointer;
     }
     .ac-option:hover, .ac-option.active {
@@ -1354,7 +1359,7 @@
       flex: none;
       width: 5.125rem;
       height: 6.5rem;
-      border-radius: 12px;
+      border-radius: 0.75rem;
       border: 1px solid var(--ink-hairline);
       overflow: hidden;
     }
@@ -1400,7 +1405,7 @@
       color: var(--champagne);
     }
     .strength-bar {
-      height: 6px;
+      height: 0.375rem;
       border-radius: 999px;
       background: rgba(59, 11, 102, 0.9);
       overflow: hidden;
@@ -1429,7 +1434,7 @@
     .ring::after {
       content: "";
       position: absolute;
-      inset: 7px;
+      inset: 0.44rem;
       border-radius: 50%;
       background: var(--ink-raised);
     }
@@ -1460,7 +1465,7 @@
       color: var(--text-faint);
     }
     .ring-sm { width: 4.5rem; height: 4.5rem; }
-    .ring-sm::after { inset: 6px; }
+    .ring-sm::after { inset: 0.33rem; }
     .ring-sm .ring-num { font-size: 1.19rem; }
 
     /* the two of you, overlapping: violet on one side, teal on the other */
@@ -1680,7 +1685,7 @@
     }
     /* the active pip: always laid out, only painted when current, so the
        three tabs keep identical heights whichever one is selected */
-    .tabbar .tab-dot { width: 4px; height: 4px; border-radius: 50%; }
+    .tabbar .tab-dot { width: 0.25rem; height: 0.25rem; border-radius: 50%; }
     .tabbar a.is-active { color: var(--violet-crest); }
     .tabbar a.is-active .tab-dot {
       background: var(--violet-crest);

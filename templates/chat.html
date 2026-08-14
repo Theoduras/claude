@@ -217,31 +217,81 @@
 (function () {
   var POLL_MS = 1500;
   var RETRY_MS = 4000;
+  var TICK_MS = 100;
+
+  /* A countdown that runs off the local clock but is only ever *told* the
+     time by the server. Each poll re-anchors a deadline; between polls the
+     ticker renders from that deadline, so the display moves every frame
+     instead of jumping 1.5 seconds at a time (or freezing for RETRY_MS when
+     a poll fails). The server stays the authority — the ticker can only
+     count down toward an anchor it was given, never past zero, and
+     send_message() gates on the phase server-side regardless. */
+  function anchoredCountdown(opts) {
+    var deadline = Date.now() + opts.initialSeconds * 1000;
+    var total = opts.totalSeconds;
+    var stopped = false;
+
+    function remaining() {
+      return Math.max(0, (deadline - Date.now()) / 1000);
+    }
+
+    function render() {
+      if (stopped) return;
+      var left = remaining();
+      opts.render(left);
+      if (opts.ring) {
+        opts.ring.style.setProperty("--deg", (left / total * 360).toFixed(2) + "deg");
+      }
+      setTimeout(render, TICK_MS);
+    }
+
+    function poll() {
+      if (stopped) return;
+      fetch(opts.stateUrl, { headers: { "Accept": "application/json" } })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.phase !== opts.phase) {
+            stopped = true;
+            opts.onPhaseChange(data);
+            return;
+          }
+          // Re-anchor, but never let the clock run backwards. The server
+          // rounds seconds_left to a whole second, so a poll can legitimately
+          // report slightly more time than the ticker has already counted
+          // off; taking the earlier of the two keeps the display monotonic.
+          // A correction larger than RESYNC_S is a real disagreement (a
+          // suspended tab, a clock jump), and that one we take as given.
+          var RESYNC_S = 2;
+          var proposed = Date.now() + data.seconds_left * 1000;
+          if (proposed < deadline || Math.abs(proposed - deadline) > RESYNC_S * 1000) {
+            deadline = proposed;
+          }
+          setTimeout(poll, POLL_MS);
+        })
+        .catch(function () { setTimeout(poll, RETRY_MS); });
+    }
+
+    render();
+    poll();
+  }
 
   // ---- reveal countdown: redirect to the chat once the server says so ----
   var revealCount = document.getElementById("reveal-count");
   if (revealCount) {
     var chatUrl = "{{ url_for('chat', match_id=match['id']) }}";
-    var stateUrl = "{{ url_for('match_state', match_id=match['id']) }}";
-    (function pollReveal() {
-      fetch(stateUrl, { headers: { "Accept": "application/json" } })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          if (data.phase !== "reveal") {
-            window.location.href = chatUrl;
-            return;
-          }
-          revealCount.textContent = data.seconds_left;
-          // sweep the ring down with the number it wraps
-          var ring = document.getElementById("reveal-ring");
-          if (ring) {
-            var deg = Math.round(data.seconds_left / {{ reveal_seconds }} * 360);
-            ring.style.setProperty("--deg", deg + "deg");
-          }
-          setTimeout(pollReveal, POLL_MS);
-        })
-        .catch(function () { setTimeout(pollReveal, RETRY_MS); });
-    })();
+    anchoredCountdown({
+      stateUrl: "{{ url_for('match_state', match_id=match['id']) }}",
+      phase: "reveal",
+      {# seconds_left is None outside the timed phases, and this script is
+         rendered for every phase — an unguarded None is a syntax error. #}
+      initialSeconds: {{ state.seconds_left or 0 }},
+      totalSeconds: {{ reveal_seconds }},
+      ring: document.getElementById("reveal-ring"),
+      render: function (left) {
+        revealCount.textContent = Math.ceil(left);
+      },
+      onPhaseChange: function () { window.location.href = chatUrl; }
+    });
   }
 
   // ---- deciding: submit choice, then poll until the other side answers ----
@@ -350,28 +400,21 @@
   // ---- server-anchored countdown for the timed phase ----
   var countdownEl = document.getElementById("timed-countdown");
   if (countdownEl && log.dataset.stateUrl) {
-    (function pollState() {
-      fetch(log.dataset.stateUrl, { headers: { "Accept": "application/json" } })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          if (data.phase !== "timed") {
-            window.location.reload();
-            return;
-          }
-          var s = data.seconds_left;
-          var mins = Math.floor(s / 60);
-          var secs = s % 60;
-          countdownEl.textContent = mins + ":" + (secs < 10 ? "0" : "") + secs;
-          countdownEl.classList.toggle("countdown-low", s <= 30);
-          var timedRing = document.getElementById("timed-ring");
-          if (timedRing) {
-            timedRing.style.setProperty(
-              "--deg", Math.round(s / {{ timed_seconds }} * 360) + "deg");
-          }
-          setTimeout(pollState, POLL_MS);
-        })
-        .catch(function () { setTimeout(pollState, RETRY_MS); });
-    })();
+    anchoredCountdown({
+      stateUrl: log.dataset.stateUrl,
+      phase: "timed",
+      initialSeconds: {{ state.seconds_left or 0 }},
+      totalSeconds: {{ timed_seconds }},
+      ring: document.getElementById("timed-ring"),
+      render: function (left) {
+        var s = Math.ceil(left);
+        var mins = Math.floor(s / 60);
+        var secs = s % 60;
+        countdownEl.textContent = mins + ":" + (secs < 10 ? "0" : "") + secs;
+        countdownEl.classList.toggle("countdown-low", s <= 30);
+      },
+      onPhaseChange: function () { window.location.reload(); }
+    });
   }
 
   var form = document.getElementById("chat-form");
