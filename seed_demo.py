@@ -97,6 +97,48 @@ DEMO_MEMBERS = [
      "music, poetry, films",   "djing, swimming",      "Everyone", 21, 34, 40),
     ("robin_e",    "Robin",   25, "Non-binary", "Maastricht","Friendship",
      "anime, board games",     "drawing, hiking",      "Everyone", 20, 32, 90),
+
+    # --- second wave: 20 more Maastricht members -------------------------
+    ("emma_v",     "Emma",    26, "Woman",      "Maastricht","Long-term relationship",
+     "reading, travel, wine",  "yoga, painting",       "Men",      24, 36, 60),
+    ("daan_p",     "Daan",    29, "Man",        "Maastricht","Long-term relationship",
+     "cycling, cooking",       "running, chess",       "Women",    23, 34, 70),
+    ("sofie_k",    "Sofie",   24, "Woman",      "Maastricht","Short-term relationship",
+     "festivals, dancing",     "gym, clubbing",        "Men",      20, 30, 40),
+    ("milan_j",    "Milan",   27, "Man",        "Maastricht","Short-term relationship",
+     "gaming, football",       "fifa, gym",            "Women",    20, 30, 30),
+    ("julia_r",    "Julia",   31, "Woman",      "Maastricht","Friendship",
+     "hiking, photography",    "climbing, drawing",    "Everyone", 22, 40, 90),
+    ("tim_h",      "Tim",     33, "Man",        "Maastricht","Friendship",
+     "board games, films",     "chess, cinema",        "Everyone", 22, 45, 100),
+    ("nina_d",     "Nina",    28, "Woman",      "Maastricht","Not sure yet",
+     "art, museums",           "painting, pottery",    "Everyone", 21, 38, 50),
+    ("bram_s",     "Bram",    30, "Man",        "Maastricht","Not sure yet",
+     "cars, motorsport",       "cycling, grilling",    "Everyone", 22, 40, 60),
+    ("lotte_m",    "Lotte",   23, "Woman",      "Maastricht","Long-term relationship",
+     "music, concerts",        "guitar, running",      "Men",      21, 30, 45),
+    ("thijs_w",    "Thijs",   34, "Man",        "Maastricht","Long-term relationship",
+     "travel, cooking, wine",  "climbing, cooking",    "Women",    26, 38, 80),
+    ("fenna_b",    "Fenna",   25, "Woman",      "Maastricht","Short-term relationship",
+     "yoga, brunch",           "pilates, baking",      "Men",      22, 32, 35),
+    ("sven_l",     "Sven",    22, "Man",        "Maastricht","Short-term relationship",
+     "gym, football",          "gym, gaming",          "Women",    18, 27, 25),
+    ("iris_t",     "Iris",    29, "Woman",      "Maastricht","Friendship",
+     "books, tea, cats",       "reading, knitting",    "Everyone", 21, 40, 80),
+    ("wouter_f",   "Wouter",  36, "Man",        "Maastricht","Friendship",
+     "chess, history",         "chess, cycling",       "Everyone", 24, 45, 100),
+    ("anouk_g",    "Anouk",   27, "Woman",      "Maastricht","Not sure yet",
+     "travel, languages",      "surfing, cooking",     "Everyone", 22, 36, 70),
+    ("ruben_c",    "Ruben",   31, "Man",        "Maastricht","Not sure yet",
+     "photography, hiking",    "climbing, drawing",    "Everyone", 23, 40, 65),
+    ("saar_n",     "Saar",    24, "Non-binary", "Maastricht","Friendship",
+     "poetry, music",          "djing, writing",       "Everyone", 20, 33, 50),
+    ("jesse_o",    "Jesse",   26, "Non-binary", "Maastricht","Not sure yet",
+     "gaming, anime",          "drawing, gaming",      "Everyone", 20, 34, 55),
+    ("marit_e",    "Marit",   32, "Woman",      "Maastricht","Long-term relationship",
+     "cooking, gardening",     "baking, gardening",    "Men",      28, 42, 55),
+    ("koen_z",     "Koen",    35, "Man",        "Maastricht","Long-term relationship",
+     "wine, cooking, jazz",    "cooking, chess",       "Women",    27, 40, 70),
 ]
 
 BIO = "{name} from {location}. Into {interests}. Here for {goal}."
@@ -213,6 +255,13 @@ DEMO_PHOTOS = {
         ((232, 211, 169), (59, 11, 102)),  # champagne -> violet-deep
     ],
 }
+
+# Second-wave members share one look: a plum/orange/pink gradient sampled
+# from an abstract swirl illustration (not a photo of anyone), so their
+# cards read as a matched set distinct from the first wave above.
+_SWIRL_GRADIENT = [((176, 58, 122), (230, 145, 60))]  # plum -> orange
+for _username, *_ in DEMO_MEMBERS[20:]:
+    DEMO_PHOTOS[_username] = _SWIRL_GRADIENT
 
 
 def make_gradient_png(w, h, top_rgb, bottom_rgb):
