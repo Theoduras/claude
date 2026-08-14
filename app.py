@@ -641,7 +641,10 @@ def design_lab():
 def index():
     if session.get("user_id"):
         return redirect(url_for("browse"))
-    return redirect(url_for("login"))
+    searching_now = get_db().execute(
+        "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
+    ).fetchone()["n"]
+    return render_template("landing.html", searching_now=searching_now)
 
 
 @app.route("/register", methods=["GET", "POST"])

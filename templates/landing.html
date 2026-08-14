@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Velvet{% endblock %}
+{% block content %}
+<div class="landing">
+  <p class="landing-brand"><span class="mark"></span>Velvet</p>
+
+  <h1>Something<br>softer than<br>swiping.</h1>
+  <p class="landing-lede">
+    Sign in and search — we pair you the moment someone is looking for you too.
+  </p>
+
+  <div class="landing-actions">
+    {# the count is the whole promise of the product: people are waiting now #}
+    <p class="landing-live">
+      <span class="live-dot"></span>
+      {{ searching_now }} searching right now
+    </p>
+    <a class="btn btn-block" href="{{ url_for('register') }}">Start searching</a>
+    <a class="btn btn-secondary btn-block" href="{{ url_for('login') }}">I already have an account</a>
+    <p class="landing-fine">Nobody matches you unless you match them back.</p>
+  </div>
+</div>
+{% endblock %}
