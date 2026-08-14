@@ -175,7 +175,7 @@
       </div></div>
     </div>
 
-    {# ---- 5. interests — a ranker, not a filter, so it sits last ---- #}
+    {# ---- 5. interests — a real filter now, so it sits last ---- #}
     <div class="toggle-row">
       <div class="toggle-head">
         <label class="switch">
@@ -185,13 +185,14 @@
         </label>
         <span class="toggle-label">
           <strong>Interests</strong>
-          <span class="toggle-summary">Doesn't filter — decides who comes first</span>
+          <span class="toggle-summary">Only matches people who share one</span>
         </span>
         <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-interests">?</button>
       </div>
       <p class="help-pop" id="help-interests">
-        Nobody is excluded for not sharing your interests. When several people
-        fit everything else, the one with the most in common is paired first.
+        Turning this on narrows the pool to people who share at least one of
+        these. Among the people who do, the one with the most in common is
+        paired first.
       </p>
       <div class="toggle-panel"><div>
         <input id="interests" name="interests" type="text"

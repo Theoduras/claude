@@ -1621,14 +1621,17 @@ def searches_compatible(s1, s2):
     requested range, each person's physical traits must satisfy the
     other's step-3 filters, and the distance between them must sit inside
     both radii. Relationship type only blocks when both named one and they
-    differ. Unset fields are treated as "no preference".
+    differ. Interests, when set, requires at least one shared (stemmed)
+    keyword. Unset fields are treated as "no preference".
 
     Each side can also switch a filter off (searches.use_gender/use_age/
     use_relationship/use_distance/use_physical), which relaxes only that side's own
     check — the other person's filter still applies, so disabling one
     filter does not by itself guarantee a match. Missing keys (hand-built
     dicts, pre-migration rows) default to "on" via .get(key, True), which
-    matches the column's own DEFAULT TRUE.
+    matches the column's own DEFAULT TRUE. Interests has no use_* column —
+    an empty interests string (the toggle off on screen 2, or never filled
+    in) already reads as "no preference", so there is nothing to disable.
     """
 
     def gender_ok(searcher, candidate_gender):
@@ -1645,9 +1648,25 @@ def searches_compatible(s1, s2):
             return True
         return searcher["age_min"] <= candidate_age <= searcher["age_max"]
 
+    def interests_ok(searcher, candidate_interests):
+        # Empty interests means "no preference" -- same convention as the
+        # other filters, and how a searcher who left this blank (or
+        # switched it off, which stores '') already reads. Non-empty means
+        # the candidate has to share at least one interest, judged the same
+        # way try_pair()'s ranking does (stemmed tokens, so near-misses
+        # like "hiking"/"hike" still count).
+        if not searcher.get("interests"):
+            return True
+        return bool(_tokens(searcher["interests"]) & _tokens(candidate_interests))
+
     if not (gender_ok(s1, s2["gender"]) and gender_ok(s2, s1["gender"])):
         return False
     if not (age_ok(s1, s2["age"]) and age_ok(s2, s1["age"])):
+        return False
+    if not (
+        interests_ok(s1, s2.get("interests"))
+        and interests_ok(s2, s1.get("interests"))
+    ):
         return False
     if not (physical_ok(s1, s2) and physical_ok(s2, s1)):
         return False
@@ -2123,6 +2142,7 @@ def search_preview():
         "age_min": age_min,
         "age_max": age_max,
         "relationship_type": wanted,
+        "interests": request.form.get("interests", "").strip(),
         "location": location,
         "lat": lat,
         "lng": lng,
@@ -2332,9 +2352,10 @@ def search_blockers(mine, others):
         "if_any_connection": relaxed(use_relationship=False),
         "if_any_distance": relaxed(use_distance=False),
         "if_any_physical": relaxed(use_physical=False),
+        "if_any_interests": relaxed(interests=""),
         "if_all_relaxed": relaxed(
             use_gender=False, use_age=False, use_relationship=False,
-            use_distance=False, use_physical=False,
+            use_distance=False, use_physical=False, interests="",
         ),
         "age_suggestion": _minimal_age_suggestion(mine, others),
         "distance_suggestion": _minimal_distance_suggestion(mine, others),
@@ -2349,9 +2370,9 @@ def search_filter_rows(mine, others, blockers):
     Each row: key, label, value_text, enabled (None when not toggleable),
     constrains (does this filter currently reject someone?), note (an
     honest caveat, if any), and suggestion (the concrete fix, if any).
-    Interests is included but is NOT a filter — searches_compatible()
-    never reads it, it only breaks ties in try_pair() — so it is shown
-    read-only with a note saying exactly that.
+    Interests filters like the rest now (searches_compatible() requires a
+    shared keyword when it's set) and also still breaks ties in try_pair()
+    among whoever's left.
     """
     rows = []
 
@@ -2422,9 +2443,14 @@ def search_filter_rows(mine, others, blockers):
         "key": "interests",
         "label": "Interests",
         "value_text": mine["interests"] or "None listed",
+        # No use_interests column to flip here (there's nothing to toggle
+        # back to -- the filter *is* whatever text is stored), so this
+        # stays read-only; change it from the full form instead.
         "enabled": None,
-        "constrains": False,
-        "note": "Not a filter — only used to rank who you're paired with first.",
+        "constrains": blockers["if_any_interests"] > blockers["current_count"],
+        "note": "Requires sharing at least one interest, and also decides who "
+            "you're paired with first among the people who do."
+            if mine["interests"] else None,
         "suggestion": None,
     })
 

@@ -60,7 +60,10 @@ filters matter as a list of switches. Each switch writes a `searches.use_*` colu
 `use_gender`/`use_age`/`use_distance`/`use_physical` — read by `searches_compatible()` via
 `.get(key, True)`; a switch that is off leaves its panel's inputs `disabled`, so those
 fields never reach the server at all. `use_relationship` is always TRUE: it *is* the tile
-choice. Interests has no column — it is a ranker, not a filter, so "off" just stores `''`.
+choice. Interests has no `use_*` column of its own — the stored text *is* the switch: "off"
+stores `''`, which `searches_compatible()` reads as "no preference". When it's non-empty it's
+a real filter (requires the other side to share at least one stemmed keyword), and it still
+breaks ties in `try_pair()`'s ranking among whoever's left.
 
 `matches.status` is `'active'` by default — pairing now only happens through live search
 (`try_pair()`), but the default keeps pre-existing rows a permanent chat, unchanged.
