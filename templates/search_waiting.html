@@ -21,74 +21,76 @@
       &middot; {{ blockers.current_count }} fit everything below{% endif %}
   </p>
 
-  <div class="filter-list">
-    {% for row in filter_rows %}
-      <div class="filter-row-wrap {{ 'filter-off' if row.enabled == false else '' }}">
-        <div class="filter-row">
-          <div class="filter-row-main">
-            <div class="filter-row-label">{{ row.label }}</div>
-            <div class="filter-row-value">{{ row.value_text }}</div>
-            {% if row.note %}<div class="filter-note">{{ row.note }}</div>{% endif %}
+  {% if blockers.current_count == 0 %}
+    <div class="filter-list">
+      {% for row in filter_rows %}
+        <div class="filter-row-wrap {{ 'filter-off' if row.enabled == false else '' }}">
+          <div class="filter-row">
+            <div class="filter-row-main">
+              <div class="filter-row-label">{{ row.label }}</div>
+              <div class="filter-row-value">{{ row.value_text }}</div>
+              {% if row.note %}<div class="filter-note">{{ row.note }}</div>{% endif %}
+            </div>
+            {% if row.enabled is not none %}
+              <form method="post" action="{{ url_for('search_filters_toggle') }}">
+                <input type="hidden" name="filter" value="{{ row.key }}">
+                <label class="switch" aria-label="Toggle {{ row.label }}">
+                  <input type="checkbox" onchange="this.form.submit()" {% if row.enabled %}checked{% endif %}>
+                  <span class="switch-track"></span>
+                </label>
+              </form>
+            {% endif %}
           </div>
-          {% if row.enabled is not none %}
-            <form method="post" action="{{ url_for('search_filters_toggle') }}">
-              <input type="hidden" name="filter" value="{{ row.key }}">
-              <label class="switch" aria-label="Toggle {{ row.label }}">
-                <input type="checkbox" onchange="this.form.submit()" {% if row.enabled %}checked{% endif %}>
-                <span class="switch-track"></span>
-              </label>
-            </form>
+          {% if row.enabled != false and row.constrains and row.suggestion %}
+            <div class="filter-row" style="padding-top: 0;">
+              <div class="filter-fix" style="width: 100%;">
+                {% if row.key == 'age' %}
+                  <span class="tag tag-teal">
+                    Widen to {{ row.suggestion.age_min }}–{{ row.suggestion.age_max }}
+                    &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+                  </span>
+                {% elif row.key == 'distance' %}
+                  <span class="tag tag-teal">
+                    Widen to {{ row.suggestion.radius_km }} km
+                    &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+                  </span>
+                {% elif row.key == 'relationship' %}
+                  <span class="tag tag-teal">
+                    Switch to {{ row.suggestion.relationship_type }}
+                    &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+                  </span>
+                {% elif row.key == 'gender' %}
+                  <span class="tag tag-teal">
+                    Switch to {{ row.suggestion.seeking }}
+                    &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+                  </span>
+                {% endif %}
+                <form method="post" action="{{ url_for('search_filters_apply') }}">
+                  <input type="hidden" name="filter" value="{{ row.key }}">
+                  <button class="btn btn-secondary btn-small" type="submit">Fix</button>
+                </form>
+              </div>
+            </div>
           {% endif %}
         </div>
-        {% if row.enabled != false and row.constrains and row.suggestion %}
-          <div class="filter-row" style="padding-top: 0;">
-            <div class="filter-fix" style="width: 100%;">
-              {% if row.key == 'age' %}
-                <span class="tag tag-teal">
-                  Widen to {{ row.suggestion.age_min }}–{{ row.suggestion.age_max }}
-                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                </span>
-              {% elif row.key == 'distance' %}
-                <span class="tag tag-teal">
-                  Widen to {{ row.suggestion.radius_km }} km
-                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                </span>
-              {% elif row.key == 'relationship' %}
-                <span class="tag tag-teal">
-                  Switch to {{ row.suggestion.relationship_type }}
-                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                </span>
-              {% elif row.key == 'gender' %}
-                <span class="tag tag-teal">
-                  Switch to {{ row.suggestion.seeking }}
-                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                </span>
-              {% endif %}
-              <form method="post" action="{{ url_for('search_filters_apply') }}">
-                <input type="hidden" name="filter" value="{{ row.key }}">
-                <button class="btn btn-secondary btn-small" type="submit">Fix</button>
-              </form>
-            </div>
-          </div>
-        {% endif %}
-      </div>
-    {% endfor %}
-  </div>
-
-  <p class="filter-note" style="text-align: left; margin: 0.7rem 0 0;">
-    Turning one off only relaxes your side — their filters still apply.
-  </p>
-
-  {% if blockers.pool and blockers.current_count == 0 and blockers.if_all_relaxed == 0 %}
-    <div class="flash" style="text-align: left;">
-      Nobody in the pool fits even with every filter above turned off. Try a
-      different connection type, or check back once more people are searching.
+      {% endfor %}
     </div>
-  {% endif %}
 
-  <p style="margin-top: 1.1rem;">
-    <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Change values in the full form instead</a>
-  </p>
+    <p class="filter-note" style="text-align: left; margin: 0.7rem 0 0;">
+      Turning one off only relaxes your side — their filters still apply.
+    </p>
+
+    {% if blockers.pool and blockers.if_all_relaxed == 0 %}
+      <div class="flash" style="text-align: left;">
+        Nobody in the pool fits even with every filter above turned off. Try a
+        different connection type, or check back once more people are searching.
+      </div>
+    {% endif %}
+
+    <p style="margin-top: 1.1rem;">
+      <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Change values in the full form instead</a>
+    </p>
+  {% endif %}
 
   <form method="post" action="{{ url_for('search_cancel') }}">
     <button class="btn btn-secondary btn-block" type="submit">Stop searching</button>
