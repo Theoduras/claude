@@ -244,6 +244,16 @@ RELATIONSHIP_TYPES = [
     "Not sure yet",
 ]
 
+# Fallback reveal copy when two searches share no interest keyword -- the
+# thing that's always true instead: they're both looking for the same
+# relationship_type. Keyed on RELATIONSHIP_TYPES values.
+RELATIONSHIP_REASON_PHRASES = {
+    "Long-term relationship": "something long-term",
+    "Short-term relationship": "something short-term",
+    "Friendship": "the same thing -- friendship",
+    "Not sure yet": "the same thing, even if neither of you is sure yet",
+}
+
 BODY_TYPES = ["Slim", "Athletic", "Average", "Curvy", "Muscular", "Plus-size"]
 FITNESS_LEVELS = ["Sedentary", "Lightly active", "Active", "Very active", "Athlete"]
 HAIR_COLORS = ["Black", "Brown", "Blonde", "Red", "Grey/White", "Other"]
@@ -1451,15 +1461,55 @@ def admin_new_profile():
     )
 
 
+def _stem(word):
+    """Loosely strip a trailing suffix so near-miss word forms collapse.
+
+    'hiking'/'hiker'/'hike' and 'film'/'films' all reduce to the same stem.
+    Deliberately crude (no dictionary) -- good enough for matching interest
+    keywords, not for display.
+    """
+    for suf in ("ing", "ers", "er", "es", "s", "e"):
+        if word.endswith(suf) and len(word) - len(suf) >= 3:
+            return word[: -len(suf)]
+    return word
+
+
 def _tokens(*texts):
-    """Split free-text fields into a set of lowercase keywords."""
+    """Split free-text fields into a set of stemmed lowercase keywords.
+
+    Used both by try_pair()'s ranking and by the match reveal, so loosening
+    the comparison here (stem instead of exact string) fixes both at once.
+    """
     words = set()
     for text in texts:
         for tok in re.split(r"[,;/\n]+|\s+", (text or "").lower()):
             tok = tok.strip(".!?()\"'")
             if len(tok) > 2:
-                words.add(tok)
+                words.add(_stem(tok))
     return words
+
+
+def _shared_interest_words(mine_text, other_text):
+    """Original-cased words from `mine_text` whose stem overlaps `other_text`.
+
+    Used for display (the reveal names the actual shared interest), while
+    `_tokens()` intersections drive ranking/matching elsewhere.
+    """
+    other_stems = _tokens(other_text)
+    seen = set()
+    result = []
+    for raw in re.split(r"[,;/\n]+|\s+", (mine_text or "")):
+        raw = raw.strip()
+        if not raw:
+            continue
+        tok = raw.lower().strip(".!?()\"'")
+        if len(tok) <= 2:
+            continue
+        stem = _stem(tok)
+        if stem in other_stems and stem not in seen:
+            seen.add(stem)
+            result.append(raw)
+    return result
 
 
 def city_coords(location):
@@ -2802,6 +2852,35 @@ def chat(match_id):
 
     state = match_state_payload(match, user["id"]) if is_participant else None
 
+    # The reveal's hook: the shared-interest overlap try_pair() already
+    # computed to pick this partner, plus a one-line opener built from it
+    # (or, with no overlap, the thing that's always true -- same
+    # relationship_type). Only worth the query during the reveal itself.
+    shared_interests = []
+    match_reason = None
+    if is_participant and phase == "reveal":
+        other_id = match["user_b"] if user["id"] == match["user_a"] else match["user_a"]
+        rows = get_db().execute(
+            "SELECT user_id, interests, relationship_type FROM searches WHERE user_id IN (?, ?)",
+            (user["id"], other_id),
+        ).fetchall()
+        mine_search = next((r for r in rows if r["user_id"] == user["id"]), None)
+        other_search = next((r for r in rows if r["user_id"] == other_id), None)
+        if mine_search and other_search:
+            # Word casing comes from the other person's own text -- the
+            # line reads "{other} likes {word}", describing them.
+            shared_interests = _shared_interest_words(
+                other_search["interests"], mine_search["interests"]
+            )
+            if shared_interests:
+                match_reason = (
+                    f"Let's open the chat talking about {shared_interests[0].lower()}."
+                )
+            else:
+                reason_type = mine_search["relationship_type"] or other_search["relationship_type"]
+                phrase = RELATIONSHIP_REASON_PHRASES.get(reason_type, "the same thing")
+                match_reason = f"You're both here for {phrase}."
+
     # Avatar for the chat header. Photos stay locked until both sides
     # continue, so this is None for most of a timed room and the header
     # falls back to the placeholder — the same gate /photo enforces, asked
@@ -2828,6 +2907,8 @@ def chat(match_id):
         other_photo_id=other_photo_id,
         reveal_seconds=REVEAL_SECONDS,
         timed_seconds=TIMED_CHAT_SECONDS,
+        shared_interests=shared_interests,
+        match_reason=match_reason,
     )
 
 
