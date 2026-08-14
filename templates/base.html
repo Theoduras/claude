@@ -606,31 +606,75 @@
        the same hidden-input + sibling-selector pattern .switch uses. */
     .tile-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      /* auto-fit rather than a fixed pair: four across on a wide card, two on a
+         tablet, one on a phone, with no breakpoint doing the arithmetic */
+      grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
       gap: 0.9rem;
     }
     .tile { display: block; cursor: pointer; }
     .tile-face {
+      position: relative;
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
-      gap: 0.6rem;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 0.7rem;
       height: 100%;
+      min-height: 9.5rem;
       box-sizing: border-box;
-      padding: 1.3rem;
+      padding: 1.5rem 1.1rem;
       border-radius: var(--radius-sm);
       border: 1px solid var(--ink-hairline);
       background-image: linear-gradient(155deg, rgba(75, 20, 124, 0.3), rgba(11, 7, 19, 0.85));
-      transition: border-color 0.18s ease, transform 0.18s ease, background-image 0.18s ease;
+      transition: border-color 0.18s ease, transform 0.18s ease,
+                  background-image 0.18s ease, box-shadow 0.18s ease;
     }
     .tile:hover .tile-face { border-color: rgba(168, 85, 247, 0.5); transform: translateY(-2px); }
-    .tile input:checked ~ .tile-face {
-      border-color: rgba(168, 85, 247, 0.7);
-      background-image: linear-gradient(155deg, rgba(138, 43, 226, 0.4), rgba(30, 10, 52, 0.92));
-      box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.5) inset;
+    /* the input is .visually-hidden, so the ring has to be drawn on the face */
+    .tile input:focus-visible ~ .tile-face {
+      outline: 2px solid var(--champagne);
+      outline-offset: 2px;
     }
-    .tile-icon { width: 1.6rem; height: 1.6rem; color: var(--violet-crest); }
-    .tile-face strong { font-family: var(--serif); font-size: 1.02rem; font-weight: 500; }
+    /* selected: champagne is the "lit" colour in this palette, so the icon and
+       the label both change hue rather than the border alone */
+    .tile input:checked ~ .tile-face {
+      border-color: var(--champagne);
+      background-image: linear-gradient(155deg, rgba(138, 43, 226, 0.45), rgba(30, 10, 52, 0.94));
+      box-shadow: 0 0 0 1px var(--champagne) inset,
+                  0 10px 30px -16px rgba(232, 211, 169, 0.75);
+    }
+    /* a tick as well as the colour, so selection never rests on hue alone */
+    .tile input:checked ~ .tile-face::after {
+      content: "";
+      position: absolute;
+      top: 0.6rem;
+      right: 0.6rem;
+      width: 1.05rem;
+      height: 1.05rem;
+      border-radius: 50%;
+      background: var(--champagne)
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.3 4.9 8.7 9.4 3.5' fill='none' stroke='%230B0713' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+        center / 0.7rem no-repeat;
+    }
+    .tile-icon {
+      width: 2rem;
+      height: 2rem;
+      color: var(--violet-crest);
+      transition: color 0.18s ease, transform 0.18s ease;
+    }
+    .tile input:checked ~ .tile-face .tile-icon {
+      color: var(--champagne);
+      transform: scale(1.08);
+    }
+    .tile-face strong {
+      font-family: var(--serif);
+      font-size: 1.02rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: color 0.18s ease;
+    }
+    .tile input:checked ~ .tile-face strong { color: var(--champagne); }
     .tile-tag {
       font-size: 0.72rem;
       text-transform: uppercase;
@@ -892,6 +936,8 @@
       .pulse-heart { animation: none; }
       .btn::before { transition: none; }
       .btn:hover, .profile-card:hover, .tile:hover .tile-face { transform: none; }
+      /* colour still marks the selected tile; only the nudge is dropped */
+      .tile input:checked ~ .tile-face .tile-icon { transform: none; }
     }
 
     /* ---------- chat -------------------------------------------------- */
