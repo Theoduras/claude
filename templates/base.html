@@ -47,6 +47,9 @@
       --measure: 62rem;
       --radius: 18px;
       --radius-sm: 11px;
+      /* named so full-bleed children can cancel it with a negative margin
+         instead of hard-coding the same clamp in two places */
+      --card-pad: clamp(1.25rem, 3vw, 1.9rem);
 
       /* fiber grain — inline so no external request is needed */
       --nap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -213,7 +216,7 @@
     /* ---------- panels: light on the fold crest, shadow beneath ------- */
     .card {
       position: relative;
-      padding: clamp(1.25rem, 3vw, 1.9rem);
+      padding: var(--card-pad);
       border-radius: var(--radius);
       border: 1px solid var(--ink-hairline);
       background-color: var(--ink-raised);
@@ -933,6 +936,80 @@
     .ph {
       background-image: repeating-linear-gradient(45deg,
         rgba(168, 133, 247, 0.16) 0 6px, transparent 6px 12px);
+    }
+
+    /* ---------- profile hero ------------------------------------------
+       Full-bleed portrait with the name sitting on it. The card's own
+       padding is cancelled with a negative margin so the photo reaches
+       the panel edge, and overflow:hidden on .card clips the corners. */
+    .profile-hero {
+      position: relative;
+      height: 18.5rem;
+      margin: calc(-1 * var(--card-pad)) calc(-1 * var(--card-pad)) 1.1rem;
+      overflow: hidden;
+      background-color: #12081F;
+      background-image:
+        radial-gradient(56% 46% at 18% 6%, rgba(168, 85, 247, 0.62), transparent 70%),
+        radial-gradient(52% 44% at 92% 16%, rgba(29, 166, 162, 0.5), transparent 72%);
+    }
+    .profile-hero > img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .profile-hero > .ph { position: absolute; inset: 0; }
+    /* scrim: the name has to stay legible over a photo of any brightness */
+    .profile-hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top,
+        var(--ink) 2%, rgba(11, 7, 19, 0.2) 55%, rgba(11, 7, 19, 0.55));
+    }
+    .profile-hero-caption {
+      position: absolute;
+      z-index: 1;
+      left: var(--card-pad);
+      right: var(--card-pad);
+      bottom: 1.1rem;
+    }
+    .profile-hero-caption h1 {
+      margin: 0;
+      font-size: clamp(1.9rem, 7vw, 2.375rem);
+      letter-spacing: -0.02em;
+    }
+    .profile-hero-meta {
+      margin: 0.3rem 0 0;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
+    /* the bio, set as a pull-quote rather than another labelled field */
+    .profile-quote {
+      margin: 0.9rem 0 0;
+      font-family: var(--serif);
+      font-size: 1.19rem;
+      line-height: 1.45;
+      text-wrap: pretty;
+    }
+
+    /* key/value rows: label left, value right, hairline between */
+    .facts { display: flex; flex-direction: column; margin-top: 1rem; }
+    .facts > div {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid var(--ink-hairline);
+    }
+    .facts dt { margin-top: 0; padding-top: 0.12rem; }
+    .facts dd {
+      margin: 0;
+      max-width: 60%;
+      text-align: right;
+      font-size: 0.875rem;
+      color: var(--text);
     }
 
     /* ---------- chat header ------------------------------------------ */
