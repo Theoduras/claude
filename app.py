@@ -2888,10 +2888,13 @@ def chat(match_id):
     state = match_state_payload(match, user["id"]) if is_participant else None
 
     # The reveal's hook: the shared-interest overlap try_pair() already
-    # computed to pick this partner, plus a one-line opener built from it
-    # (or, with no overlap, the thing that's always true -- same
-    # relationship_type). Only worth the query during the reveal itself.
+    # computed to pick this partner, plus a one-line opener built from it.
+    # Falls back in order: a shared word -> the other person's own
+    # interests (even with no overlap, that's still something to open
+    # with) -> the thing that's always true, same relationship_type.
+    # Only worth the queries during the reveal itself.
     shared_interests = []
+    other_interest_list = []
     match_reason = None
     if is_participant and phase == "reveal":
         other_id = match["user_b"] if user["id"] == match["user_a"] else match["user_a"]
@@ -2901,16 +2904,28 @@ def chat(match_id):
         ).fetchall()
         mine_search = next((r for r in rows if r["user_id"] == user["id"]), None)
         other_search = next((r for r in rows if r["user_id"] == other_id), None)
+        other_profile = next((p for p in profiles if p["user_id"] == other_id), None)
+        mine_profile = next((p for p in profiles if p["user_id"] == user["id"]), None)
         if mine_search and other_search:
+            # searches.interests is routinely blank: the "Interests" toggle
+            # on screen 2 defaults off, and switching a filter off writes
+            # '' rather than leaving the profile's value in place. Fall
+            # back to the profile itself so the reveal still has something
+            # to show instead of going straight to the generic line.
+            mine_text = mine_search["interests"] or (mine_profile["interests"] if mine_profile else "")
+            other_text = other_search["interests"] or (other_profile["interests"] if other_profile else "")
+
+            other_interest_list = [w.strip() for w in re.split(r"[,;/\n]+", other_text) if w.strip()]
             # Word casing comes from the other person's own text -- the
             # line reads "{other} likes {word}", describing them.
-            shared_interests = _shared_interest_words(
-                other_search["interests"], mine_search["interests"]
-            )
+            shared_interests = _shared_interest_words(other_text, mine_text)
+
             if shared_interests:
                 match_reason = (
                     f"Let's open the chat talking about {shared_interests[0].lower()}."
                 )
+            elif other_interest_list:
+                match_reason = f"Ask about {other_interest_list[0].lower()}."
             else:
                 reason_type = mine_search["relationship_type"] or other_search["relationship_type"]
                 phrase = RELATIONSHIP_REASON_PHRASES.get(reason_type, "the same thing")
@@ -2943,6 +2958,7 @@ def chat(match_id):
         reveal_seconds=REVEAL_SECONDS,
         timed_seconds=TIMED_CHAT_SECONDS,
         shared_interests=shared_interests,
+        other_interest_list=other_interest_list,
         match_reason=match_reason,
     )
 

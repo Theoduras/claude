@@ -26,8 +26,8 @@
       </p>
 
       <p class="subtitle" style="margin-inline: auto; margin-top: 1.1rem;">
-        {% if shared_interests %}
-          {{ other['name'] }}{% if other['age'] %}, {{ other['age'] }}{% endif %} likes {{ shared_interests | join(', ') }}.<br>
+        {% if other_interest_list %}
+          {{ other['name'] }}{% if other['age'] %}, {{ other['age'] }}{% endif %} likes {{ other_interest_list | join(', ') }}.<br>
         {% endif %}
         {{ match_reason }}
       </p>
