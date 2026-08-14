@@ -684,13 +684,38 @@
       font-weight: 700;
     }
     /* stays 2x2 on a phone rather than collapsing to a column, so all four
-       options fit one screen; the tile just gets shorter and tighter */
+       options fit one screen; the tile gets shorter, tighter and smaller-set
+       instead. The label steps down twice — a two-word option like "Long-term
+       relationship" is what decides whether a tile reads or wraps. */
+    @media (max-width: 720px) {
+      .tile-face strong { font-size: 0.92rem; }
+      .tile-tag { font-size: 0.66rem; }
+    }
     @media (max-width: 480px) {
       .tile-grid { gap: 0.65rem; }
-      .tile-face { min-height: 7.6rem; padding: 1.1rem 0.7rem; gap: 0.55rem; }
-      .tile-icon { width: 1.7rem; height: 1.7rem; }
-      .tile-face strong { font-size: 0.88rem; }
+      .tile-face { min-height: 7.2rem; padding: 1rem 0.6rem; gap: 0.5rem; }
+      .tile-icon { width: 1.6rem; height: 1.6rem; }
+      .tile-face strong { font-size: 0.8rem; letter-spacing: 0.01em; }
+      .tile-tag { font-size: 0.6rem; }
     }
+    @media (max-width: 360px) {
+      .tile-face { min-height: 6.6rem; padding: 0.85rem 0.5rem; }
+      .tile-face strong { font-size: 0.74rem; }
+    }
+    /* the debug viewport toggle fakes a phone inside a wide window, where
+       width-based queries never fire — mirror the phone sizes off the flag */
+    html[data-viewport="mobile"] .tile-grid { gap: 0.65rem; }
+    html[data-viewport="mobile"] .tile-face {
+      min-height: 7.2rem;
+      padding: 1rem 0.6rem;
+      gap: 0.5rem;
+    }
+    html[data-viewport="mobile"] .tile-icon { width: 1.6rem; height: 1.6rem; }
+    html[data-viewport="mobile"] .tile-face strong {
+      font-size: 0.8rem;
+      letter-spacing: 0.01em;
+    }
+    html[data-viewport="mobile"] .tile-tag { font-size: 0.6rem; }
 
     /* ---------- sliders --------------------------------------------- */
     input[type="range"] {
