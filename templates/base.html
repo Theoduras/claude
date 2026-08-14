@@ -1438,27 +1438,88 @@
       box-shadow: 0 0 8px rgba(168, 85, 247, 0.9);
     }
 
+    /* The phone layout normally comes from a media query, but a manual
+       preview override needs to force it on regardless of the real
+       viewport (or suppress it on an actually-narrow one) — a media query
+       alone can't be overridden by a class, so :not([data-viewport="desktop"])
+       lets it opt out and the second, query-free block below lets a forced
+       "mobile" preference opt in on a wide screen. Same rules, twice. */
     @media (max-width: 720px) {
-      .tabbar { display: flex; }
-      /* the three links the tab bar now owns; the rest stay reachable in a
-         single scrollable strip so no route is orphaned on a phone */
-      nav .tab-dup { display: none; }
-      nav {
+      html:not([data-viewport="desktop"]) .tabbar { display: flex; }
+      html:not([data-viewport="desktop"]) nav .tab-dup { display: none; }
+      html:not([data-viewport="desktop"]) nav {
         flex-wrap: nowrap;
         overflow-x: auto;
         scrollbar-width: none;
         gap: 0.15rem;
         padding-inline: 1.25rem;
       }
-      nav::-webkit-scrollbar { display: none; }
-      .brand { margin-right: 0.6rem; }
-      nav a:not(.brand) { white-space: nowrap; }
-      main {
+      html:not([data-viewport="desktop"]) nav::-webkit-scrollbar { display: none; }
+      html:not([data-viewport="desktop"]) .brand { margin-right: 0.6rem; }
+      html:not([data-viewport="desktop"]) nav a:not(.brand) { white-space: nowrap; }
+      html:not([data-viewport="desktop"]) main {
         padding: 1.5rem 1.5rem 7rem;
         gap: 1rem;
       }
     }
+    html[data-viewport="mobile"] .tabbar { display: flex; }
+    html[data-viewport="mobile"] nav .tab-dup { display: none; }
+    html[data-viewport="mobile"] nav {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      gap: 0.15rem;
+      padding-inline: 1.25rem;
+    }
+    html[data-viewport="mobile"] nav::-webkit-scrollbar { display: none; }
+    html[data-viewport="mobile"] .brand { margin-right: 0.6rem; }
+    html[data-viewport="mobile"] nav a:not(.brand) { white-space: nowrap; }
+    html[data-viewport="mobile"] main {
+      padding: 1.5rem 1.5rem 7rem;
+      gap: 1rem;
+    }
+
+    /* ---------- viewport preview toggle (debug only) -------------------
+       Fixed and outside every layout container, so it floats over the
+       page — nav, main and the tab bar all lay out as if it isn't there. */
+    .viewport-toggle {
+      position: fixed;
+      right: 1rem;
+      bottom: 1rem;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.55rem 0.9rem;
+      font-family: var(--sans);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text);
+      background: rgba(21, 12, 34, 0.92);
+      border: 1px solid var(--ink-hairline);
+      border-radius: 999px;
+      box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.85);
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+    }
+    .viewport-toggle:hover { border-color: rgba(168, 85, 247, 0.42); }
+    /* sits above the tab bar rather than behind it on a forced-mobile preview */
+    html[data-viewport="mobile"] .viewport-toggle { bottom: 5.5rem; }
   </style>
+  {% if config.DEBUG %}
+    {# Runs before body paint so the forced layout never flashes the wrong
+       one first. Falls back to the real viewport on the very first visit,
+       then a click pins it either way until cleared. #}
+    <script>
+      (function () {
+        var v = localStorage.getItem("velvet-viewport-preview");
+        if (v !== "mobile" && v !== "desktop") {
+          v = window.matchMedia("(max-width: 720px)").matches ? "mobile" : "desktop";
+        }
+        document.documentElement.setAttribute("data-viewport", v);
+      })();
+    </script>
+  {% endif %}
 </head>
 <body>
   <nav>
@@ -1522,6 +1583,37 @@
         <span class="tab-dot"></span>
       </a>
     </nav>
+  {% endif %}
+  {% if config.DEBUG %}
+    {# Dev-only: previews the mobile layout on a wide monitor (or vice
+       versa) without resizing the window. Sits outside <nav>/<main>/the
+       tab bar, so it never participates in their layout. #}
+    <button type="button" class="viewport-toggle" id="viewport-toggle" aria-label="Toggle mobile/desktop preview">
+      <span id="viewport-toggle-label"></span>
+    </button>
+    <script>
+      (function () {
+        var KEY = "velvet-viewport-preview";
+        var btn = document.getElementById("viewport-toggle");
+        var label = document.getElementById("viewport-toggle-label");
+
+        function render() {
+          var current = document.documentElement.getAttribute("data-viewport");
+          // shows the mode a click switches TO, so the label reads as an action
+          label.textContent = current === "mobile" ? "🖥️ Desktop" : "📱 Mobile";
+        }
+
+        btn.addEventListener("click", function () {
+          var next = document.documentElement.getAttribute("data-viewport") === "mobile"
+            ? "desktop" : "mobile";
+          document.documentElement.setAttribute("data-viewport", next);
+          localStorage.setItem(KEY, next);
+          render();
+        });
+
+        render();
+      })();
+    </script>
   {% endif %}
 </body>
 </html>
