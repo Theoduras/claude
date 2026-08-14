@@ -927,6 +927,18 @@
       margin-right: 0.3rem;
     }
 
+    /* live telemetry: counts that tick while you watch. Monospace and
+       tabular so a changing digit never reflows the line. */
+    .live-count {
+      margin: 0.9rem 0 0.25rem;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--champagne);
+    }
+
     /* ---------- landing: the logged-out hero -------------------------
        The hero sits high and the actions sink to the bottom of the fold,
        so the fabric shows through the gap between them at any height. */
