@@ -8,7 +8,23 @@
   <form method="post" action="{{ url_for('edit_profile') }}" enctype="multipart/form-data">
     {% set allow_photos = true %}
     {% include "_profile_fields.html" %}
-    <button class="btn" type="submit">Save profile</button>
+
+    {% if strength_pct is defined %}
+      <div class="field-group">
+        <div class="strength-head">
+          <span class="eyebrow">Profile strength</span>
+          <span class="strength-value">{{ strength_pct }}%</span>
+        </div>
+        <div class="strength-bar">
+          <div class="strength-fill" style="width: {{ strength_pct }}%;"></div>
+        </div>
+        {% if strength_hint %}
+          <p class="hint" style="margin-top: 0.6rem;">{{ strength_hint }}</p>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <button class="btn btn-block" type="submit">Save changes</button>
   </form>
 </div>
 {% endblock %}

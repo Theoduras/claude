@@ -85,6 +85,22 @@
       JPEG, PNG, or WebP, up to 2 MB each, {{ photo_max_per_user }} total.
     </p>
   </div>
+  {# What you already have. Only edit_profile passes photos, so the admin
+     "new profile" form — where there is nothing uploaded yet — skips this. #}
+  {% if photos is defined and photos %}
+    <div class="photo-tiles">
+      {% for photo in photos %}
+        <div class="photo-tile">
+          <img src="{{ url_for('photo', photo_id=photo['id']) }}" alt="Your photo" loading="lazy">
+          {% if loop.first %}<span class="photo-tile-label">main</span>{% endif %}
+        </div>
+      {% endfor %}
+      {% if photos | length < photo_max_per_user %}
+        <label class="photo-tile photo-tile-add" for="photos" title="Add another photo">+</label>
+      {% endif %}
+    </div>
+  {% endif %}
+
   <label for="profile_picture">Profile picture</label>
   <input id="profile_picture" name="profile_picture" type="file" accept="image/jpeg,image/png,image/webp">
 

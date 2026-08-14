@@ -1076,6 +1076,45 @@ def mutual_score(a, b):
     return harmonic, sorted(all_reasons)
 
 
+# The fields other people's filters actually read. Profile strength is just
+# how many of them are filled in — no hidden weighting — and the hint names
+# the first real gap instead of nagging in general terms.
+STRENGTH_FIELDS = [
+    ("name", "Add your name"),
+    ("age", "Add your age"),
+    ("gender", "Set your gender"),
+    ("seeking", "Say who you're looking for"),
+    ("location", "Add your location"),
+    ("relationship_type", "Say what kind of connection you want"),
+    ("bio", "Write a short bio"),
+    ("interests", "List a few interests"),
+    ("height_cm", "Add your height"),
+    ("body_type", "Add your body type"),
+    ("fitness_level", "Add your fitness level"),
+    ("hair_color", "Add your hair colour"),
+    ("eye_color", "Add your eye colour"),
+    ("tattoos", "Say whether you have tattoos"),
+]
+
+
+def profile_strength(profile, photo_count):
+    """Return (percent complete, next gap to close).
+
+    A photo counts for one slot of its own: other people's physical filters
+    skip profiles that have none, so it is worth about as much as any single
+    field, and it is listed first when missing for the same reason.
+    """
+    filled = [bool(str(profile.get(f) or "").strip()) for f, _ in STRENGTH_FIELDS]
+    missing = [hint for (_, hint), ok in zip(STRENGTH_FIELDS, filled) if not ok]
+
+    done = sum(filled) + (1 if photo_count else 0)
+    if not photo_count:
+        missing.insert(0, "Add a photo — other people's filters skip profiles without one")
+
+    percent = round(done * 100 / (len(STRENGTH_FIELDS) + 1))
+    return percent, (missing[0] if missing else None)
+
+
 @app.route("/profile/edit", methods=["GET", "POST"])
 @login_required
 def edit_profile():
@@ -1167,9 +1206,19 @@ def edit_profile():
             ).fetchone()
         )
 
+    # Shown as tiles so you can see what you already have while editing.
+    photos = db.execute(
+        "SELECT id FROM photos WHERE user_id = ? ORDER BY is_primary DESC, id",
+        (user_id,),
+    ).fetchall()
+    strength_pct, strength_hint = profile_strength(profile, len(photos))
+
     return render_template(
         "profile_edit.html",
         profile=profile,
+        photos=photos,
+        strength_pct=strength_pct,
+        strength_hint=strength_hint,
         relationship_types=RELATIONSHIP_TYPES,
         genders=GENDERS,
         seeking_options=SEEKING_OPTIONS,
