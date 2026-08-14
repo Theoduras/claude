@@ -1486,7 +1486,7 @@
       position: fixed;
       right: 1rem;
       bottom: 1rem;
-      z-index: 10;
+      z-index: 999;
       display: flex;
       align-items: center;
       gap: 0.4rem;
@@ -1506,8 +1506,7 @@
     /* sits above the tab bar rather than behind it on a forced-mobile preview */
     html[data-viewport="mobile"] .viewport-toggle { bottom: 5.5rem; }
   </style>
-  {% if dev_tools %}
-    {# Runs before body paint so the forced layout never flashes the wrong
+  {# Runs before body paint so the forced layout never flashes the wrong
        one first. Falls back to the real viewport on the very first visit,
        then a click pins it either way until cleared. #}
     <script>
@@ -1519,7 +1518,6 @@
         document.documentElement.setAttribute("data-viewport", v);
       })();
     </script>
-  {% endif %}
 </head>
 <body>
   <nav>
@@ -1584,8 +1582,7 @@
       </a>
     </nav>
   {% endif %}
-  {% if dev_tools %}
-    {# Dev-only: previews the mobile layout on a wide monitor (or vice
+  {# Previews the mobile layout on a wide monitor (or vice
        versa) without resizing the window. Sits outside <nav>/<main>/the
        tab bar, so it never participates in their layout. #}
     <button type="button" class="viewport-toggle" id="viewport-toggle" aria-label="Toggle mobile/desktop preview">
@@ -1614,6 +1611,5 @@
         render();
       })();
     </script>
-  {% endif %}
 </body>
 </html>

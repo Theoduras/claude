@@ -101,10 +101,6 @@ POOL = ConnectionPool(
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = os.environ.get("APP_ADMIN_PASSWORD", "admin12345")
 AUTO_LOGIN = os.environ.get("AUTO_LOGIN", "0") not in ("0", "false", "no")
-# Gates the local-only UI (the mobile/desktop preview toggle). Read at import
-# time so it works however the app is served -- app.debug is only set by
-# app.run(), so it stays False under gunicorn and under a plain `import app`.
-DEV_TOOLS = os.environ.get("FLASK_DEBUG", "0") not in ("0", "false", "no")
 
 GENDERS = ["Woman", "Man", "Non-binary"]
 
@@ -616,7 +612,7 @@ def admin_required(view):
 
 @app.context_processor
 def inject_user():
-    return {"current_user": current_user(), "dev_tools": DEV_TOOLS}
+    return {"current_user": current_user()}
 
 
 @app.before_request
