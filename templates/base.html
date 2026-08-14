@@ -138,6 +138,15 @@
     h1 { font-size: clamp(1.9rem, 4.2vw, 2.9rem); }
     h2 { font-size: 1.3rem; }
 
+    /* A form header two screens into a flow is a label, not a statement —
+       the display h1 shouts over the controls it introduces. Still an h1, so
+       the document outline is unchanged; only the type scale drops. */
+    .page-title--sm {
+      font-size: clamp(1.25rem, 2.4vw, 1.45rem);
+      letter-spacing: 0;
+    }
+    h1.page-title--sm + .subtitle { margin-top: 0.35rem; }
+
     /* h1's clamp(1.9rem, 4.2vw, 2.9rem) leaves a lot of unused
        line-height above the subtitle; h2's 1.3rem doesn't, so the same
        pull-up overlaps its text instead of just tightening the gap. */
@@ -376,6 +385,11 @@
       margin: 0;
       opacity: 0;
       cursor: pointer;
+      /* .switch-track is also inset:0 and comes later in the source, so
+         without this it paints over the input and takes the clicks. The
+         label association hides that from a human, but the input should be
+         the hit target it looks like. */
+      z-index: 1;
     }
     .switch-track {
       position: absolute;
@@ -717,6 +731,171 @@
     }
     html[data-viewport="mobile"] .tile-tag { font-size: 0.6rem; }
 
+    /* ---------- step dots -------------------------------------------
+       Real links, not decoration: the search flow is two screens and both
+       are reachable in either direction, so each dot is an <a> that can be
+       tabbed to and followed. The visible dot stays small while the hit
+       target around it is thumb-sized. */
+    .step-dots {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.15rem;
+      margin: 0 0 1.4rem;
+    }
+    .step-dot {
+      display: grid;
+      place-items: center;
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: 50%;
+      text-decoration: none;
+      border: 0;
+      background: none;
+      padding: 0;
+      cursor: pointer;
+    }
+    .step-dot::before {
+      content: "";
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      background: var(--ink-hairline);
+      transition: background 0.18s ease, transform 0.18s ease,
+                  box-shadow 0.18s ease;
+    }
+    .step-dot:hover::before { background: var(--text-faint); }
+    .step-dot[aria-current="step"]::before {
+      background: var(--violet-crest);
+      box-shadow: 0 0 10px rgba(168, 85, 247, 0.7);
+      transform: scale(1.25);
+    }
+    .step-dot:focus-visible {
+      outline: 2px solid var(--champagne);
+      outline-offset: -4px;
+    }
+    /* Screen 2 is meaningless without a connection type, so its dot is inert
+       until one is picked rather than absent — the flow's length stays legible. */
+    .step-dot[aria-disabled="true"] {
+      cursor: default;
+      pointer-events: none;
+      opacity: 0.4;
+    }
+    /* the thin rule between dots reads as a path rather than a list */
+    .step-dot + .step-dot { position: relative; }
+    .step-dot + .step-dot::after {
+      content: "";
+      position: absolute;
+      right: 100%;
+      width: 1.1rem;
+      height: 1px;
+      background: var(--ink-hairline);
+    }
+
+    /* ---------- toggle rows: "which parts are important?" -------------
+       One grid template for every row, so switches line up down one edge
+       and help buttons down the other however long a label runs. */
+    .toggle-row {
+      border-top: 1px solid var(--ink-hairline);
+      padding: 0.95rem 0;
+    }
+    .toggle-row:first-of-type { border-top: 0; padding-top: 0.2rem; }
+    .toggle-head {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 0.8rem;
+    }
+    .toggle-head > .toggle-label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      min-width: 0;
+    }
+    .toggle-label strong {
+      font-family: var(--serif);
+      font-size: 1.02rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: color 0.18s ease;
+    }
+    .toggle-row:has(.switch input:checked) .toggle-label strong { color: var(--text); }
+    .toggle-label .toggle-summary {
+      font-size: 0.8rem;
+      color: var(--text-faint);
+    }
+    /* The panel is revealed by the switch alone — no JS decides visibility,
+       so it survives a page render with the box already checked. It indents
+       to the label rather than the switch, which is what makes the panel
+       read as belonging to the row above it. */
+    .toggle-panel {
+      display: grid;
+      grid-template-rows: 0fr;
+      opacity: 0;
+      margin-left: 3.4rem;
+      transition: grid-template-rows 0.18s ease, opacity 0.18s ease;
+    }
+    .toggle-panel > div {
+      overflow: hidden;
+      min-height: 0;
+    }
+    .toggle-row:has(.switch input:checked) .toggle-panel {
+      grid-template-rows: 1fr;
+      opacity: 1;
+      margin-top: 0.85rem;
+    }
+    .toggle-panel label { margin-top: 0.9rem; }
+    .toggle-panel > div > *:first-child { margin-top: 0; }
+    /* a 3.4rem indent costs too much of the column on a phone; the row's own
+       hairline still carries the grouping once the indent goes */
+    @media (max-width: 480px) {
+      .toggle-panel, .help-pop { margin-left: 0; }
+    }
+    html[data-viewport="mobile"] .toggle-panel,
+    html[data-viewport="mobile"] .help-pop { margin-left: 0; }
+
+    /* ---------- inline help ------------------------------------------- */
+    .help-dot {
+      display: grid;
+      place-items: center;
+      width: 1.4rem;
+      height: 1.4rem;
+      flex-shrink: 0;
+      padding: 0;
+      border-radius: 50%;
+      border: 1px solid var(--ink-hairline);
+      background: none;
+      color: var(--text-faint);
+      font-family: var(--sans);
+      font-size: 0.74rem;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      transition: color 0.18s ease, border-color 0.18s ease;
+    }
+    .help-dot:hover { color: var(--text-muted); border-color: var(--text-faint); }
+    .help-dot[aria-expanded="true"] {
+      color: var(--champagne);
+      border-color: var(--champagne);
+    }
+    .help-dot:focus-visible {
+      outline: 2px solid var(--champagne);
+      outline-offset: 2px;
+    }
+    .help-pop {
+      display: none;
+      margin: 0.7rem 0 0 3.4rem;
+      padding: 0.7rem 0.85rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--ink-hairline);
+      background: rgba(8, 5, 14, 0.6);
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      line-height: 1.5;
+      max-width: 46ch;
+    }
+    .help-pop.open { display: block; }
+
     /* ---------- sliders --------------------------------------------- */
     input[type="range"] {
       -webkit-appearance: none;
@@ -841,41 +1020,6 @@
       color: var(--text);
     }
 
-    /* ---------- wizard review card ------------------------------------ */
-    .review-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-      margin: 1rem 0;
-      border: 1px solid var(--ink-hairline);
-      border-radius: var(--radius-sm);
-      overflow: hidden;
-    }
-    .review-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 1rem;
-      padding: 0.6rem 1rem;
-      font-size: 0.9rem;
-    }
-    .review-row + .review-row { border-top: 1px solid var(--ink-hairline); }
-    .review-row dt {
-      margin: 0;
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-      color: var(--text-faint);
-    }
-    .review-row dd { margin: 0; text-align: right; }
-    .review-pool {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      flex-wrap: wrap;
-      margin: 0.9rem 0;
-    }
-
     /* ---------- match lifecycle: countdown & decision ------------------ */
     .countdown {
       display: inline-flex;
@@ -969,6 +1113,9 @@
       .btn:hover, .profile-card:hover, .tile:hover .tile-face { transform: none; }
       /* colour still marks the selected tile; only the nudge is dropped */
       .tile input:checked ~ .tile-face .tile-icon { transform: none; }
+      /* panels still open and close, they just arrive rather than slide */
+      .toggle-panel { transition: none; }
+      .step-dot::before { transition: none; }
     }
 
     /* ---------- chat -------------------------------------------------- */

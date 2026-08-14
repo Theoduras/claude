@@ -2,28 +2,45 @@
 {% block title %}Search for a match — Velvet{% endblock %}
 {% block content %}
 <div class="card narrow">
-  <h1>Search for a match now</h1>
+  {% include "_search_steps.html" with context %}
+
+  <h1 class="page-title--sm">What matters to you?</h1>
   <p class="subtitle">
-    Looking for <strong>{{ wanted | lower }}</strong> &middot;
+    Switch off anything you don't want to filter on — the more you leave on,
+    the fewer people fit.
+  </p>
+
+  <p class="recap">
+    <span>{{ wanted }}</span>
+    <span aria-hidden="true">·</span>
+    <span>{% if place.location %}{{ place.location }}{% else %}anywhere{% endif %}{% if place.location and place.radius_km < radius_max %} · within {{ place.radius_km }} km{% endif %}</span>
     <a href="{{ url_for('live_search') }}">change</a>
   </p>
 
-  <div class="wizard-dots" id="wizard-dots">
-    <span class="dot active"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
-  </div>
-
-  <form method="post" action="{{ url_for('search_criteria') }}" id="wizard-form">
+  <form method="post" action="{{ url_for('search_criteria') }}" id="criteria-form">
     <input type="hidden" name="relationship_type" value="{{ wanted }}">
-    <input type="hidden" name="location_lat" id="location_lat"
-           value="{{ existing['lat'] if existing and existing['lat'] is not none else '' }}">
-    <input type="hidden" name="location_lng" id="location_lng"
-           value="{{ existing['lng'] if existing and existing['lng'] is not none else '' }}">
+    <input type="hidden" name="location" value="{{ place.location }}">
+    <input type="hidden" name="location_lat" value="{{ place.lat }}">
+    <input type="hidden" name="location_lng" value="{{ place.lng }}">
+    <input type="hidden" name="radius_km" value="{{ place.radius_km }}">
 
-    <div class="wizard-stage">
-      <div class="wizard-step active" data-step="1">
-        <p class="eyebrow">Step 1 of 4 &middot; Who</p>
-        <label for="seeking">I'm looking for</label>
-        <select id="seeking" name="seeking">
+    {# ---- 1. who ---- #}
+    <div class="toggle-row">
+      <div class="toggle-head">
+        <label class="switch">
+          <input type="checkbox" name="use_gender"
+                 {% if not existing or existing['use_gender'] %}checked{% endif %}>
+          <span class="switch-track"></span>
+        </label>
+        <span class="toggle-label"><strong>Who I'm looking for</strong></span>
+        <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-gender">?</button>
+      </div>
+      <p class="help-pop" id="help-gender">
+        Only people whose gender matches this are paired with you. Switch it off
+        to be open to anyone.
+      </p>
+      <div class="toggle-panel"><div>
+        <select id="seeking" name="seeking" aria-label="Who I'm looking for">
           <option value="">Anyone</option>
           {% for s in seeking_options %}
             <option value="{{ s }}"
@@ -32,8 +49,28 @@
             </option>
           {% endfor %}
         </select>
+      </div></div>
+    </div>
 
-        <label>Age range <span class="slider-value" id="age-value"></span></label>
+    {# ---- 2. age ---- #}
+    <div class="toggle-row">
+      <div class="toggle-head">
+        <label class="switch">
+          <input type="checkbox" name="use_age"
+                 {% if not existing or existing['use_age'] %}checked{% endif %}>
+          <span class="switch-track"></span>
+        </label>
+        <span class="toggle-label">
+          <strong>Age range</strong>
+          <span class="toggle-summary" id="age-value"></span>
+        </span>
+        <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-age">?</button>
+      </div>
+      <p class="help-pop" id="help-age">
+        Only people inside this range are paired with you. Everyone on Velvet is
+        18 or over.
+      </p>
+      <div class="toggle-panel"><div>
         <div class="range-dual">
           <div class="range-dual-track"></div>
           <div class="range-dual-fill" id="age-fill"></div>
@@ -44,48 +81,53 @@
                  value="{{ existing['age_max'] if existing else 35 }}"
                  aria-label="Maximum age">
         </div>
+      </div></div>
+    </div>
 
-        <button type="button" class="btn btn-block wizard-next">Next</button>
+    {# ---- 3. distance — the value itself is set on screen 1 ---- #}
+    <div class="toggle-row">
+      <div class="toggle-head">
+        <label class="switch">
+          <input type="checkbox" name="use_distance"
+                 {% if not existing or existing['use_distance'] %}checked{% endif %}>
+          <span class="switch-track"></span>
+        </label>
+        <span class="toggle-label">
+          <strong>Distance</strong>
+          <span class="toggle-summary">
+            {% if not place.location %}No location set
+            {% elif place.radius_km >= radius_max %}{{ place.location }} · any distance
+            {% else %}Within {{ place.radius_km }} km of {{ place.location }}{% endif %}
+          </span>
+        </span>
+        <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-distance">?</button>
       </div>
+      <p class="help-pop" id="help-distance">
+        Only people inside your radius are paired with you. Switch it off to
+        match with anyone, anywhere.
+        <a href="{{ url_for('live_search') }}">Change the location or radius</a>.
+      </p>
+    </div>
 
-      <div class="wizard-step" data-step="2">
-        <p class="eyebrow">Step 2 of 4 &middot; Where</p>
-        <label for="location">Location</label>
-        <div class="ac-wrap">
-          <input id="location" name="location" type="text" autocomplete="off" list="city-list"
-                 value="{{ existing['location'] if existing and existing['location'] else me['location'] }}"
-                 placeholder="e.g. Berlin" role="combobox" aria-expanded="false"
-                 aria-controls="location-ac-list" aria-autocomplete="list">
-          <ul class="ac-list" id="location-ac-list" role="listbox"></ul>
-        </div>
-        <datalist id="city-list">
-          {% for city in city_choices %}<option value="{{ city }}"></option>{% endfor %}
-        </datalist>
-
-        <label for="radius_km">Search radius <span class="slider-value" id="radius-value"></span></label>
-        <input type="range" id="radius_km" name="radius_km" min="5" max="{{ radius_max }}" step="5"
-               value="{{ existing['radius_km'] if existing else radius_max }}">
-        <p class="hint" id="radius-hint"></p>
-
-        <div class="wizard-nav">
-          <button type="button" class="btn btn-secondary wizard-back">Back</button>
-          <button type="button" class="btn wizard-next">Next</button>
-        </div>
+    {# ---- 4. physical ---- #}
+    <div class="toggle-row">
+      <div class="toggle-head">
+        <label class="switch">
+          <input type="checkbox" name="use_physical"
+                 {% if not existing or existing['use_physical'] %}checked{% endif %}>
+          <span class="switch-track"></span>
+        </label>
+        <span class="toggle-label">
+          <strong>Physical traits</strong>
+          <span class="toggle-summary">Height, build, hair, eyes, tattoos</span>
+        </span>
+        <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-physical">?</button>
       </div>
-
-      <div class="wizard-step" data-step="3">
-        <p class="eyebrow">Step 3 of 4 &middot; What you'll match on</p>
-
-        <label for="interests">Interests (optional)</label>
-        <input id="interests" name="interests" type="text"
-               value="{{ existing['interests'] if existing else me['interests'] }}"
-               placeholder="e.g. music, hiking — used to pick the best fit">
-
-        <div class="field-group" style="margin-top:1.2rem; padding-top:1rem;">
-          <h2>Physical traits (optional)</h2>
-          <p class="subtitle">Only people who fit these get matched to you — leave blank for no preference.</p>
-        </div>
-
+      <p class="help-pop" id="help-physical">
+        Only people who fit every trait you set here are paired with you. Anything
+        you leave blank isn't filtered on, so you can set just the one that matters.
+      </p>
+      <div class="toggle-panel"><div>
         <div class="field-pair">
           <div>
             <label for="pref_height_min">Height from (cm)</label>
@@ -130,31 +172,46 @@
             {% endfor %}
           </select>
         {% endfor %}
+      </div></div>
+    </div>
 
-        <div class="wizard-nav">
-          <button type="button" class="btn btn-secondary wizard-back">Back</button>
-          <button type="button" class="btn wizard-next" id="to-review">Review</button>
-        </div>
+    {# ---- 5. interests — a ranker, not a filter, so it sits last ---- #}
+    <div class="toggle-row">
+      <div class="toggle-head">
+        <label class="switch">
+          <input type="checkbox" name="use_interests"
+                 {% if existing and existing['interests'] %}checked{% endif %}>
+          <span class="switch-track"></span>
+        </label>
+        <span class="toggle-label">
+          <strong>Interests</strong>
+          <span class="toggle-summary">Doesn't filter — decides who comes first</span>
+        </span>
+        <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-interests">?</button>
       </div>
+      <p class="help-pop" id="help-interests">
+        Nobody is excluded for not sharing your interests. When several people
+        fit everything else, the one with the most in common is paired first.
+      </p>
+      <div class="toggle-panel"><div>
+        <input id="interests" name="interests" type="text"
+               value="{{ existing['interests'] if existing else me['interests'] }}"
+               placeholder="e.g. music, hiking" aria-label="Interests">
+      </div></div>
+    </div>
 
-      <div class="wizard-step" data-step="4">
-        <p class="eyebrow">Step 4 of 4 &middot; Review</p>
-        <dl class="review-list" id="review-list"></dl>
+    <div class="pool-live" id="pool-live" aria-live="polite">
+      <span class="muted">Checking the pool…</span>
+    </div>
+    <div id="pool-suggestions"></div>
 
-        <div class="review-pool" id="review-pool">
-          <span class="muted">Checking the pool…</span>
-        </div>
-        <div id="review-suggestions"></div>
-
-        <div class="wizard-nav">
-          <button type="button" class="btn btn-secondary wizard-back">Back</button>
-          <button class="btn" type="submit">&#128269; Start searching</button>
-        </div>
-      </div>
+    <div class="criteria-nav">
+      <a class="btn btn-secondary" href="{{ url_for('live_search') }}">Back</a>
+      <button class="btn" type="submit">&#128269; Start searching</button>
     </div>
   </form>
 
-  <p class="hint" style="margin-top: 0.75rem;">
+  <p class="hint" style="margin-top: 0.9rem;">
     You are {{ me['gender'] or 'unspecified gender' }}{% if me['age'] %}, {{ me['age'] }}{% endif %}{% if me['location'] %}, in {{ me['location'] }}{% endif %} —
     others' filters apply to you too, so keep
     <a href="{{ url_for('edit_profile') }}">your profile</a> accurate.
@@ -162,54 +219,57 @@
 </div>
 
 <style>
-  .wizard-dots { display: flex; gap: 0.4rem; margin-bottom: 1.3rem; }
-  .wizard-dots .dot {
-    width: 0.5rem; height: 0.5rem; border-radius: 50%;
-    background: var(--ink-hairline);
-    transition: background 0.25s ease, transform 0.25s ease;
+  .recap {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.45rem;
+    margin: 0.9rem 0 1.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
   }
-  .wizard-dots .dot.active {
-    background: var(--violet-crest);
-    box-shadow: 0 0 10px rgba(168, 85, 247, 0.7);
-    transform: scale(1.25);
+  .recap > span:first-child { color: var(--champagne); }
+  .pool-live {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--ink-hairline);
   }
-  .wizard-stage { perspective: 1400px; }
-  .wizard-step {
-    display: none;
-    animation: flip-in 0.45s cubic-bezier(.2,.7,.3,1);
-    transform-style: preserve-3d;
+  #pool-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.7rem;
   }
-  .wizard-step.active { display: block; }
-  .wizard-step.leaving {
-    display: block;
-    animation: flip-out 0.45s cubic-bezier(.2,.7,.3,1);
-  }
-  @keyframes flip-in {
-    from { transform: rotateY(-90deg); opacity: 0; }
-    to   { transform: rotateY(0deg); opacity: 1; }
-  }
-  @keyframes flip-out {
-    from { transform: rotateY(0deg); opacity: 1; }
-    to   { transform: rotateY(90deg); opacity: 0; }
+  .criteria-nav { display: flex; gap: 0.7rem; margin-top: 1.5rem; }
+  .criteria-nav .btn { text-align: center; white-space: nowrap; }
+  /* Back is a way out, not a peer of the primary action, so it takes only
+     the width of its own label instead of half the row. */
+  .criteria-nav .btn-secondary { flex: 0 0 auto; }
+  .criteria-nav .btn:last-child { flex: 1; }
+  /* the row a suggestion just edited, so the change is visible from the chip */
+  .toggle-row.flash { animation: row-flash 0.9s ease; }
+  @keyframes row-flash {
+    from { background: rgba(232, 211, 169, 0.14); }
+    to { background: transparent; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .wizard-step, .wizard-step.leaving { animation: none; }
+    .toggle-row.flash { animation: none; }
   }
-  .wizard-nav { display: flex; gap: 0.7rem; }
-  .wizard-nav .btn { flex: 1; }
 </style>
 
 <script>
 (function () {
+  var form = document.getElementById("criteria-form");
+
+  // ---- age slider ----
   var minEl = document.getElementById("age_min");
   var maxEl = document.getElementById("age_max");
   var ageOut = document.getElementById("age-value");
   var ageFill = document.getElementById("age-fill");
   var ageLo = parseInt(minEl.min, 10), ageHi = parseInt(minEl.max, 10);
-  var radiusEl = document.getElementById("radius_km");
-  var radiusOut = document.getElementById("radius-value");
-  var radiusHint = document.getElementById("radius-hint");
-  var radiusMax = parseInt(radiusEl.max, 10);
 
   function pct(v) { return ((v - ageLo) / (ageHi - ageLo)) * 100; }
 
@@ -230,253 +290,155 @@
     maxEl.style.zIndex = changed === "max" ? 3 : 2;
   }
 
-  function syncRadius() {
-    var km = parseInt(radiusEl.value, 10);
-    if (km >= radiusMax) {
-      radiusOut.textContent = "anywhere";
-      radiusHint.textContent = "Distance is ignored — match with anyone.";
-    } else {
-      radiusOut.textContent = km + " km";
-      radiusHint.textContent = "Only people within " + km + " km of your location.";
-    }
-  }
-
   minEl.addEventListener("input", function () { syncAge("min"); });
   maxEl.addEventListener("input", function () { syncAge("max"); });
-  radiusEl.addEventListener("input", syncRadius);
   syncAge();
-  syncRadius();
 
-  // ---- location combobox (Photon suggestions via /api/places) ----
-  var locInput = document.getElementById("location");
-  var locList = document.getElementById("location-ac-list");
-  var latEl = document.getElementById("location_lat");
-  var lngEl = document.getElementById("location_lng");
-  var acTimer = null;
-  var acController = null;
-  var acActive = -1;
-  var acItems = [];
-
-  function closeAc() {
-    locList.innerHTML = "";
-    acItems = [];
-    acActive = -1;
-    locInput.setAttribute("aria-expanded", "false");
-  }
-
-  function renderAc(results) {
-    locList.innerHTML = "";
-    acItems = results;
-    acActive = -1;
-    results.forEach(function (r, i) {
-      var li = document.createElement("li");
-      li.className = "ac-option";
-      li.id = "ac-opt-" + i;
-      li.setAttribute("role", "option");
-      li.textContent = r.label;
-      li.addEventListener("mousedown", function (ev) {
-        ev.preventDefault();
-        selectAc(i);
+  // ---- switches disable their own panel ----
+  // CSS hides a closed panel; disabling is what keeps its fields out of the
+  // POST, so an unused filter is genuinely absent rather than submitted blank.
+  function syncPanels() {
+    form.querySelectorAll(".toggle-row").forEach(function (row) {
+      var sw = row.querySelector(".switch input");
+      var panel = row.querySelector(".toggle-panel");
+      if (!sw || !panel) return;
+      panel.querySelectorAll("input, select, textarea").forEach(function (el) {
+        el.disabled = !sw.checked;
       });
-      locList.appendChild(li);
     });
-    locInput.setAttribute("aria-expanded", results.length ? "true" : "false");
   }
-
-  function selectAc(i) {
-    var r = acItems[i];
-    if (!r) return;
-    locInput.value = r.label;
-    latEl.value = r.lat;
-    lngEl.value = r.lng;
-    closeAc();
-  }
-
-  locInput.addEventListener("input", function () {
-    // A stale coordinate must never survive a re-type of the text.
-    latEl.value = "";
-    lngEl.value = "";
-    var q = locInput.value.trim();
-    clearTimeout(acTimer);
-    if (q.length < 2) { closeAc(); return; }
-    acTimer = setTimeout(function () {
-      if (acController) acController.abort();
-      acController = new AbortController();
-      fetch("{{ url_for('api_places') }}?q=" + encodeURIComponent(q), {
-        headers: { "Accept": "application/json" },
-        signal: acController.signal
-      })
-        .then(function (res) { return res.json(); })
-        .then(function (data) { renderAc(data.results || []); })
-        .catch(function () { /* offline: free text still works */ });
-    }, 250);
+  form.querySelectorAll(".switch input").forEach(function (sw) {
+    sw.addEventListener("change", function () { syncPanels(); schedulePreview(); });
   });
+  syncPanels();
 
-  locInput.addEventListener("keydown", function (ev) {
-    if (!acItems.length) return;
-    if (ev.key === "ArrowDown") {
-      ev.preventDefault();
-      acActive = Math.min(acActive + 1, acItems.length - 1);
-    } else if (ev.key === "ArrowUp") {
-      ev.preventDefault();
-      acActive = Math.max(acActive - 1, 0);
-    } else if (ev.key === "Enter" && acActive >= 0) {
-      ev.preventDefault();
-      selectAc(acActive);
-      return;
-    } else if (ev.key === "Escape") {
-      closeAc();
-      return;
-    } else {
-      return;
-    }
-    Array.prototype.forEach.call(locList.children, function (li, i) {
-      li.classList.toggle("active", i === acActive);
-    });
-    locInput.setAttribute("aria-activedescendant", "ac-opt-" + acActive);
-  });
+  // ---- help popovers ----
+  var helpButtons = Array.prototype.slice.call(document.querySelectorAll(".help-dot"));
 
-  locInput.addEventListener("blur", function () {
-    setTimeout(closeAc, 120);
-  });
-
-  // ---- wizard step flipping ----
-  var steps = Array.prototype.slice.call(document.querySelectorAll(".wizard-step"));
-  var dots = Array.prototype.slice.call(document.querySelectorAll("#wizard-dots .dot"));
-  var current = 0;
-
-  function goTo(index) {
-    var outgoing = steps[current];
-    outgoing.classList.remove("active");
-    outgoing.classList.add("leaving");
-    setTimeout(function () { outgoing.classList.remove("leaving"); }, 450);
-
-    current = index;
-    steps[current].classList.add("active");
-    dots.forEach(function (d, i) { d.classList.toggle("active", i === current); });
-    steps[current].scrollIntoView({ block: "nearest", behavior: "smooth" });
-
-    if (index === 3) loadReview();
-  }
-
-  document.querySelectorAll(".wizard-next").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      if (current < steps.length - 1) goTo(current + 1);
-    });
-  });
-  document.querySelectorAll(".wizard-back").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      if (current > 0) goTo(current - 1);
-    });
-  });
-
-  // ---- step 4: review card ----
-  var reviewList = document.getElementById("review-list");
-  var reviewPool = document.getElementById("review-pool");
-  var reviewSuggestions = document.getElementById("review-suggestions");
-  var form = document.getElementById("wizard-form");
-
-  var bodyTypeLabels = {{ body_types | tojson }};
-
-  function selectedBodyTypes() {
-    return Array.prototype.slice.call(document.querySelectorAll('input[name="pref_body_types"]:checked'))
-      .map(function (b) { return b.value; });
-  }
-
-  function addRow(label, value) {
-    if (!value) return;
-    var row = document.createElement("div");
-    row.className = "review-row";
-    var dt = document.createElement("dt");
-    dt.textContent = label;
-    var dd = document.createElement("dd");
-    dd.textContent = value;
-    row.appendChild(dt);
-    row.appendChild(dd);
-    reviewList.appendChild(row);
-  }
-
-  function renderSummary() {
-    reviewList.innerHTML = "";
-    addRow("Connection type", "{{ wanted }}");
-    addRow("Looking for", document.getElementById("seeking").value || "Anyone");
-    addRow("Age range", minEl.value + " – " + maxEl.value + " years");
-    var loc = locInput.value.trim();
-    var radiusTxt = radiusEl.value >= radiusMax ? "anywhere" : radiusEl.value + " km";
-    addRow("Location", loc ? (loc + " · within " + radiusTxt) : "Not set");
-    addRow("Interests", document.getElementById("interests").value.trim());
-
-    var h1 = document.getElementById("pref_height_min").value;
-    var h2 = document.getElementById("pref_height_max").value;
-    if (h1 && h2) addRow("Height", h1 + "–" + h2 + " cm");
-
-    var bts = selectedBodyTypes();
-    if (bts.length) addRow("Body types", bts.join(", "));
-
-    ["pref_fitness_level", "pref_hair_color", "pref_eye_color", "pref_tattoos"].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el.value) addRow(el.previousElementSibling.textContent.trim(), el.value);
+  function closeHelp(except) {
+    helpButtons.forEach(function (btn) {
+      if (btn === except) return;
+      btn.setAttribute("aria-expanded", "false");
+      document.getElementById(btn.getAttribute("aria-controls")).classList.remove("open");
     });
   }
 
-  function loadReview() {
-    renderSummary();
-    reviewPool.innerHTML = '<span class="muted">Checking the pool…</span>';
-    reviewSuggestions.innerHTML = "";
+  helpButtons.forEach(function (btn) {
+    btn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      var pop = document.getElementById(btn.getAttribute("aria-controls"));
+      var open = btn.getAttribute("aria-expanded") === "true";
+      closeHelp(btn);
+      btn.setAttribute("aria-expanded", open ? "false" : "true");
+      pop.classList.toggle("open", !open);
+    });
+  });
+  document.addEventListener("click", function () { closeHelp(null); });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") closeHelp(null);
+  });
 
-    var data = new FormData(form);
+  // ---- live pool count ----
+  var poolLive = document.getElementById("pool-live");
+  var poolSuggestions = document.getElementById("pool-suggestions");
+  var previewTimer = null;
+  var previewController = null;
+
+  function schedulePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(loadPreview, 350);
+  }
+
+  function chip(text, teal) {
+    var el = document.createElement("span");
+    el.className = teal ? "tag tag-teal" : "tag";
+    el.textContent = text;
+    return el;
+  }
+
+  function loadPreview() {
+    if (previewController) previewController.abort();
+    previewController = new AbortController();
     fetch("{{ url_for('search_preview') }}", {
       method: "POST",
       headers: { "Accept": "application/json" },
-      body: data
+      body: new FormData(form),
+      signal: previewController.signal
     })
       .then(function (res) { return res.json(); })
       .then(function (result) {
+        poolLive.innerHTML = "";
+        poolSuggestions.innerHTML = "";
         if (result.error) {
-          reviewPool.innerHTML = '<span class="muted">Could not check the pool right now.</span>';
+          poolLive.appendChild(chip("Could not check the pool right now", false));
           return;
         }
         var total = result.total_waiting;
-        var compatible = result.compatible_count;
-        reviewPool.innerHTML =
-          '<span class="tag">' + total + ' ' + (total === 1 ? "person" : "people") + ' searching right now</span>' +
-          '<span class="tag tag-teal">' + compatible + ' ' + (compatible === 1 ? "person fits" : "people fit") + ' everything you picked</span>';
+        var fit = result.compatible_count;
+        poolLive.appendChild(chip(
+          total + (total === 1 ? " person" : " people") + " searching right now", false));
+        poolLive.appendChild(chip(
+          fit + (fit === 1 ? " person fits" : " people fit") + " what you picked", true));
 
-        reviewSuggestions.innerHTML = "";
         (result.suggestions || []).forEach(function (s) {
-          var chip = document.createElement("span");
-          chip.className = "tag tag-teal";
-          chip.style.cursor = "pointer";
-          chip.style.marginRight = "0.5rem";
-          var text = "", targetStep = 0;
+          var text = "";
           if (s.key === "age") {
-            text = "Widen to " + s.age_min + "–" + s.age_max + " · " + s.count + (s.count === 1 ? " person" : " people");
-            targetStep = 0;
+            text = "Widen to " + s.age_min + "–" + s.age_max;
           } else if (s.key === "distance") {
-            text = "Widen to " + s.radius_km + " km · " + s.count + (s.count === 1 ? " person" : " people");
-            targetStep = 1;
-          } else if (s.key === "relationship") {
-            text = "Switch to " + s.relationship_type + " · " + s.count + (s.count === 1 ? " person" : " people");
-            targetStep = 0;
+            text = "Widen to " + s.radius_km + " km";
           } else if (s.key === "gender") {
-            text = "Switch to " + s.seeking + " · " + s.count + (s.count === 1 ? " person" : " people");
-            targetStep = 0;
+            text = "Switch to " + s.seeking;
+          } else {
+            return;  // relationship type is fixed by the tile on screen 1
           }
-          chip.textContent = text;
-          chip.addEventListener("click", function () {
-            if (s.key === "age") { minEl.value = s.age_min; maxEl.value = s.age_max; syncAge(); }
-            else if (s.key === "distance") { radiusEl.value = s.radius_km; syncRadius(); }
-            else if (s.key === "relationship") { /* relationship type is fixed per this wizard */ }
-            else if (s.key === "gender") { document.getElementById("seeking").value = s.seeking; }
-            goTo(targetStep);
+          text += " · " + s.count + (s.count === 1 ? " person" : " people");
+
+          var el = chip(text, true);
+          el.style.cursor = "pointer";
+          el.setAttribute("role", "button");
+          el.setAttribute("tabindex", "0");
+          function apply() {
+            var row = null;
+            if (s.key === "age") {
+              minEl.value = s.age_min;
+              maxEl.value = s.age_max;
+              syncAge();
+              row = minEl.closest(".toggle-row");
+            } else if (s.key === "gender") {
+              document.getElementById("seeking").value = s.seeking;
+              row = document.getElementById("seeking").closest(".toggle-row");
+            } else if (s.key === "distance") {
+              // The radius lives on screen 1; relaxing it here means dropping
+              // the filter, which is the one thing this screen can do to it.
+              var sw = form.querySelector('input[name="use_distance"]');
+              sw.checked = false;
+              syncPanels();
+              row = sw.closest(".toggle-row");
+            }
+            if (row) {
+              row.classList.remove("flash");
+              void row.offsetWidth;  // restart the animation on a repeat click
+              row.classList.add("flash");
+            }
+            schedulePreview();
+          }
+          el.addEventListener("click", apply);
+          el.addEventListener("keydown", function (ev) {
+            if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); apply(); }
           });
-          reviewSuggestions.appendChild(chip);
+          poolSuggestions.appendChild(el);
         });
       })
-      .catch(function () {
-        reviewPool.innerHTML = '<span class="muted">Could not check the pool right now.</span>';
+      .catch(function (err) {
+        if (err.name === "AbortError") return;
+        poolLive.innerHTML = "";
+        poolLive.appendChild(chip("Could not check the pool right now", false));
       });
   }
+
+  form.addEventListener("input", schedulePreview);
+  form.addEventListener("change", schedulePreview);
+  loadPreview();
 })();
 </script>
 {% endblock %}

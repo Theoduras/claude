@@ -52,7 +52,15 @@ A shim gives psycopg connections the old sqlite3 shape (`app.py:195`) — `?` pl
 in query strings are rewritten, so **write `?`, not `%s`**, in `db.execute(...)` calls.
 
 Tables: `users` (+`is_bot`), `profiles`, `matches` (+`status`/`paired_at`/`decision_a`/
-`decision_b`/`ended_at`), `searches` (+`lat`/`lng`), `messages`, `photos`.
+`decision_b`/`ended_at`), `searches` (+`lat`/`lng`/`use_*`), `messages`, `photos`.
+
+Starting a search is **two screens**: `/search` picks the connection type and the location
++ radius (carried to screen 2 in `session["search_draft"]`), `/search/criteria` asks which
+filters matter as a list of switches. Each switch writes a `searches.use_*` column —
+`use_gender`/`use_age`/`use_distance`/`use_physical` — read by `searches_compatible()` via
+`.get(key, True)`; a switch that is off leaves its panel's inputs `disabled`, so those
+fields never reach the server at all. `use_relationship` is always TRUE: it *is* the tile
+choice. Interests has no column — it is a ranker, not a filter, so "off" just stores `''`.
 
 `matches.status` is `'active'` by default — pairing now only happens through live search
 (`try_pair()`), but the default keeps pre-existing rows a permanent chat, unchanged.

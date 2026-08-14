@@ -480,6 +480,7 @@ CREATE TABLE IF NOT EXISTS searches (
     use_age BOOLEAN NOT NULL DEFAULT TRUE,
     use_relationship BOOLEAN NOT NULL DEFAULT TRUE,
     use_distance BOOLEAN NOT NULL DEFAULT TRUE,
+    use_physical BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -488,6 +489,10 @@ ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_gender BOOLEAN NOT NULL DEFAUL
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_age BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_relationship BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_distance BOOLEAN NOT NULL DEFAULT TRUE;
+-- The physical block is one switch rather than one per trait: it hides or shows
+-- a whole panel in the UI, and DEFAULT TRUE keeps every pre-existing row filtering
+-- exactly as it did before the switch existed.
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_physical BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- Bring searches created before the physical-trait step existed up to date.
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_height_min INTEGER;
@@ -1474,7 +1479,13 @@ def physical_ok(searcher, candidate):
     Each filter only blocks when the searcher set it AND the candidate has a
     value for that attribute — an unset filter or an unset candidate
     attribute is treated as "no preference", same convention as gender/age.
+
+    The whole block is behind one switch (searches.use_physical), so a
+    searcher can widen their net without losing the values behind it.
     """
+    if not searcher.get("use_physical", True):
+        return True
+
     h_min, h_max = searcher.get("pref_height_min"), searcher.get("pref_height_max")
     if h_min is not None and h_max is not None and candidate.get("height_cm") is not None:
         if not h_min <= candidate["height_cm"] <= h_max:
@@ -1494,6 +1505,29 @@ def physical_ok(searcher, candidate):
     return True
 
 
+def physical_summary(search):
+    """One human-readable line for whatever physical filters are set.
+
+    Empty string when none are — the caller decides what to say in that
+    case, since "no preferences" reads differently on a review row than it
+    does in a form.
+    """
+    parts = []
+    h_min, h_max = search.get("pref_height_min"), search.get("pref_height_max")
+    if h_min is not None and h_max is not None:
+        parts.append(f"{h_min}–{h_max} cm")
+
+    body_types = (search.get("pref_body_types") or "").strip()
+    if body_types:
+        parts.append(body_types.replace(",", ", "))
+
+    for field in ("pref_fitness_level", "pref_hair_color", "pref_eye_color", "pref_tattoos"):
+        if search.get(field):
+            parts.append(search[field])
+
+    return " · ".join(parts)
+
+
 def searches_compatible(s1, s2):
     """True when two live searches satisfy each other's criteria.
 
@@ -1505,7 +1539,7 @@ def searches_compatible(s1, s2):
     differ. Unset fields are treated as "no preference".
 
     Each side can also switch a filter off (searches.use_gender/use_age/
-    use_relationship/use_distance), which relaxes only that side's own
+    use_relationship/use_distance/use_physical), which relaxes only that side's own
     check — the other person's filter still applies, so disabling one
     filter does not by itself guarantee a match. Missing keys (hand-built
     dicts, pre-migration rows) default to "on" via .get(key, True), which
@@ -1664,8 +1698,16 @@ def require_profile():
 @app.route("/search", methods=["GET", "POST"])
 @login_required
 def live_search():
-    """Step 1: choose the kind of connection you're searching for."""
-    if require_profile() is None:
+    """Screen 1: what kind of connection, and where.
+
+    Location and radius live here rather than on the criteria screen so that
+    everything you decide up front — what you want and where you want it —
+    sits on one page. They travel to screen 2 in the session rather than the
+    query string: coordinates and a radius are per-user draft state, not
+    something worth putting in a URL.
+    """
+    me = require_profile()
+    if me is None:
         flash("Fill in your profile first so others can match with you.")
         return redirect(url_for("edit_profile"))
 
@@ -1674,23 +1716,42 @@ def live_search():
         if wanted not in RELATIONSHIP_TYPES:
             flash("Please choose what kind of connection you want.")
         else:
+            session["search_draft"] = {
+                "location": request.form.get("location", "").strip(),
+                "location_lat": request.form.get("location_lat", "").strip(),
+                "location_lng": request.form.get("location_lng", "").strip(),
+                "radius_km": request.form.get("radius_km", str(RADIUS_MAX_KM)),
+            }
             return redirect(url_for("search_criteria", relationship_type=wanted))
 
     existing = get_db().execute(
         "SELECT * FROM searches WHERE user_id = ?", (session["user_id"],)
     ).fetchone()
 
+    # Coming back from screen 2 must show what you typed, not what you last
+    # searched for, so the draft wins over the saved row when it exists.
+    draft = session.get("search_draft") or {}
+
     return render_template(
         "search_start.html",
+        me=me,
         relationship_types=RELATIONSHIP_TYPES,
         existing=existing,
+        draft=draft,
+        city_choices=CITY_CHOICES,
+        radius_max=RADIUS_MAX_KM,
     )
 
 
 @app.route("/search/criteria", methods=["GET", "POST"])
 @login_required
 def search_criteria():
-    """Step 2: gender, age range, location + radius, interests — then search."""
+    """Screen 2: which filters matter, and what they're set to — then search.
+
+    Location, radius and the connection type were decided on screen 1 and
+    ride along as hidden fields, so this handler still reads one complete
+    form and the validation below is unchanged.
+    """
     db = get_db()
     user_id = session["user_id"]
     me = require_profile()
@@ -1711,7 +1772,7 @@ def search_criteria():
         interests = request.form.get("interests", "").strip()
         location = request.form.get("location", "").strip()
 
-        # Set only when the combobox in step 2 resolved a geocoder pick; the
+        # Set only when the combobox on screen 1 resolved a geocoder pick; the
         # JS clears these two fields the moment the user free-types after
         # selecting, so a stale coordinate can never be paired with a
         # different typed city.
@@ -1753,6 +1814,16 @@ def search_criteria():
             phys_error, phys = validate_physical(phys_values)
             error = error or phys_error
 
+        # The switches on the criteria screen. A switch that is off leaves its
+        # panel's inputs disabled, so those fields never reach us and the
+        # validation above quietly falls back to its "no preference" defaults —
+        # but the flag is what actually relaxes the check in
+        # searches_compatible(), and it has to be stored either way.
+        use_gender = "use_gender" in request.form
+        use_age = "use_age" in request.form
+        use_distance = "use_distance" in request.form
+        use_physical = "use_physical" in request.form
+
         if error:
             flash(error)
         else:
@@ -1763,8 +1834,10 @@ def search_criteria():
                      interests, location, lat, lng, radius_km,
                      pref_height_min, pref_height_max, pref_body_types,
                      pref_fitness_level, pref_hair_color, pref_eye_color,
-                     pref_tattoos, status, match_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, NOW())
+                     pref_tattoos, use_gender, use_age, use_distance,
+                     use_physical, status, match_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        'waiting', NULL, NOW())
                 ON CONFLICT(user_id) DO UPDATE SET
                     seeking = excluded.seeking,
                     age_min = excluded.age_min,
@@ -1782,15 +1855,16 @@ def search_criteria():
                     pref_hair_color = excluded.pref_hair_color,
                     pref_eye_color = excluded.pref_eye_color,
                     pref_tattoos = excluded.pref_tattoos,
-                    -- Values carry over to the next search (the form above
-                    -- is prefilled from this row), but the on/off switches
-                    -- do not: the form shows every value as applying, so a
-                    -- filter silently left off from a previous search would
-                    -- contradict what the user just confirmed here.
-                    use_gender = TRUE,
-                    use_age = TRUE,
+                    -- The switches are explicit user intent now — the
+                    -- criteria screen asks which filters matter — so they are
+                    -- written from the form rather than forced back on.
+                    -- use_relationship stays on: it *is* the connection type
+                    -- picked on screen 1, which has no switch of its own.
+                    use_gender = excluded.use_gender,
+                    use_age = excluded.use_age,
                     use_relationship = TRUE,
-                    use_distance = TRUE,
+                    use_distance = excluded.use_distance,
+                    use_physical = excluded.use_physical,
                     status = 'waiting',
                     match_id = NULL,
                     created_at = NOW()
@@ -1802,20 +1876,46 @@ def search_criteria():
                     phys[PREF_BODY_TYPES_FIELD], phys["pref_fitness_level"],
                     phys["pref_hair_color"], phys["pref_eye_color"],
                     phys["pref_tattoos"],
+                    use_gender, use_age, use_distance, use_physical,
                 ),
             )
             db.commit()
+            # The draft has been saved for real; leaving it behind would let a
+            # later visit to screen 1 prefill from a search already underway.
+            session.pop("search_draft", None)
 
             # No try_pair() here: the search is brand new, so it cannot be
             # paired yet anyway (see MIN_SEARCH_SECONDS). The waiting page's
             # poll picks it up once it ripens.
             return redirect(url_for("search_waiting"))
 
+    # Screen 1's answers, carried as hidden fields so this page still posts one
+    # complete form. The draft wins over the saved row, which is only a
+    # fallback for landing here directly (a bookmark, or a browser back).
+    draft = session.get("search_draft") or {}
+    place = {
+        "location": draft.get("location")
+            or (existing["location"] if existing else "")
+            or me["location"],
+        "lat": draft.get("location_lat")
+            or (existing["lat"] if existing and existing["lat"] is not None else ""),
+        "lng": draft.get("location_lng")
+            or (existing["lng"] if existing and existing["lng"] is not None else ""),
+    }
+    try:
+        place["radius_km"] = int(
+            draft.get("radius_km")
+            or (existing["radius_km"] if existing else RADIUS_MAX_KM)
+        )
+    except (TypeError, ValueError):
+        place["radius_km"] = RADIUS_MAX_KM
+
     return render_template(
         "search_criteria.html",
         me=me,
         existing=existing,
         wanted=wanted,
+        place=place,
         seeking_options=SEEKING_OPTIONS,
         city_choices=CITY_CHOICES,
         radius_max=RADIUS_MAX_KM,
@@ -1895,7 +1995,7 @@ def api_places():
 @app.route("/search/preview", methods=["POST"])
 @login_required
 def search_preview():
-    """Live pool readout for wizard step 4 — how many people fit the
+    """Live pool readout for the criteria screen — how many people fit the
     criteria you're about to save, plus suggestions if the answer is zero.
 
     Writes nothing: builds a synthetic search row in the exact shape
@@ -1940,10 +2040,14 @@ def search_preview():
         "lat": lat,
         "lng": lng,
         "radius_km": radius_km,
-        "use_gender": True,
-        "use_age": True,
+        # The switches on the criteria screen post like any other checkbox, so
+        # the preview counts what the user is actually about to save rather
+        # than assuming every filter applies.
+        "use_gender": "use_gender" in request.form,
+        "use_age": "use_age" in request.form,
         "use_relationship": True,
-        "use_distance": True,
+        "use_distance": "use_distance" in request.form,
+        "use_physical": "use_physical" in request.form,
         "gender": me["gender"],
         "age": me["age"],
         "height_cm": me["height_cm"],
@@ -2140,8 +2244,10 @@ def search_blockers(mine, others):
         "if_any_age": relaxed(use_age=False),
         "if_any_connection": relaxed(use_relationship=False),
         "if_any_distance": relaxed(use_distance=False),
+        "if_any_physical": relaxed(use_physical=False),
         "if_all_relaxed": relaxed(
-            use_gender=False, use_age=False, use_relationship=False, use_distance=False
+            use_gender=False, use_age=False, use_relationship=False,
+            use_distance=False, use_physical=False,
         ),
         "age_suggestion": _minimal_age_suggestion(mine, others),
         "distance_suggestion": _minimal_distance_suggestion(mine, others),
@@ -2213,6 +2319,16 @@ def search_filter_rows(mine, others, blockers):
         "constrains": blockers["if_any_distance"] > blockers["current_count"],
         "note": distance_note,
         "suggestion": blockers["distance_suggestion"],
+    })
+
+    rows.append({
+        "key": "physical",
+        "label": "Physical traits",
+        "value_text": physical_summary(mine) or "No preferences set",
+        "enabled": mine.get("use_physical", True),
+        "constrains": blockers["if_any_physical"] > blockers["current_count"],
+        "note": None,
+        "suggestion": None,
     })
 
     rows.append({
@@ -2301,6 +2417,7 @@ FILTER_TOGGLE_COLUMNS = {
     "age": "use_age",
     "relationship": "use_relationship",
     "distance": "use_distance",
+    "physical": "use_physical",
 }
 
 
