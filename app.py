@@ -2529,7 +2529,21 @@ def resolve_match(match_id):
 
     now = dt.now(timezone.utc)
     phase = match_phase(match, now)
-    if phase not in ("deciding",):
+    if phase not in ("reveal", "timed", "deciding"):
+        return match
+
+    # Someone leaving ends the room the moment it happens, in any phase —
+    # there is nothing left to wait for once one side has gone. Everything
+    # below this is end-of-timer resolution and only applies to 'deciding'.
+    if "unmatch" in (match["decision_a"], match["decision_b"]):
+        db.execute(
+            "UPDATE matches SET status = 'ended', ended_at = NOW() WHERE id = ?",
+            (match_id,),
+        )
+        db.commit()
+        return db.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
+
+    if phase != "deciding":
         return match
 
     users = db.execute(
@@ -2626,7 +2640,15 @@ def match_decide(match_id):
         return {"error": "invalid choice"}, 400
 
     match = resolve_match(match_id) or match
-    if match_phase(match) == "deciding":
+    # Leaving is allowed from the moment the match appears; committing to
+    # continue only once the room is actually open, so a pair cannot both
+    # accept during the reveal and skip the timed chat altogether.
+    allowed = {
+        "reveal": ("unmatch",),
+        "timed": ("continue", "unmatch"),
+        "deciding": ("continue", "unmatch"),
+    }.get(match_phase(match), ())
+    if choice in allowed:
         col = "decision_a" if user_id == match["user_a"] else "decision_b"
         db = get_db()
         db.execute(f"UPDATE matches SET {col} = ? WHERE id = ?", (choice, match_id))
@@ -2761,6 +2783,8 @@ def chat(match_id):
         phase=phase,
         state=state,
         other_photo_id=other_photo_id,
+        reveal_seconds=REVEAL_SECONDS,
+        timed_seconds=TIMED_CHAT_SECONDS,
     )
 
 

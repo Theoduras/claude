@@ -1081,6 +1081,108 @@
       background: linear-gradient(90deg, var(--violet-deep), var(--violet-crest));
     }
 
+    /* ---------- countdown ring ----------------------------------------
+       A conic sweep driven by --deg with a disc punched out of the middle,
+       so the number reads against the panel rather than against the ring.
+       Used for both the reveal countdown and the room timer; only --deg
+       and --ring-color differ. */
+    .ring {
+      position: relative;
+      flex: none;
+      width: 6rem;
+      height: 6rem;
+      border-radius: 50%;
+      background: conic-gradient(
+        var(--ring-color, var(--champagne)) 0deg var(--deg, 0deg),
+        rgba(59, 11, 102, 0.6) var(--deg, 0deg) 360deg);
+    }
+    .ring::after {
+      content: "";
+      position: absolute;
+      inset: 7px;
+      border-radius: 50%;
+      background: var(--ink-raised);
+    }
+    /* above ::after, which is painted as the ring's last child */
+    .ring-inner {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+    }
+    .ring-num {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      font-size: 1.62rem;
+      line-height: 1;
+      color: var(--champagne);
+    }
+    .ring-unit {
+      font-weight: 700;
+      font-size: 0.5rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .ring-sm { width: 4.5rem; height: 4.5rem; }
+    .ring-sm::after { inset: 6px; }
+    .ring-sm .ring-num { font-size: 1.19rem; }
+
+    /* the two of you, overlapping: violet on one side, teal on the other */
+    .pair {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1.4rem;
+    }
+    .pair > * {
+      width: 6.5rem;
+      height: 6.5rem;
+      flex: none;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1px solid rgba(168, 85, 247, 0.5);
+      box-shadow: 0 0 40px -8px rgba(168, 85, 247, 0.7);
+    }
+    .pair > * + * {
+      margin-left: -1.5rem;
+      border-color: rgba(29, 166, 162, 0.5);
+      box-shadow: 0 0 40px -8px rgba(29, 166, 162, 0.6);
+    }
+
+    .eyebrow-gold { color: var(--champagne); letter-spacing: 0.24em; }
+
+    /* the room strip: timer beside the explanation of what it means */
+    .room-timer {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--ink-hairline);
+      margin-bottom: 0.9rem;
+    }
+    .room-timer-label {
+      font-weight: 700;
+      font-size: 0.625rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .room-timer p {
+      margin: 0.35rem 0 0;
+      font-size: 0.845rem;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    .decision-actions { display: flex; gap: 0.7rem; }
+    .decision-actions .btn { flex: 1; }
+    .decision-actions .btn-continue { flex: 1.35; }
+
     /* ---------- chat header ------------------------------------------ */
     .chat-head {
       display: flex;

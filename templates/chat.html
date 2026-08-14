@@ -6,10 +6,44 @@
 {% set other = right if left['user_id'] == me_id else left %}
 <div class="card{% if phase == 'reveal' %} reveal-card{% endif %}">
   {% if is_participant and phase == 'reveal' %}
-    <div class="pulse-heart"></div>
-    <p class="eyebrow">It's a match</p>
-    <h1 style="font-size: 1.4rem;">You and {{ other['name'] }} both said yes</h1>
-    <p class="subtitle" style="margin-inline: auto;">Opening your chat in <span id="reveal-count">{{ state.seconds_left }}</span>s…</p>
+    <div style="text-align: center;">
+      <p class="eyebrow eyebrow-gold">Match found</p>
+
+      {# photos are still locked this early, so these are hatched stand-ins #}
+      <div class="pair">
+        <span class="ph"></span>
+        <span class="ph"></span>
+      </div>
+
+      <h1 style="margin-top: 1.4rem;">Congratulations —<br>you matched</h1>
+      <p class="subtitle" style="margin-inline: auto;">
+        You and <strong style="color: var(--text);">{{ other['name'] }}{% if other['age'] %}, {{ other['age'] }}{% endif %}</strong>
+        were both looking for each other.
+      </p>
+      <p class="chat-head-live" style="justify-content: center; margin-top: 1.1rem;">
+        <span class="live-dot"></span>{{ other['name'] }} is already in the room
+      </p>
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1.6rem;">
+        <div class="ring" id="reveal-ring"
+             style="--deg: {{ (state.seconds_left / reveal_seconds * 360) | round | int }}deg;">
+          <div class="ring-inner">
+            <span class="ring-num" id="reveal-count">{{ state.seconds_left }}</span>
+            <span class="ring-unit">seconds</span>
+          </div>
+        </div>
+        <p class="subtitle" style="margin-inline: auto;">
+          The room opens on its own when the countdown ends.
+        </p>
+        {# Accepting is implicit — waiting is the yes. Only leaving needs a
+           button, and it ends the match before the room ever opens. #}
+        <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
+              style="width: 100%;">
+          <input type="hidden" name="choice" value="unmatch">
+          <button class="btn btn-secondary btn-block" type="submit">Not this one</button>
+        </form>
+      </div>
+    </div>
 
   {% elif is_participant and phase == 'deciding' %}
     <h1 style="font-size: 1.25rem;">Time's up — continue with {{ other['name'] }}?</h1>
@@ -79,13 +113,31 @@
           <p class="chat-head-live">
             <span class="live-dot"></span>
             <span id="live-status">live</span>
-            {% if phase == 'timed' %}
-              &middot; <span class="countdown" id="timed-countdown">{{ (state.seconds_left // 60) }}:{{ '%02d' % (state.seconds_left % 60) }}</span>
-            {% endif %}
           </p>
         </div>
         {% if phase == 'active' %}<span class="tag">Matched</span>{% endif %}
       </div>
+
+      {% if phase == 'timed' %}
+        {# The room's clock. It lives here rather than in the header so the
+           ring can carry it — one timer on the page, not two. #}
+        <div class="room-timer">
+          <div class="ring ring-sm" id="timed-ring"
+               style="--ring-color: var(--violet-crest);
+                      --deg: {{ (state.seconds_left / timed_seconds * 360) | round | int }}deg;">
+            <div class="ring-inner">
+              <span class="ring-num countdown" id="timed-countdown">{{ (state.seconds_left // 60) }}:{{ '%02d' % (state.seconds_left % 60) }}</span>
+            </div>
+          </div>
+          <div>
+            <div class="room-timer-label">Time left in this room</div>
+            <p>
+              If neither of you continues, the room closes and nobody is told
+              who hesitated.
+            </p>
+          </div>
+        </div>
+      {% endif %}
     {% else %}
       <h1 style="font-size: 1.25rem;">
         &#10084; {{ left['name'] }} &amp; {{ right['name'] }}
@@ -122,6 +174,31 @@
       </p>
     </div>
 
+    {% if is_participant and phase == 'timed' %}
+      {# You can commit before the clock runs out — the room does not have
+         to expire first for a decision to count. #}
+      <div style="margin: 0.9rem 0;">
+        <p class="chat-head-live" style="margin-bottom: 0.7rem;">
+          <span class="live-dot"></span>
+          {% if state.my_decision %}
+            You chose {{ 'to continue' if state.my_decision == 'continue' else 'to unmatch' }} — waiting for {{ other['name'] }}
+          {% elif state.their_decision %}
+            {{ other['name'] }} has already decided
+          {% else %}
+            {{ other['name'] }} hasn't decided yet
+          {% endif %}
+        </p>
+        {% if not state.my_decision %}
+          <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
+                class="decision-actions" id="decision-form">
+            <input type="hidden" name="choice" id="decision-choice" value="">
+            <button class="btn btn-secondary" type="submit" data-choice="unmatch">Unmatch</button>
+            <button class="btn btn-continue" type="submit" data-choice="continue">Continue match</button>
+          </form>
+        {% endif %}
+      </div>
+    {% endif %}
+
     {% if is_participant %}
       <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
         <input type="text" name="body" id="chat-input" placeholder="Type a message…"
@@ -155,6 +232,12 @@
             return;
           }
           revealCount.textContent = data.seconds_left;
+          // sweep the ring down with the number it wraps
+          var ring = document.getElementById("reveal-ring");
+          if (ring) {
+            var deg = Math.round(data.seconds_left / {{ reveal_seconds }} * 360);
+            ring.style.setProperty("--deg", deg + "deg");
+          }
           setTimeout(pollReveal, POLL_MS);
         })
         .catch(function () { setTimeout(pollReveal, RETRY_MS); });
@@ -280,6 +363,11 @@
           var secs = s % 60;
           countdownEl.textContent = mins + ":" + (secs < 10 ? "0" : "") + secs;
           countdownEl.classList.toggle("countdown-low", s <= 30);
+          var timedRing = document.getElementById("timed-ring");
+          if (timedRing) {
+            timedRing.style.setProperty(
+              "--deg", Math.round(s / {{ timed_seconds }} * 360) + "deg");
+          }
           setTimeout(pollState, POLL_MS);
         })
         .catch(function () { setTimeout(pollState, RETRY_MS); });
