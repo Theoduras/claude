@@ -62,19 +62,42 @@
 
   {% else %}
     {# 'timed' or 'active', and non-participant (admin) viewers of any phase #}
-    <h1 style="font-size: 1.25rem;">
-      &#10084; {{ left['name'] }} &amp; {{ right['name'] }}
-    </h1>
-    <p class="subtitle">
-      {% if phase == 'active' %}Matched chatroom{% else %}Timed chat{% endif %} &middot;
-      <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">@{{ left['username'] }}</a>
-      and
-      <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">@{{ right['username'] }}</a>
-      &middot; <span class="muted" id="live-status">live</span>
-      {% if is_participant and phase == 'timed' %}
-        &middot; <span class="countdown" id="timed-countdown">{{ (state.seconds_left // 60) }}:{{ '%02d' % (state.seconds_left % 60) }}</span>
-      {% endif %}
-    </p>
+    {% if is_participant %}
+      <div class="chat-head">
+        <a class="chat-back" href="{{ url_for('chats') }}" aria-label="Back to chats">&lsaquo;</a>
+        {% if other_photo_id %}
+          <img class="avatar" src="{{ url_for('photo', photo_id=other_photo_id) }}"
+               alt="{{ other['name'] }}">
+        {% else %}
+          {# photos stay locked until you both continue — hatch until then #}
+          <span class="avatar ph"></span>
+        {% endif %}
+        <div class="chat-head-main">
+          <a class="chat-head-name" href="{{ url_for('view_profile', user_id=other['user_id']) }}">
+            {{ other['name'] }}{% if other['age'] %}, {{ other['age'] }}{% endif %}
+          </a>
+          <p class="chat-head-live">
+            <span class="live-dot"></span>
+            <span id="live-status">live</span>
+            {% if phase == 'timed' %}
+              &middot; <span class="countdown" id="timed-countdown">{{ (state.seconds_left // 60) }}:{{ '%02d' % (state.seconds_left % 60) }}</span>
+            {% endif %}
+          </p>
+        </div>
+        {% if phase == 'active' %}<span class="tag">Matched</span>{% endif %}
+      </div>
+    {% else %}
+      <h1 style="font-size: 1.25rem;">
+        &#10084; {{ left['name'] }} &amp; {{ right['name'] }}
+      </h1>
+      <p class="subtitle">
+        {% if phase == 'active' %}Matched chatroom{% else %}Timed chat{% endif %} &middot;
+        <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">@{{ left['username'] }}</a>
+        and
+        <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">@{{ right['username'] }}</a>
+        &middot; <span class="muted" id="live-status">live</span>
+      </p>
+    {% endif %}
 
     <div class="chat-log" id="chat-log"
          data-me="{{ me_id }}"
@@ -101,9 +124,9 @@
 
     {% if is_participant %}
       <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
-        <input type="text" name="body" id="chat-input" placeholder="Type a message..."
+        <input type="text" name="body" id="chat-input" placeholder="Type a message…"
                autofocus required autocomplete="off">
-        <button class="btn" type="submit">Send</button>
+        <button class="btn btn-send" type="submit" aria-label="Send">&#8593;</button>
       </form>
     {% else %}
       <p class="hint" style="margin-top: 0.5rem;">

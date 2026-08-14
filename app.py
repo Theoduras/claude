@@ -2688,6 +2688,20 @@ def chat(match_id):
 
     state = match_state_payload(match, user["id"]) if is_participant else None
 
+    # Avatar for the chat header. Photos stay locked until both sides
+    # continue, so this is None for most of a timed room and the header
+    # falls back to the placeholder — the same gate /photo enforces, asked
+    # here so the template never has to guess.
+    other_photo_id = None
+    if is_participant:
+        other_id = match["user_b"] if user["id"] == match["user_a"] else match["user_a"]
+        if can_view_photos(other_id, user["id"], user["is_admin"]):
+            row = get_db().execute(
+                "SELECT id FROM photos WHERE user_id = ? ORDER BY id LIMIT 1",
+                (other_id,),
+            ).fetchone()
+            other_photo_id = row["id"] if row else None
+
     return render_template(
         "chat.html",
         match=match,
@@ -2697,6 +2711,7 @@ def chat(match_id):
         is_participant=is_participant,
         phase=phase,
         state=state,
+        other_photo_id=other_photo_id,
     )
 
 
