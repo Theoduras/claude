@@ -104,6 +104,12 @@ AUTO_LOGIN = os.environ.get("AUTO_LOGIN", "0") not in ("0", "false", "no")
 
 GENDERS = ["Woman", "Man", "Non-binary"]
 
+# Object pronoun for the reveal's "Ask {pronoun} about X" line, keyed on the
+# self-reported profiles.gender value. Anything else (Non-binary, unset)
+# reads as "them" -- never guessed from a name, only from what the person
+# themselves put on their own profile.
+PRONOUNS = {"Woman": "her", "Man": "him"}
+
 SEEKING_OPTIONS = ["Women", "Men", "Everyone"]
 
 # Which profile genders each "looking for" choice accepts.
@@ -2914,13 +2920,16 @@ def chat(match_id):
     state = match_state_payload(match, user["id"]) if is_participant else None
 
     # The reveal's hook: the shared-interest overlap try_pair() already
-    # computed to pick this partner, plus a one-line opener built from it.
-    # Falls back in order: a shared word -> the other person's own
-    # interests (even with no overlap, that's still something to open
-    # with) -> the thing that's always true, same relationship_type.
-    # Only worth the queries during the reveal itself.
-    shared_interests = []
-    other_interest_list = []
+    # computed to pick this partner, rendered as chips (shared ones filled,
+    # the rest outlined) plus a one-line opener naming the best one to ask
+    # about. Falls back in order: a shared word -> the other person's own
+    # interests (even with no overlap, that's still something to open with)
+    # -> the thing that's always true, same relationship_type. Only worth
+    # the queries during the reveal itself.
+    reveal_heading = None
+    reveal_chips = []
+    reveal_highlight = None
+    reveal_pronoun = "them"
     match_reason = None
     if is_participant and phase == "reveal":
         other_id = match["user_b"] if user["id"] == match["user_a"] else match["user_a"]
@@ -2932,6 +2941,7 @@ def chat(match_id):
         other_search = next((r for r in rows if r["user_id"] == other_id), None)
         other_profile = next((p for p in profiles if p["user_id"] == other_id), None)
         mine_profile = next((p for p in profiles if p["user_id"] == user["id"]), None)
+        reveal_pronoun = PRONOUNS.get(other_profile["gender"] if other_profile else None, "them")
         if mine_search and other_search:
             # searches.interests is routinely blank: the "Interests" toggle
             # on screen 2 defaults off, and switching a filter off writes
@@ -2943,15 +2953,20 @@ def chat(match_id):
 
             other_interest_list = [w.strip() for w in re.split(r"[,;/\n]+", other_text) if w.strip()]
             # Word casing comes from the other person's own text -- the
-            # line reads "{other} likes {word}", describing them.
+            # chips and the opener describe them, in their own words.
             shared_interests = _shared_interest_words(other_text, mine_text)
+            shared_stems = {_stem(w.lower().strip(".!?()\"'")) for w in shared_interests}
 
-            if shared_interests:
-                match_reason = (
-                    f"Let's open the chat talking about {shared_interests[0].lower()}."
+            if other_interest_list:
+                reveal_chips = sorted(
+                    (
+                        {"text": w, "shared": _stem(w.lower().strip(".!?()\"'")) in shared_stems}
+                        for w in other_interest_list
+                    ),
+                    key=lambda c: not c["shared"],
                 )
-            elif other_interest_list:
-                match_reason = f"Ask about {other_interest_list[0].lower()}."
+                reveal_heading = "You both like" if shared_interests else f"{other_profile['name']}'s interests"
+                reveal_highlight = shared_interests[0] if shared_interests else other_interest_list[0]
             else:
                 reason_type = mine_search["relationship_type"] or other_search["relationship_type"]
                 phrase = RELATIONSHIP_REASON_PHRASES.get(reason_type, "the same thing")
@@ -2983,8 +2998,10 @@ def chat(match_id):
         other_photo_id=other_photo_id,
         reveal_seconds=REVEAL_SECONDS,
         timed_seconds=TIMED_CHAT_SECONDS,
-        shared_interests=shared_interests,
-        other_interest_list=other_interest_list,
+        reveal_heading=reveal_heading,
+        reveal_chips=reveal_chips,
+        reveal_highlight=reveal_highlight,
+        reveal_pronoun=reveal_pronoun,
         match_reason=match_reason,
     )
 

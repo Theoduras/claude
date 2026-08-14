@@ -25,12 +25,19 @@
         <span class="live-dot"></span>{{ other['name'] }} is already in the room
       </p>
 
-      <p class="subtitle" style="margin-inline: auto; margin-top: 1.1rem;">
-        {% if other_interest_list %}
-          {{ other['name'] }}{% if other['age'] %}, {{ other['age'] }}{% endif %} likes {{ other_interest_list | join(', ') }}.<br>
-        {% endif %}
-        {{ match_reason }}
-      </p>
+      {% if reveal_chips %}
+        <p class="eyebrow" style="margin-top: 1.3rem;">{{ reveal_heading }}</p>
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 0.5rem;">
+          {% for chip in reveal_chips %}
+            <span class="tag{% if not chip.shared %} tag-outline{% endif %}">{{ chip.text }}</span>
+          {% endfor %}
+        </div>
+        <p class="subtitle" style="margin-inline: auto; margin-top: 0.7rem;">
+          Ask {{ reveal_pronoun }} about <strong style="color: var(--champagne);">{{ reveal_highlight }}</strong>.
+        </p>
+      {% else %}
+        <p class="subtitle" style="margin-inline: auto; margin-top: 1.1rem;">{{ match_reason }}</p>
+      {% endif %}
 
       <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1.6rem;">
         <div class="ring" id="reveal-ring"
@@ -41,14 +48,14 @@
           </div>
         </div>
         <p class="subtitle" style="margin-inline: auto;">
-          The room opens on its own when the countdown ends.
+          Say yes to start now — or wait, and the chat opens on its own.
         </p>
         {# Accepting is implicit — waiting is the yes. Leaving needs a
            button and ends the match before the room ever opens; entering
            early needs one too, since it opens the room for both sides. #}
         <form method="post" action="{{ url_for('match_skip_reveal', match_id=match['id']) }}"
               style="width: 100%;">
-          <button class="btn btn-primary btn-block" type="submit">Enter chat now</button>
+          <button class="btn btn-primary btn-block" type="submit">Yes, start chatting</button>
         </form>
         <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
               style="width: 100%;">
