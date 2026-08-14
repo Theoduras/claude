@@ -604,7 +604,7 @@ def admin_required(view):
         user = current_user()
         if user is None or not user["is_admin"]:
             flash("Only the admin can do that.")
-            return redirect(url_for("browse"))
+            return redirect(url_for("live_search"))
         return view(*args, **kwargs)
 
     return wrapped
@@ -640,7 +640,7 @@ def design_lab():
 @app.route("/")
 def index():
     if session.get("user_id"):
-        return redirect(url_for("browse"))
+        return redirect(url_for("live_search"))
     searching_now = get_db().execute(
         "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
     ).fetchone()["n"]
@@ -650,7 +650,7 @@ def index():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if session.get("user_id"):
-        return redirect(url_for("browse"))
+        return redirect(url_for("live_search"))
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -691,7 +691,7 @@ def register():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("user_id"):
-        return redirect(url_for("browse"))
+        return redirect(url_for("live_search"))
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -704,7 +704,7 @@ def login():
         if user and check_password_hash(user["password_hash"], password):
             session.clear()
             session["user_id"] = user["id"]
-            return redirect(url_for("browse"))
+            return redirect(url_for("live_search"))
 
         flash("Invalid username or password.")
 
@@ -1282,7 +1282,7 @@ def view_profile(user_id):
 
     if row is None:
         flash("That profile does not exist.")
-        return redirect(url_for("browse"))
+        return redirect(url_for("live_search"))
 
     user = current_user()
     can_view = can_view_photos(user_id, user["id"], user["is_admin"])
@@ -1417,35 +1417,6 @@ def _tokens(*texts):
             if len(tok) > 2:
                 words.add(tok)
     return words
-
-
-def genders_compatible(me, other):
-    """True when both profiles' gender preferences accept each other.
-
-    An unset gender or preference is treated as open, so incomplete
-    profiles still get matches.
-    """
-
-    def accepts(seeker, candidate):
-        if not seeker["seeking"] or not candidate["gender"]:
-            return True
-        return candidate["gender"] in SEEKING_MATCHES[seeker["seeking"]]
-
-    return accepts(me, other) and accepts(other, me)
-
-
-def match_score(me, other):
-    """Rank a candidate on a 0-100 scale, physical attributes weighted heavily.
-
-    Thin wrapper over mutual_score: the harmonic mean of both directions, so
-    a one-sided attraction cannot outrank genuine mutual compatibility. See
-    WEIGHTS for the per-attribute weighting (physical subtotal is 74 of 100).
-    """
-    score, reasons = mutual_score(me, other)
-    return round(score), reasons
-
-
-MATCH_OPTION_COUNT = 3
 
 
 def city_coords(location):
@@ -2384,119 +2355,6 @@ def search_filters_apply():
     return redirect(url_for("search_waiting"))
 
 
-@app.route("/find", methods=["GET", "POST"])
-@login_required
-def find():
-    """Step 1: pick the relationship type you're looking for."""
-    me = get_db().execute(
-        "SELECT * FROM profiles WHERE user_id = ?", (session["user_id"],)
-    ).fetchone()
-
-    if me is None or not me["name"]:
-        flash("Fill in your profile first so we can find your matches.")
-        return redirect(url_for("edit_profile"))
-
-    if request.method == "POST":
-        wanted = request.form.get("relationship_type", "")
-        if wanted not in RELATIONSHIP_TYPES:
-            flash("Please choose what you're looking for.")
-        else:
-            return redirect(url_for("find_results", relationship_type=wanted))
-
-    return render_template(
-        "find.html",
-        relationship_types=RELATIONSHIP_TYPES,
-        current_choice=me["relationship_type"],
-    )
-
-
-@app.route("/find/results")
-@login_required
-def find_results():
-    """Step 2: three candidates who want the same kind of relationship."""
-    db = get_db()
-    wanted = request.args.get("relationship_type", "")
-    if wanted not in RELATIONSHIP_TYPES:
-        return redirect(url_for("find"))
-
-    me = db.execute(
-        "SELECT * FROM profiles WHERE user_id = ?", (session["user_id"],)
-    ).fetchone()
-    if me is None or not me["name"]:
-        flash("Fill in your profile first so we can find your matches.")
-        return redirect(url_for("edit_profile"))
-
-    # Only people after the same kind of relationship, and not already
-    # matched with me.
-    candidates = db.execute(
-        """
-        SELECT p.*, u.username FROM profiles p
-        JOIN users u ON u.id = p.user_id
-        WHERE p.user_id != ?
-          AND p.name != ''
-          AND p.relationship_type = ?
-          AND p.user_id NOT IN (
-              SELECT CASE WHEN user_a = ? THEN user_b ELSE user_a END
-              FROM matches WHERE ? IN (user_a, user_b)
-          )
-        """,
-        (session["user_id"], wanted, session["user_id"], session["user_id"]),
-    ).fetchall()
-
-    scored = []
-    for cand in candidates:
-        if not genders_compatible(me, cand):
-            continue
-        score, reasons = match_score(me, cand)
-        scored.append({"profile": cand, "score": score, "reasons": reasons})
-
-    scored.sort(key=lambda m: m["score"], reverse=True)
-
-    return render_template(
-        "find_results.html",
-        wanted=wanted,
-        options=scored[:MATCH_OPTION_COUNT],
-        total=len(scored),
-    )
-
-
-@app.route("/matches")
-@login_required
-def matches():
-    db = get_db()
-    me = db.execute(
-        "SELECT * FROM profiles WHERE user_id = ?", (session["user_id"],)
-    ).fetchone()
-
-    if me is None or not me["name"]:
-        flash("Fill in your profile first so we can find your matches.")
-        return redirect(url_for("edit_profile"))
-
-    candidates = db.execute(
-        """
-        SELECT p.*, u.username FROM profiles p
-        JOIN users u ON u.id = p.user_id
-        WHERE p.user_id != ? AND p.name != ''
-        """,
-        (session["user_id"],),
-    ).fetchall()
-
-    scored = []
-    for cand in candidates:
-        if not genders_compatible(me, cand):
-            continue
-        score, reasons = match_score(me, cand)
-        scored.append({"profile": cand, "score": score, "reasons": reasons})
-
-    scored.sort(key=lambda m: m["score"], reverse=True)
-
-    return render_template(
-        "matches.html",
-        top=scored[0] if scored else None,
-        others=scored[1:],
-    )
-
-
 def get_match_participants(match_id):
     """Return (match_row, [profile_a, profile_b]) or (None, None)."""
     db = get_db()
@@ -2697,38 +2555,6 @@ def match_decide(match_id):
     if wants_json:
         return match_state_payload(match, user_id)
     return redirect(url_for("chat", match_id=match_id))
-
-
-@app.route("/match/<int:other_id>", methods=["POST"])
-@login_required
-def create_match(other_id):
-    db = get_db()
-    me_id = session["user_id"]
-
-    if other_id == me_id:
-        flash("You can't match with yourself.")
-        return redirect(url_for("matches"))
-
-    other = db.execute(
-        "SELECT user_id, name FROM profiles WHERE user_id = ?", (other_id,)
-    ).fetchone()
-    if other is None:
-        flash("That profile does not exist.")
-        return redirect(url_for("matches"))
-
-    a, b = sorted((me_id, other_id))
-    existing = db.execute(
-        "SELECT id FROM matches WHERE user_a = ? AND user_b = ?", (a, b)
-    ).fetchone()
-    if existing:
-        return redirect(url_for("chat", match_id=existing["id"]))
-
-    new_id = db.insert_returning_id(
-        "INSERT INTO matches (user_a, user_b) VALUES (?, ?)", (a, b)
-    )
-    db.commit()
-    flash(f"It's a match! You and {other['name']} can chat now.")
-    return redirect(url_for("chat", match_id=new_id))
 
 
 @app.route("/chats")
@@ -3037,30 +2863,6 @@ def send_message(match_id):
         return {"message": message_dict(row)}
 
     return redirect(url_for("chat", match_id=match_id))
-
-
-@app.route("/browse")
-@login_required
-def browse():
-    profiles = get_db().execute(
-        """
-        SELECT p.*, u.username FROM profiles p
-        JOIN users u ON u.id = p.user_id
-        WHERE p.user_id != ? AND p.name != ''
-        ORDER BY p.updated_at DESC
-        """,
-        (session["user_id"],),
-    ).fetchall()
-
-    me = get_db().execute(
-        "SELECT * FROM profiles WHERE user_id = ?", (session["user_id"],)
-    ).fetchone()
-
-    return render_template(
-        "browse.html",
-        profiles=profiles,
-        profile_incomplete=(me is not None and me["name"] == ""),
-    )
 
 
 @app.route("/photo/<int:photo_id>")

@@ -1466,9 +1466,6 @@
     {% if current_user %}
       {% if current_user['is_admin'] %}<span class="tag">Admin</span>{% endif %}
       <a class="tab-dup" href="{{ url_for('live_search') }}">Live search</a>
-      <a href="{{ url_for('find') }}">Find a match</a>
-      <a href="{{ url_for('browse') }}">Browse</a>
-      <a href="{{ url_for('matches') }}">Matches</a>
       <a class="tab-dup" href="{{ url_for('chats') }}">Chats</a>
       <a class="tab-dup" href="{{ url_for('view_profile', user_id=current_user['id']) }}">Profile</a>
       {% if current_user['is_admin'] %}
@@ -1490,8 +1487,7 @@
   {% if current_user %}
     {#- which tab lights up: every search-ish route collapses onto Search -#}
     {% set ep = request.endpoint %}
-    {% set search_eps = ['live_search', 'search_criteria', 'search_waiting',
-                         'find', 'find_results', 'browse', 'matches'] %}
+    {% set search_eps = ['live_search', 'search_criteria', 'search_waiting'] %}
     {% set chat_eps = ['chats', 'chat'] %}
     {% set you_eps = ['view_profile', 'edit_profile'] %}
     <nav class="tabbar" aria-label="Primary">

@@ -54,8 +54,9 @@ in query strings are rewritten, so **write `?`, not `%s`**, in `db.execute(...)`
 Tables: `users` (+`is_bot`), `profiles`, `matches` (+`status`/`paired_at`/`decision_a`/
 `decision_b`/`ended_at`), `searches` (+`lat`/`lng`), `messages`, `photos`.
 
-`matches.status` is `'active'` by default — every `/find` match and pre-existing row is a
-permanent chat, unchanged. Only `try_pair()` writes `status='timed'` with `paired_at`,
+`matches.status` is `'active'` by default — pairing now only happens through live search
+(`try_pair()`), but the default keeps pre-existing rows a permanent chat, unchanged.
+`try_pair()` writes `status='timed'` with `paired_at`,
 which kicks off a computed lifecycle (`match_phase()`, `app.py:~2470`): 20s reveal → 5min
 timed chat → decision → `active` (both Continue) or `ended` (either Unmatch, or the grace
 window lapses). No background job — phases are derived from `paired_at` on each poll.
@@ -76,10 +77,12 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 | auth | `/register`, `/login`, `/logout` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
 | search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/status`, `/search/cancel`, `/search/filters/toggle`, `/search/filters/apply` |
-| find | `/find`, `/find/results` |
-| matches | `/matches`, `/match/<other_id>`, `/match/<id>/state`, `/match/<id>/decide` |
+| match lifecycle | `/match/<id>/state`, `/match/<id>/decide` |
 | chat | `/chats`, `/chat/<id>`, `…/messages`, `…/send` |
-| browse | `/browse` |
+
+`/find`, `/find/results`, `/matches` and `/browse` were removed — pairing happens only
+through live search now. `create_match()`, `match_score()` and `genders_compatible()`
+(the instant-pair and ranking helpers those routes used) went with them.
 
 ## Working rule
 
