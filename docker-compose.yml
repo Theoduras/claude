@@ -1,0 +1,43 @@
+# Postgres for local Velvet development.
+#
+# The app itself runs on the host (python app.py) — only the database lives in
+# a container, so editing code needs no rebuild. The credentials below are
+# deliberately the same as app.py's database_url() defaults, so a local run
+# needs no DATABASE_URL and no environment variables at all.
+#
+#   docker compose up -d      start Postgres in the background
+#   docker compose down       stop it (data survives)
+#   docker compose down -v    stop it and delete the data
+#
+# setup.ps1 / setup.sh do this for you, including waiting for the healthcheck.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: velvet-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: velvet
+      # Postgres re-reads these on every start; without an explicit locale the
+      # image picks one from the host and collation can differ between machines.
+      LANG: C.UTF-8
+    ports:
+      # Host-only bind: the demo ships a default admin password and an
+      # auto-login switch, so the database must not be reachable off-machine.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - velvet-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # The setup scripts block on this before seeding — app.py's connection
+      # pool gives up after 30s, so seeding a still-starting Postgres fails.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d velvet"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  velvet-pgdata:
+    name: velvet-pgdata

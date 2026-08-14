@@ -5,3 +5,6 @@ __pycache__
 **/__pycache__
 *.pyc
 *.db
+setup.ps1
+setup.sh
+docker-compose.yml

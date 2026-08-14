@@ -20,17 +20,24 @@ register an account and log in. Set AUTO_LOGIN=1 to skip the login page
 during local development and browse as admin automatically.
 """
 
+import hashlib
 import math
 import os
 import re
 import secrets
+import time
+from datetime import datetime as dt, timezone
 
+import requests
 import psycopg
+from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from flask import (
     Flask,
+    Response,
+    abort,
     flash,
     g,
     redirect,
@@ -47,31 +54,33 @@ app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
 
 
 def database_url():
-    """Build the Postgres connection string from the environment.
+    """Build the Postgres conninfo from the environment.
 
-    DATABASE_URL wins if set. Otherwise the parts are assembled, which is
-    what the Cloud Run deployment uses: INSTANCE_CONNECTION_NAME makes the
-    app connect over the Cloud SQL unix socket rather than TCP.
+    DATABASE_URL wins if set. Otherwise the parts are assembled with
+    make_conninfo, which quotes every value. Pasting them into a URL by hand
+    does not: a password containing "/" silently swallows the user, the
+    dbname and the port, and a base64 password hits that about half the time.
     """
     url = os.environ.get("DATABASE_URL")
     if url:
         return url
 
-    user = os.environ.get("DB_USER", "postgres")
-    password = os.environ.get("DB_PASS", "postgres")
-    name = os.environ.get("DB_NAME", "velvet")
+    parts = {
+        "user": os.environ.get("DB_USER", "postgres"),
+        "password": os.environ.get("DB_PASS", "postgres"),
+        "dbname": os.environ.get("DB_NAME", "velvet"),
+    }
 
     instance = os.environ.get("INSTANCE_CONNECTION_NAME")
     if instance:
         socket_dir = os.environ.get("DB_SOCKET_DIR", "/cloudsql")
-        return (
-            f"postgresql://{user}:{password}@/{name}"
-            f"?host={socket_dir}/{instance}"
-        )
+        return make_conninfo(**parts, host=f"{socket_dir}/{instance}")
 
-    host = os.environ.get("DB_HOST", "127.0.0.1")
-    port = os.environ.get("DB_PORT", "5432")
-    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+    return make_conninfo(
+        **parts,
+        host=os.environ.get("DB_HOST", "127.0.0.1"),
+        port=os.environ.get("DB_PORT", "5432"),
+    )
 
 
 # Each instance keeps a deliberately small pool: Cloud Run multiplies it by
@@ -134,6 +143,15 @@ CITY_COORDS = {
     "amsterdam": (52.370, 4.895),
     "basel": (47.560, 7.588),
     "salzburg": (47.809, 13.055),
+    "maastricht": (50.851, 5.691),
+    "rotterdam": (51.924, 4.478),
+    "utrecht": (52.092, 5.104),
+    "eindhoven": (51.441, 5.478),
+    "the hague": (52.070, 4.301),
+    "den haag": (52.070, 4.301),
+    "groningen": (53.219, 6.567),
+    "nijmegen": (51.812, 5.837),
+    "arnhem": (51.985, 5.899),
 }
 
 # Offered in the location picker, nicely cased.
@@ -141,9 +159,88 @@ CITY_CHOICES = [
     "Berlin", "Hamburg", "Munich", "Cologne", "Frankfurt", "Stuttgart",
     "Düsseldorf", "Leipzig", "Dresden", "Hannover", "Bremen", "Nuremberg",
     "Essen", "Dortmund", "Vienna", "Zurich", "Amsterdam", "Basel", "Salzburg",
+    "Maastricht", "Rotterdam", "Utrecht", "Eindhoven", "The Hague",
+    "Groningen", "Nijmegen", "Arnhem",
 ]
 
 RADIUS_MAX_KM = 500  # slider maximum; at the top it means "anywhere"
+
+# --- match lifecycle (live-search pairings only; /find stays instant) -----
+REVEAL_SECONDS = 20          # "it's a match" card before the chat opens
+TIMED_CHAT_SECONDS = 300     # 5 minutes to talk before a decision is forced
+DECISION_GRACE_SECONDS = 600  # no answer within 10 minutes counts as unmatch
+
+# What someone can say on their way out. Free text arrives under the
+# "custom" key; "" covers both "rather not say" and never having been
+# asked, so the ended screen reads the same way for either.
+DECLINE_REASON_MAX_CHARS = 240
+DECLINE_REASONS = {
+    "no_spark": "Not feeling a connection",
+    "too_far": "Too far away",
+    "no_flow": "The conversation didn't flow",
+    "different": "Looking for something different",
+    "quiet": "",
+}
+
+# --- photos -----------------------------------------------------------
+PHOTO_MAX_BYTES = 2 * 1024 * 1024
+PHOTO_MAX_PER_USER = 6
+PHOTO_ALLOWED_MIMES = {"image/jpeg", "image/png", "image/webp"}
+
+
+def sniff_image_mime(data):
+    """Identify an image by its magic bytes, never by the browser-supplied
+    Content-Type header — that header is client-controlled and trivially
+    spoofed. SVG is deliberately not supported: it can carry script that
+    would execute on this origin when served back."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def can_view_photos(owner_id, viewer_id, viewer_is_admin):
+    """Photos unlock only once both sides have pressed Continue — i.e. a
+    matches row exists between the two with status='active'. That is
+    exactly the same state resolve_match() writes, so this needs no
+    bookkeeping of its own."""
+    if viewer_id == owner_id or viewer_is_admin:
+        return True
+    a, b = sorted((owner_id, viewer_id))
+    row = get_db().execute(
+        "SELECT status FROM matches WHERE user_a = ? AND user_b = ?", (a, b)
+    ).fetchone()
+    return row is not None and row["status"] == "active"
+
+
+# --- profile auto-fill (random sample values, no API) ------------------
+SAMPLE_NAMES = ["Alex", "Sam", "Jordan", "Robin", "Casey", "Morgan", "Taylor", "Rowan"]
+SAMPLE_BIOS = [
+    "Coffee enthusiast who's always planning the next trip.",
+    "Enjoys long walks, good food, and even better conversation.",
+    "Spends most weekends outdoors, the rest catching up on films.",
+    "Firm believer that a good playlist fixes most problems.",
+]
+SAMPLE_WANTS = [
+    "Someone easy to talk to who's up for spontaneous plans.",
+    "A genuine connection built on honesty and a shared sense of humour.",
+    "Someone who's as curious about the world as I am.",
+]
+SAMPLE_NEEDS = [
+    "Honesty and good communication, above everything else.",
+    "Someone who makes time, even when life gets busy.",
+    "Kindness — to me and to everyone else around them.",
+]
+SAMPLE_INTERESTS = [
+    "music, travel, cooking", "hiking, photography, films", "yoga, reading, coffee",
+    "gaming, cycling, cooking",
+]
+SAMPLE_HOBBIES = [
+    "salsa dancing, yoga", "guitar, running", "sailing, painting", "climbing, chess",
+]
 
 RELATIONSHIP_TYPES = [
     "Long-term relationship",
@@ -189,6 +286,42 @@ PROFILE_FIELDS = [
 # Handled separately via request.form.getlist() — a checkbox group, not a
 # single value, so it doesn't fit the uniform PROFILE_FIELDS .get() loop.
 PREF_BODY_TYPES_FIELD = "pref_body_types"
+
+
+def sample_profile_data():
+    """Vocabulary for the profile-edit "Fill" buttons.
+
+    Picked client-side (see profile_edit.html) so a click is instant and
+    needs no round trip. Built entirely from constants that already exist
+    for the real form, plus the short SAMPLE_* sentence lists above, so
+    there is nothing here to keep in sync by hand.
+    """
+    return {
+        "name": SAMPLE_NAMES,
+        "age": {"min": 18, "max": 75},
+        "gender": GENDERS,
+        "seeking": SEEKING_OPTIONS,
+        "location": CITY_CHOICES,
+        "bio": SAMPLE_BIOS,
+        "interests": SAMPLE_INTERESTS,
+        "hobbies": SAMPLE_HOBBIES,
+        "wants": SAMPLE_WANTS,
+        "needs": SAMPLE_NEEDS,
+        "relationship_type": RELATIONSHIP_TYPES,
+        "height_cm": {"min": HEIGHT_MIN_CM, "max": HEIGHT_MAX_CM},
+        "body_type": BODY_TYPES,
+        "fitness_level": FITNESS_LEVELS,
+        "hair_color": HAIR_COLORS,
+        "eye_color": EYE_COLORS,
+        "tattoos": TATTOO_LEVELS,
+        "pref_height_min": {"min": HEIGHT_MIN_CM, "max": HEIGHT_MAX_CM},
+        "pref_height_max": {"min": HEIGHT_MIN_CM, "max": HEIGHT_MAX_CM},
+        "pref_body_types": BODY_TYPES,
+        "pref_fitness_level": FITNESS_LEVELS,
+        "pref_hair_color": HAIR_COLORS,
+        "pref_eye_color": EYE_COLORS,
+        "pref_tattoos": TATTOO_LEVELS,
+    }
 
 
 class Db:
@@ -244,8 +377,13 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Seeded demo members that auto-reply in chat (see seed_demo.py). Never
+    -- set by user-facing code.
+    is_bot BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_bot BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Case-insensitive uniqueness, the equivalent of SQLite's COLLATE NOCASE.
 -- An expression index rather than the citext extension, so no database
@@ -299,14 +437,32 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_hair_color TEXT NOT NULL DEFA
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_eye_color TEXT NOT NULL DEFAULT '';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_tattoos TEXT NOT NULL DEFAULT '';
 
+-- status default is 'active' so every pre-existing row (and every future
+-- /find "Match & chat" row, which never goes through try_pair) behaves as a
+-- permanent chat exactly as before. Only try_pair() writes 'timed'.
 CREATE TABLE IF NOT EXISTS matches (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_a BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     user_b BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'active',
+    paired_at TIMESTAMPTZ,
+    decision_a TEXT NOT NULL DEFAULT '',
+    decision_b TEXT NOT NULL DEFAULT '',
+    reason_a TEXT NOT NULL DEFAULT '',
+    reason_b TEXT NOT NULL DEFAULT '',
+    ended_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (user_a, user_b),
     CHECK (user_a < user_b)
 );
+
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS paired_at TIMESTAMPTZ;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS decision_a TEXT NOT NULL DEFAULT '';
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS decision_b TEXT NOT NULL DEFAULT '';
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS reason_a TEXT NOT NULL DEFAULT '';
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS reason_b TEXT NOT NULL DEFAULT '';
 
 -- One row per member currently looking for a live match.
 CREATE TABLE IF NOT EXISTS searches (
@@ -317,11 +473,49 @@ CREATE TABLE IF NOT EXISTS searches (
     relationship_type TEXT NOT NULL DEFAULT '',
     interests TEXT NOT NULL DEFAULT '',
     location TEXT NOT NULL DEFAULT '',
+    lat DOUBLE PRECISION,
+    lng DOUBLE PRECISION,
     radius_km INTEGER NOT NULL DEFAULT 500,
+    pref_height_min INTEGER,
+    pref_height_max INTEGER,
+    pref_body_types TEXT NOT NULL DEFAULT '',
+    pref_fitness_level TEXT NOT NULL DEFAULT '',
+    pref_hair_color TEXT NOT NULL DEFAULT '',
+    pref_eye_color TEXT NOT NULL DEFAULT '',
+    pref_tattoos TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'waiting',
     match_id BIGINT REFERENCES matches(id) ON DELETE SET NULL,
+    -- Each filter can be switched off without losing the value behind it, so
+    -- a searcher can widen their net and put it back afterwards. These govern
+    -- only this searcher's own side of the check: the other person's filters
+    -- still apply, which is why turning one off does not guarantee a match.
+    use_gender BOOLEAN NOT NULL DEFAULT TRUE,
+    use_age BOOLEAN NOT NULL DEFAULT TRUE,
+    use_relationship BOOLEAN NOT NULL DEFAULT TRUE,
+    use_distance BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Bring databases created before the per-filter toggles existed up to date.
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_gender BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_age BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_relationship BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_distance BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Bring searches created before the physical-trait step existed up to date.
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_height_min INTEGER;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_height_max INTEGER;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_body_types TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_fitness_level TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_hair_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_eye_color TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_tattoos TEXT NOT NULL DEFAULT '';
+
+-- Coordinates from the /api/places geocoder, used ahead of the CITY_COORDS
+-- fallback so distance filtering works for any city, not just the seeded
+-- list. Nullable: a free-typed or unrecognised location leaves these unset.
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
 
 -- The pairing pass scans waiting searchers.
 CREATE INDEX IF NOT EXISTS searches_status_idx ON searches (status);
@@ -336,6 +530,21 @@ CREATE TABLE IF NOT EXISTS messages (
 
 -- Serves the chat poll: "messages in this room newer than <id>".
 CREATE INDEX IF NOT EXISTS messages_match_id_idx ON messages (match_id, id);
+
+-- Photos are stored as bytes so they survive Cloud Run's ephemeral disk
+-- with no bucket, and so visibility can be a plain SQL check on the
+-- serving route (see /photo/<id>) rather than a static URL that bypasses
+-- auth entirely.
+CREATE TABLE IF NOT EXISTS photos (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    data BYTEA NOT NULL,
+    mime TEXT NOT NULL,
+    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS photos_user_id_idx ON photos (user_id, is_primary);
 """
 
 # Arbitrary but fixed keys for Postgres advisory locks. Any instance taking
@@ -487,9 +696,12 @@ def register():
                 flash("Welcome! Now set up your profile.")
                 return redirect(url_for("edit_profile"))
 
+        # Re-render with the username filled in: "that username is taken"
+        # shouldn't also cost you everything else you typed.
         flash(error)
+        return render_template("register.html", username=username)
 
-    return render_template("register.html")
+    return render_template("register.html", username="")
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -897,6 +1109,32 @@ def edit_profile():
         phys_error, phys = validate_physical(values)
         error = error or phys_error
 
+        # Photos: sniff magic bytes rather than trusting the browser's
+        # Content-Type, cap size and count. Validated up front so a bad
+        # upload doesn't half-save the rest of the profile.
+        uploads = []
+        primary_file = request.files.get("profile_picture")
+        extra_files = request.files.getlist("photos")
+        candidates = [(True, primary_file)] if primary_file and primary_file.filename else []
+        candidates += [(False, f) for f in extra_files if f and f.filename]
+        for is_primary, f in candidates:
+            data = f.read(PHOTO_MAX_BYTES + 1)
+            if len(data) > PHOTO_MAX_BYTES:
+                error = error or "Each photo must be under 2 MB."
+                break
+            mime = sniff_image_mime(data)
+            if mime is None or mime not in PHOTO_ALLOWED_MIMES:
+                error = error or "Photos must be JPEG, PNG, or WebP."
+                break
+            uploads.append((is_primary, mime, data))
+        else:
+            if uploads:
+                existing_count = db.execute(
+                    "SELECT COUNT(*) AS n FROM photos WHERE user_id = ?", (user_id,)
+                ).fetchone()["n"]
+                if existing_count + len(uploads) > PHOTO_MAX_PER_USER:
+                    error = error or f"You can have at most {PHOTO_MAX_PER_USER} photos."
+
         if error is None:
             db.execute(
                 """
@@ -925,6 +1163,13 @@ def edit_profile():
                     values["relationship_type"], user_id,
                 ),
             )
+            for is_primary, mime, data in uploads:
+                if is_primary:
+                    db.execute("UPDATE photos SET is_primary = FALSE WHERE user_id = ?", (user_id,))
+                db.insert_returning_id(
+                    "INSERT INTO photos (user_id, data, mime, is_primary) VALUES (?, ?, ?, ?)",
+                    (user_id, data, mime, is_primary),
+                )
             db.commit()
             flash("Profile saved.")
             return redirect(url_for("view_profile", user_id=user_id))
@@ -951,6 +1196,9 @@ def edit_profile():
         tattoo_levels=TATTOO_LEVELS,
         height_min=HEIGHT_MIN_CM,
         height_max=HEIGHT_MAX_CM,
+        sample_profile=sample_profile_data(),
+        photo_max_bytes=PHOTO_MAX_BYTES,
+        photo_max_per_user=PHOTO_MAX_PER_USER,
     )
 
 
@@ -970,10 +1218,25 @@ def view_profile(user_id):
         flash("That profile does not exist.")
         return redirect(url_for("browse"))
 
+    user = current_user()
+    can_view = can_view_photos(user_id, user["id"], user["is_admin"])
+    photos = (
+        get_db()
+        .execute(
+            "SELECT id, is_primary FROM photos WHERE user_id = ? ORDER BY is_primary DESC, id",
+            (user_id,),
+        )
+        .fetchall()
+        if can_view
+        else []
+    )
+
     return render_template(
         "profile_view.html",
         profile=row,
         is_own=(user_id == session["user_id"]),
+        can_view_photos=can_view,
+        photos=photos,
     )
 
 
@@ -1070,6 +1333,7 @@ def admin_new_profile():
         tattoo_levels=TATTOO_LEVELS,
         height_min=HEIGHT_MIN_CM,
         height_max=HEIGHT_MAX_CM,
+        sample_profile=sample_profile_data(),
     )
 
 
@@ -1134,22 +1398,85 @@ def distance_km(loc_a, loc_b):
     return 2 * 6371.0 * math.asin(math.sqrt(h))
 
 
+def search_coords(search):
+    """Coordinates for a `searches` row: the geocoded lat/lng when the
+    location was picked from /api/places suggestions, else the hardcoded
+    CITY_COORDS fallback. Lets distance filtering work for any city on
+    earth, not just the ~27 seeded ones.
+    """
+    lat, lng = search.get("lat"), search.get("lng")
+    if lat is not None and lng is not None:
+        return (lat, lng)
+    return city_coords(search.get("location"))
+
+
+def search_distance_km(s1, s2):
+    """Great-circle distance between two `searches` rows, or None."""
+    a, b = search_coords(s1), search_coords(s2)
+    if a is None or b is None:
+        return None
+
+    lat1, lon1 = map(math.radians, a)
+    lat2, lon2 = map(math.radians, b)
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 2 * 6371.0 * math.asin(math.sqrt(h))
+
+
+def physical_ok(searcher, candidate):
+    """True when a candidate's physical traits satisfy the searcher's step-3 filters.
+
+    Each filter only blocks when the searcher set it AND the candidate has a
+    value for that attribute — an unset filter or an unset candidate
+    attribute is treated as "no preference", same convention as gender/age.
+    """
+    h_min, h_max = searcher.get("pref_height_min"), searcher.get("pref_height_max")
+    if h_min is not None and h_max is not None and candidate.get("height_cm") is not None:
+        if not h_min <= candidate["height_cm"] <= h_max:
+            return False
+
+    body_types = (searcher.get("pref_body_types") or "").strip()
+    if body_types and candidate.get("body_type"):
+        if candidate["body_type"] not in body_types.split(","):
+            return False
+
+    for field in ("fitness_level", "hair_color", "eye_color", "tattoos"):
+        pref = searcher.get("pref_" + field)
+        val = candidate.get(field)
+        if pref and val and pref != val:
+            return False
+
+    return True
+
+
 def searches_compatible(s1, s2):
     """True when two live searches satisfy each other's criteria.
 
     Both directions must hold: each person's gender must be one the other
     is looking for, each person's age must fall inside the other's
-    requested range, and the distance between them must sit inside both
-    radii. Relationship type only blocks when both named one and they
+    requested range, each person's physical traits must satisfy the
+    other's step-3 filters, and the distance between them must sit inside
+    both radii. Relationship type only blocks when both named one and they
     differ. Unset fields are treated as "no preference".
+
+    Each side can also switch a filter off (searches.use_gender/use_age/
+    use_relationship/use_distance), which relaxes only that side's own
+    check — the other person's filter still applies, so disabling one
+    filter does not by itself guarantee a match. Missing keys (hand-built
+    dicts, pre-migration rows) default to "on" via .get(key, True), which
+    matches the column's own DEFAULT TRUE.
     """
 
     def gender_ok(searcher, candidate_gender):
+        if not searcher.get("use_gender", True):
+            return True
         if not searcher["seeking"] or not candidate_gender:
             return True
         return candidate_gender in SEEKING_MATCHES[searcher["seeking"]]
 
     def age_ok(searcher, candidate_age):
+        if not searcher.get("use_age", True):
+            return True
         if candidate_age is None:
             return True
         return searcher["age_min"] <= candidate_age <= searcher["age_max"]
@@ -1158,18 +1485,25 @@ def searches_compatible(s1, s2):
         return False
     if not (age_ok(s1, s2["age"]) and age_ok(s2, s1["age"])):
         return False
+    if not (physical_ok(s1, s2) and physical_ok(s2, s1)):
+        return False
     if (
-        s1["relationship_type"]
+        s1.get("use_relationship", True)
+        and s2.get("use_relationship", True)
+        and s1["relationship_type"]
         and s2["relationship_type"]
         and s1["relationship_type"] != s2["relationship_type"]
     ):
         return False
 
     # Distance must fit inside both people's radius. An unknown city or a
-    # radius at the maximum means "anywhere".
-    gap = distance_km(s1["location"], s2["location"])
+    # radius at the maximum means "anywhere". A side with use_distance off
+    # is simply skipped from the per-searcher loop below.
+    gap = search_distance_km(s1, s2)
     if gap is not None:
         for search in (s1, s2):
+            if not search.get("use_distance", True):
+                continue
             if search["radius_km"] < RADIUS_MAX_KM and gap > search["radius_km"]:
                 return False
     return True
@@ -1191,7 +1525,7 @@ def try_pair(user_id):
     try:
         mine = db.execute(
             """
-            SELECT s.*, p.gender, p.age FROM searches s
+            SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
             WHERE s.user_id = ?
             """,
@@ -1210,7 +1544,7 @@ def try_pair(user_id):
 
         others = db.execute(
             """
-            SELECT s.*, p.gender, p.age FROM searches s
+            SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
             WHERE s.status = 'waiting' AND s.user_id != ?
             ORDER BY s.created_at
@@ -1240,8 +1574,13 @@ def try_pair(user_id):
         if existing:
             matched_id = existing["id"]
         else:
+            # status='timed' + paired_at kicks off the reveal/timed-chat/
+            # decision lifecycle in match_phase() — only live-search pairs
+            # go through it; /find's create_match() leaves the 'active'
+            # default alone.
             matched_id = db.insert_returning_id(
-                "INSERT INTO matches (user_a, user_b) VALUES (?, ?)", (a, b)
+                "INSERT INTO matches (user_a, user_b, status, paired_at) VALUES (?, ?, 'timed', NOW())",
+                (a, b),
             )
 
         db.execute(
@@ -1313,6 +1652,21 @@ def search_criteria():
         interests = request.form.get("interests", "").strip()
         location = request.form.get("location", "").strip()
 
+        # Set only when the combobox in step 2 resolved a geocoder pick; the
+        # JS clears these two fields the moment the user free-types after
+        # selecting, so a stale coordinate can never be paired with a
+        # different typed city.
+        lat = lng = None
+        raw_lat = request.form.get("location_lat", "").strip()
+        raw_lng = request.form.get("location_lng", "").strip()
+        if raw_lat and raw_lng:
+            try:
+                cand_lat, cand_lng = float(raw_lat), float(raw_lng)
+                if -90 <= cand_lat <= 90 and -180 <= cand_lng <= 180:
+                    lat, lng = cand_lat, cand_lng
+            except ValueError:
+                pass
+
         error = None
         if seeking and seeking not in SEEKING_OPTIONS:
             error = "Please choose who you're looking for."
@@ -1331,6 +1685,15 @@ def search_criteria():
             elif not 1 <= radius_km <= RADIUS_MAX_KM:
                 error = f"Radius must be between 1 and {RADIUS_MAX_KM} km."
 
+        phys = {}
+        if error is None:
+            phys_values = dict(request.form)
+            phys_values[PREF_BODY_TYPES_FIELD] = ",".join(
+                request.form.getlist(PREF_BODY_TYPES_FIELD)
+            )
+            phys_error, phys = validate_physical(phys_values)
+            error = error or phys_error
+
         if error:
             flash(error)
         else:
@@ -1338,8 +1701,11 @@ def search_criteria():
                 """
                 INSERT INTO searches
                     (user_id, seeking, age_min, age_max, relationship_type,
-                     interests, location, radius_km, status, match_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, NOW())
+                     interests, location, lat, lng, radius_km,
+                     pref_height_min, pref_height_max, pref_body_types,
+                     pref_fitness_level, pref_hair_color, pref_eye_color,
+                     pref_tattoos, status, match_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', NULL, NOW())
                 ON CONFLICT(user_id) DO UPDATE SET
                     seeking = excluded.seeking,
                     age_min = excluded.age_min,
@@ -1347,14 +1713,27 @@ def search_criteria():
                     relationship_type = excluded.relationship_type,
                     interests = excluded.interests,
                     location = excluded.location,
+                    lat = excluded.lat,
+                    lng = excluded.lng,
                     radius_km = excluded.radius_km,
+                    pref_height_min = excluded.pref_height_min,
+                    pref_height_max = excluded.pref_height_max,
+                    pref_body_types = excluded.pref_body_types,
+                    pref_fitness_level = excluded.pref_fitness_level,
+                    pref_hair_color = excluded.pref_hair_color,
+                    pref_eye_color = excluded.pref_eye_color,
+                    pref_tattoos = excluded.pref_tattoos,
                     status = 'waiting',
                     match_id = NULL,
                     created_at = NOW()
                 """,
                 (
                     user_id, seeking, age_min, age_max, wanted, interests,
-                    location, radius_km,
+                    location, lat, lng, radius_km,
+                    phys["pref_height_min"], phys["pref_height_max"],
+                    phys[PREF_BODY_TYPES_FIELD], phys["pref_fitness_level"],
+                    phys["pref_hair_color"], phys["pref_eye_color"],
+                    phys["pref_tattoos"],
                 ),
             )
             db.commit()
@@ -1373,77 +1752,435 @@ def search_criteria():
         seeking_options=SEEKING_OPTIONS,
         city_choices=CITY_CHOICES,
         radius_max=RADIUS_MAX_KM,
+        body_types=BODY_TYPES,
+        fitness_levels=FITNESS_LEVELS,
+        hair_colors=HAIR_COLORS,
+        eye_colors=EYE_COLORS,
+        tattoo_levels=TATTOO_LEVELS,
+        height_min=HEIGHT_MIN_CM,
+        height_max=HEIGHT_MAX_CM,
     )
 
 
-def search_blockers(user_id):
-    """Explain why a waiting search hasn't matched: what each rule rejects.
+# Small TTL cache so repeated keystrokes (and repeated users typing the same
+# city) don't each hit the geocoder. Capped so a burst of unique queries
+# can't grow this unboundedly across a long-running instance.
+_PLACES_CACHE = {}
+_PLACES_CACHE_TTL = 600
+_PLACES_CACHE_MAX = 500
 
-    Returns counts of pool members that would match if a single filter were
-    relaxed, so the waiting page can suggest a concrete fix.
+
+@app.route("/api/places")
+@login_required
+def api_places():
+    """Typeahead suggestions for the location field, backed by Photon
+    (an OSM geocoder built for per-keystroke autocomplete, unlike Nominatim
+    which asks callers not to hit it that way).
+
+    Always returns 200 with a (possibly empty) list — a geocoder outage or
+    timeout must not break the location field, which still accepts free
+    text with the CITY_CHOICES datalist as an offline fallback.
+    """
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return {"results": []}
+
+    key = q.lower()
+    cached = _PLACES_CACHE.get(key)
+    if cached and time.time() - cached[0] < _PLACES_CACHE_TTL:
+        return {"results": cached[1]}
+
+    results = []
+    try:
+        resp = requests.get(
+            "https://photon.komoot.io/api/",
+            params={"q": q, "limit": 6, "lang": "en"},
+            headers={"User-Agent": "Velvet dating app (dev) - location autocomplete"},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        place_kinds = {"city", "town", "village", "hamlet", "state", "country", "county"}
+        for feat in payload.get("features", []):
+            props = feat.get("properties", {})
+            if props.get("osm_value") not in place_kinds and props.get("osm_key") != "place":
+                continue
+            coords = (feat.get("geometry") or {}).get("coordinates")
+            if not coords or len(coords) != 2:
+                continue
+            lng, lat = coords
+            parts = [props.get("name")]
+            for extra in ("state", "country"):
+                if props.get(extra) and props[extra] not in parts:
+                    parts.append(props[extra])
+            label = ", ".join(p for p in parts if p)
+            if label:
+                results.append({"label": label, "lat": lat, "lng": lng})
+    except (requests.RequestException, ValueError):
+        results = []
+
+    if len(_PLACES_CACHE) > _PLACES_CACHE_MAX:
+        _PLACES_CACHE.clear()
+    _PLACES_CACHE[key] = (time.time(), results)
+    return {"results": results}
+
+
+@app.route("/search/preview", methods=["POST"])
+@login_required
+def search_preview():
+    """Live pool readout for wizard step 4 — how many people fit the
+    criteria you're about to save, plus suggestions if the answer is zero.
+
+    Writes nothing: builds a synthetic search row in the exact shape
+    searches_compatible() expects and reuses the existing engine as-is, so
+    the count and suggestions here are guaranteed consistent with what
+    /search/waiting will show after you actually start searching.
+    """
+    me = require_profile()
+    if me is None:
+        return {"error": "profile incomplete"}, 400
+
+    wanted = request.form.get("relationship_type", "")
+    if wanted not in RELATIONSHIP_TYPES:
+        return {"error": "invalid relationship_type"}, 400
+
+    seeking = request.form.get("seeking", "")
+    location = request.form.get("location", "").strip()
+    try:
+        lat = float(request.form.get("location_lat", "")) if request.form.get("location_lat") else None
+        lng = float(request.form.get("location_lng", "")) if request.form.get("location_lng") else None
+    except ValueError:
+        lat = lng = None
+
+    try:
+        age_min = int(request.form.get("age_min", 18))
+        age_max = int(request.form.get("age_max", 120))
+        radius_km = int(request.form.get("radius_km", RADIUS_MAX_KM))
+    except ValueError:
+        return {"error": "invalid age or radius"}, 400
+
+    phys_values = dict(request.form)
+    phys_values[PREF_BODY_TYPES_FIELD] = ",".join(request.form.getlist(PREF_BODY_TYPES_FIELD))
+    _phys_error, phys = validate_physical(phys_values)
+
+    mine = {
+        "user_id": session["user_id"],
+        "seeking": seeking,
+        "age_min": age_min,
+        "age_max": age_max,
+        "relationship_type": wanted,
+        "location": location,
+        "lat": lat,
+        "lng": lng,
+        "radius_km": radius_km,
+        "use_gender": True,
+        "use_age": True,
+        "use_relationship": True,
+        "use_distance": True,
+        "gender": me["gender"],
+        "age": me["age"],
+        "height_cm": me["height_cm"],
+        "body_type": me["body_type"],
+        "fitness_level": me["fitness_level"],
+        "hair_color": me["hair_color"],
+        "eye_color": me["eye_color"],
+        "tattoos": me["tattoos"],
+        "pref_height_min": phys["pref_height_min"],
+        "pref_height_max": phys["pref_height_max"],
+        "pref_body_types": phys[PREF_BODY_TYPES_FIELD],
+        "pref_fitness_level": phys["pref_fitness_level"],
+        "pref_hair_color": phys["pref_hair_color"],
+        "pref_eye_color": phys["pref_eye_color"],
+        "pref_tattoos": phys["pref_tattoos"],
+    }
+
+    others = get_db().execute(
+        """
+        SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
+        JOIN profiles p ON p.user_id = s.user_id
+        WHERE s.status = 'waiting' AND s.user_id != ?
+        """,
+        (session["user_id"],),
+    ).fetchall()
+    others = [dict(o) for o in others]
+
+    blockers = search_blockers(mine, others)
+    suggestions = []
+    if blockers.get("age_suggestion"):
+        suggestions.append({"key": "age", **blockers["age_suggestion"]})
+    if blockers.get("distance_suggestion"):
+        suggestions.append({"key": "distance", **blockers["distance_suggestion"]})
+    for rs in blockers.get("relationship_suggestions", [])[:1]:
+        suggestions.append({"key": "relationship", **rs})
+    for gs in blockers.get("gender_suggestions", [])[:1]:
+        suggestions.append({"key": "gender", **gs})
+
+    return {
+        "total_waiting": len(others),
+        "compatible_count": blockers.get("current_count", 0),
+        "suggestions": suggestions,
+    }
+
+
+def _minimal_age_suggestion(mine, others):
+    """Smallest age-range widening that admits at least one waiting person.
+
+    For each candidate, the minimal range that would include them is
+    (min(my_lo, their_age), max(my_hi, their_age)) — widening any less
+    still excludes them, so this is the least possible change per
+    candidate. The smallest such span across all candidates is reported,
+    but only if it is verified compatible on every OTHER filter too, via
+    a real searches_compatible() call rather than by assumption.
+    """
+    best = None
+    for o in others:
+        cand_age = o["age"]
+        if cand_age is None:
+            continue
+        lo = min(mine["age_min"], cand_age)
+        hi = max(mine["age_max"], cand_age)
+        if lo == mine["age_min"] and hi == mine["age_max"]:
+            continue  # already inside range; some other filter is blocking them
+        trial = dict(mine)
+        trial["age_min"], trial["age_max"] = lo, hi
+        if not searches_compatible(trial, o):
+            continue
+        span = hi - lo
+        if best is None or span < best[0]:
+            best = (span, lo, hi)
+
+    if best is None:
+        return None
+    _, lo, hi = best
+    trial = dict(mine)
+    trial["age_min"], trial["age_max"] = lo, hi
+    count = sum(1 for o in others if searches_compatible(trial, o))
+    return {"age_min": lo, "age_max": hi, "count": count}
+
+
+def _minimal_distance_suggestion(mine, others):
+    """Smallest radius that admits at least one waiting person, verified
+    the same way as the age suggestion above."""
+    best = None
+    for o in others:
+        gap = search_distance_km(mine, o)
+        if gap is None or gap <= mine["radius_km"]:
+            continue
+        radius = min(math.ceil(gap), RADIUS_MAX_KM)
+        trial = dict(mine)
+        trial["radius_km"] = radius
+        if not searches_compatible(trial, o):
+            continue
+        if best is None or radius < best:
+            best = radius
+
+    if best is None:
+        return None
+    trial = dict(mine)
+    trial["radius_km"] = best
+    count = sum(1 for o in others if searches_compatible(trial, o))
+    return {"radius_km": best, "count": count}
+
+
+def _relationship_suggestions(mine, others):
+    """Which other relationship types, if switched to, would open up
+    matches — each verified through searches_compatible(), most people
+    admitted first."""
+    results, seen = [], set()
+    for o in others:
+        rt = o["relationship_type"]
+        if not rt or rt == mine["relationship_type"] or rt in seen:
+            continue
+        seen.add(rt)
+        trial = dict(mine)
+        trial["relationship_type"] = rt
+        count = sum(1 for x in others if searches_compatible(trial, x))
+        if count:
+            results.append({"relationship_type": rt, "count": count})
+    results.sort(key=lambda r: -r["count"])
+    return results
+
+
+def _gender_suggestions(mine, others):
+    """Which "looking for" options, if switched to, would open up
+    matches, same verification and ordering as relationship."""
+    results = []
+    for opt in SEEKING_OPTIONS:
+        if opt == mine["seeking"]:
+            continue
+        trial = dict(mine)
+        trial["seeking"] = opt
+        count = sum(1 for o in others if searches_compatible(trial, o))
+        if count:
+            results.append({"seeking": opt, "count": count})
+    results.sort(key=lambda r: -r["count"])
+    return results
+
+
+def _search_pool(user_id):
+    """Return (mine, others) as dicts, or (None, []) if not searching.
+
+    others is every other waiting searcher, joined with the profile fields
+    searches_compatible() needs (gender, age).
     """
     db = get_db()
     mine = db.execute(
         """
-        SELECT s.*, p.gender, p.age FROM searches s
+        SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
         WHERE s.user_id = ?
         """,
         (user_id,),
     ).fetchone()
     if mine is None:
-        return {}
+        return None, []
 
     others = db.execute(
         """
-        SELECT s.*, p.gender, p.age FROM searches s
+        SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
         WHERE s.status = 'waiting' AND s.user_id != ?
         """,
         (user_id,),
     ).fetchall()
+    return dict(mine), [dict(o) for o in others]
+
+
+def search_blockers(mine, others):
+    """Explain why a waiting search hasn't matched, filter by filter.
+
+    Returns pool size, a per-filter "if you turned this off, N more people
+    would fit" count (computed by actually disabling that use_* flag, so
+    it is exactly what the toggle button would do), and a concrete
+    suggested value for each filter that is currently blocking someone —
+    every suggestion verified against the pool through searches_compatible(),
+    never assumed.
+    """
+    if mine is None:
+        return {}
 
     def relaxed(**overrides):
         loosened = dict(mine)
         loosened.update(overrides)
         return sum(1 for o in others if searches_compatible(loosened, o))
 
+    current_count = sum(1 for o in others if searches_compatible(mine, o))
+
     return {
         "pool": len(others),
-        "if_any_distance": relaxed(radius_km=RADIUS_MAX_KM),
-        "if_any_age": relaxed(age_min=18, age_max=120),
-        "if_any_connection": relaxed(relationship_type=""),
-        "if_any_gender": relaxed(seeking=""),
-        # When no single change is enough, say what dropping every filter
-        # except gender would give.
+        "current_count": current_count,
+        "if_any_gender": relaxed(use_gender=False),
+        "if_any_age": relaxed(use_age=False),
+        "if_any_connection": relaxed(use_relationship=False),
+        "if_any_distance": relaxed(use_distance=False),
         "if_all_relaxed": relaxed(
-            radius_km=RADIUS_MAX_KM, age_min=18, age_max=120, relationship_type=""
+            use_gender=False, use_age=False, use_relationship=False, use_distance=False
         ),
+        "age_suggestion": _minimal_age_suggestion(mine, others),
+        "distance_suggestion": _minimal_distance_suggestion(mine, others),
+        "relationship_suggestions": _relationship_suggestions(mine, others),
+        "gender_suggestions": _gender_suggestions(mine, others),
     }
+
+
+def search_filter_rows(mine, others, blockers):
+    """One dict per filter parameter, for a uniform template loop.
+
+    Each row: key, label, value_text, enabled (None when not toggleable),
+    constrains (does this filter currently reject someone?), note (an
+    honest caveat, if any), and suggestion (the concrete fix, if any).
+    Interests is included but is NOT a filter — searches_compatible()
+    never reads it, it only breaks ties in try_pair() — so it is shown
+    read-only with a note saying exactly that.
+    """
+    rows = []
+
+    rows.append({
+        "key": "gender",
+        "label": "Who I'm looking for",
+        "value_text": mine["seeking"] or "Anyone",
+        "enabled": mine.get("use_gender", True),
+        "constrains": blockers["if_any_gender"] > blockers["current_count"],
+        "note": None,
+        "suggestion": blockers["gender_suggestions"][0]
+            if blockers["gender_suggestions"] else None,
+    })
+
+    rows.append({
+        "key": "age",
+        "label": "Age range",
+        "value_text": f"{mine['age_min']}–{mine['age_max']}",
+        "enabled": mine.get("use_age", True),
+        "constrains": blockers["if_any_age"] > blockers["current_count"],
+        "note": None,
+        "suggestion": blockers["age_suggestion"],
+    })
+
+    rows.append({
+        "key": "relationship",
+        "label": "Connection",
+        "value_text": mine["relationship_type"] or "Anything",
+        "enabled": mine.get("use_relationship", True),
+        "constrains": blockers["if_any_connection"] > blockers["current_count"],
+        "note": None,
+        "suggestion": blockers["relationship_suggestions"][0]
+            if blockers["relationship_suggestions"] else None,
+    })
+
+    if not mine["location"]:
+        distance_value = "Anywhere"
+        distance_note = None
+    elif mine["radius_km"] >= RADIUS_MAX_KM:
+        distance_value = f"{mine['location']} · any distance"
+        distance_note = None
+    else:
+        distance_value = f"{mine['location']} · within {mine['radius_km']} km"
+        distance_note = None
+    if mine["location"] and search_coords(mine) is None:
+        distance_note = "We don't recognise this city, so distance isn't being applied."
+    rows.append({
+        "key": "distance",
+        "label": "Distance",
+        "value_text": distance_value,
+        "enabled": mine.get("use_distance", True),
+        "constrains": blockers["if_any_distance"] > blockers["current_count"],
+        "note": distance_note,
+        "suggestion": blockers["distance_suggestion"],
+    })
+
+    rows.append({
+        "key": "interests",
+        "label": "Interests",
+        "value_text": mine["interests"] or "None listed",
+        "enabled": None,
+        "constrains": False,
+        "note": "Not a filter — only used to rank who you're paired with first.",
+        "suggestion": None,
+    })
+
+    return rows
 
 
 @app.route("/search/waiting")
 @login_required
 def search_waiting():
-    row = get_db().execute(
-        "SELECT * FROM searches WHERE user_id = ?", (session["user_id"],)
-    ).fetchone()
+    user_id = session["user_id"]
+    mine, others = _search_pool(user_id)
 
-    if row is None or row["status"] == "cancelled":
+    if mine is None or mine["status"] == "cancelled":
         return redirect(url_for("live_search"))
-    if row["status"] == "matched" and row["match_id"]:
-        return redirect(url_for("chat", match_id=row["match_id"]))
+    if mine["status"] == "matched" and mine["match_id"]:
+        return redirect(url_for("chat", match_id=mine["match_id"]))
 
-    waiting_count = get_db().execute(
-        "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
-    ).fetchone()["n"]
+    blockers = search_blockers(mine, others)
 
     return render_template(
         "search_waiting.html",
-        search=row,
-        waiting=waiting_count,
+        search=mine,
+        waiting=len(others),
         radius_max=RADIUS_MAX_KM,
-        blockers=search_blockers(session["user_id"]),
+        blockers=blockers,
+        filter_rows=search_filter_rows(mine, others, blockers),
     )
 
 
@@ -1487,6 +2224,93 @@ def search_cancel():
     db.commit()
     flash("Search stopped.")
     return redirect(url_for("live_search"))
+
+
+# Whitelisted so the toggle route can build SQL identifiers from a request
+# value without ever interpolating the value itself — only the mapped
+# column name (one of these four fixed strings) reaches the query.
+FILTER_TOGGLE_COLUMNS = {
+    "gender": "use_gender",
+    "age": "use_age",
+    "relationship": "use_relationship",
+    "distance": "use_distance",
+}
+
+
+@app.route("/search/filters/toggle", methods=["POST"])
+@login_required
+def search_filters_toggle():
+    """Flip one filter on/off without touching the value behind it."""
+    user_id = session["user_id"]
+    column = FILTER_TOGGLE_COLUMNS.get(request.form.get("filter", ""))
+    if column is None:
+        flash("Unknown filter.")
+        return redirect(url_for("search_waiting"))
+
+    db = get_db()
+    db.execute(
+        f"UPDATE searches SET {column} = NOT {column} "
+        "WHERE user_id = ? AND status = 'waiting'",
+        (user_id,),
+    )
+    db.commit()
+    # Disabling a filter can immediately make an existing waiting searcher
+    # compatible, so retry pairing now rather than waiting for the next poll.
+    try_pair(user_id)
+    return redirect(url_for("search_waiting"))
+
+
+@app.route("/search/filters/apply", methods=["POST"])
+@login_required
+def search_filters_apply():
+    """Apply the current suggested fix for one filter.
+
+    The suggestion is recomputed here from the live pool rather than
+    trusted from the submitted form, so a stale page can't write a value
+    that no longer helps (or never did).
+    """
+    user_id = session["user_id"]
+    key = request.form.get("filter", "")
+
+    mine, others = _search_pool(user_id)
+    if mine is None or mine["status"] != "waiting":
+        return redirect(url_for("search_waiting"))
+    blockers = search_blockers(mine, others)
+
+    db = get_db()
+    if key == "age" and blockers["age_suggestion"]:
+        sug = blockers["age_suggestion"]
+        db.execute(
+            "UPDATE searches SET age_min = ?, age_max = ? "
+            "WHERE user_id = ? AND status = 'waiting'",
+            (sug["age_min"], sug["age_max"], user_id),
+        )
+    elif key == "distance" and blockers["distance_suggestion"]:
+        sug = blockers["distance_suggestion"]
+        db.execute(
+            "UPDATE searches SET radius_km = ? WHERE user_id = ? AND status = 'waiting'",
+            (sug["radius_km"], user_id),
+        )
+    elif key == "relationship" and blockers["relationship_suggestions"]:
+        sug = blockers["relationship_suggestions"][0]
+        db.execute(
+            "UPDATE searches SET relationship_type = ? "
+            "WHERE user_id = ? AND status = 'waiting'",
+            (sug["relationship_type"], user_id),
+        )
+    elif key == "gender" and blockers["gender_suggestions"]:
+        sug = blockers["gender_suggestions"][0]
+        db.execute(
+            "UPDATE searches SET seeking = ? WHERE user_id = ? AND status = 'waiting'",
+            (sug["seeking"], user_id),
+        )
+    else:
+        flash("That suggestion is no longer available — refresh and try again.")
+        return redirect(url_for("search_waiting"))
+
+    db.commit()
+    try_pair(user_id)
+    return redirect(url_for("search_waiting"))
 
 
 @app.route("/find", methods=["GET", "POST"])
@@ -1613,7 +2437,7 @@ def get_match_participants(match_id):
     profiles = [
         db.execute(
             """
-            SELECT p.*, u.username FROM profiles p
+            SELECT p.*, u.username, u.is_bot FROM profiles p
             JOIN users u ON u.id = p.user_id
             WHERE p.user_id = ?
             """,
@@ -1622,6 +2446,220 @@ def get_match_participants(match_id):
         for uid in (match["user_a"], match["user_b"])
     ]
     return match, profiles
+
+
+# --- match lifecycle: reveal -> timed chat -> decision -----------------
+#
+# Only try_pair() ever writes status='timed'; every pre-existing row and
+# every /find "Match & chat" row keeps the 'active' default and behaves
+# exactly as before. Phases are computed from paired_at rather than stored,
+# so there is no background job advancing them — each poll (or the /decide
+# POST) calls resolve_match() to persist a phase once it becomes terminal.
+
+def match_phase(match, now=None):
+    """Return 'reveal' | 'timed' | 'deciding' | 'active' | 'ended'."""
+    if match["status"] in ("active", "ended"):
+        return match["status"]
+
+    paired_at = match["paired_at"]
+    if paired_at is None:
+        # Shouldn't happen for status='timed', but fail toward "active"
+        # rather than stranding the chat behind a countdown with no anchor.
+        return "active"
+
+    now = now or dt.now(timezone.utc)
+    elapsed = (now - paired_at).total_seconds()
+
+    if elapsed < REVEAL_SECONDS:
+        return "reveal"
+    if elapsed < REVEAL_SECONDS + TIMED_CHAT_SECONDS:
+        return "timed"
+    # Past the grace window this is really "ended" (resolve_match() will
+    # persist that on the next poll/decide call) but until then it still
+    # reads as "deciding" — a match with no status write yet is not active.
+    return "deciding"
+
+
+def resolve_match(match_id):
+    """Advance a timed match to its terminal state if one is now due.
+
+    Both 'continue' -> active. Either 'unmatch' -> ended. Grace window
+    elapsed with a decision still missing -> ended (auto-unmatch). A bot
+    participant always auto-continues once the human has decided or the
+    chat has locked, so a lifecycle can be exercised solo against a seeded
+    member. Returns the (possibly updated) match row.
+    """
+    db = get_db()
+    match = db.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
+    if match is None or match["status"] in ("active", "ended"):
+        return match
+
+    now = dt.now(timezone.utc)
+    phase = match_phase(match, now)
+
+    # An outcome both sides have already settled doesn't need the clock.
+    # Both pressed Continue at 0:40, or someone left the room early — making
+    # anyone watch four more minutes of a timer whose result is decided is
+    # theatre. These two run before the phase guard; everything below it
+    # (bot auto-continue, the lapsed window) still belongs to 'deciding'.
+    settled = None
+    if "unmatch" in (match["decision_a"], match["decision_b"]):
+        settled = "ended"
+    elif match["decision_a"] == "continue" and match["decision_b"] == "continue":
+        settled = "active"
+
+    if settled:
+        db.execute(
+            "UPDATE matches SET status = ?, "
+            "ended_at = CASE WHEN ? = 'ended' THEN NOW() ELSE ended_at END "
+            "WHERE id = ?",
+            (settled, settled, match_id),
+        )
+        db.commit()
+        return db.execute(
+            "SELECT * FROM matches WHERE id = ?", (match_id,)
+        ).fetchone()
+
+    if phase not in ("deciding",):
+        return match
+
+    users = db.execute(
+        "SELECT id, is_bot FROM users WHERE id IN (?, ?)",
+        (match["user_a"], match["user_b"]),
+    ).fetchall()
+    is_bot = {u["id"]: u["is_bot"] for u in users}
+
+    decision_a, decision_b = match["decision_a"], match["decision_b"]
+    if is_bot.get(match["user_a"]) and not decision_a:
+        decision_a = "continue"
+    if is_bot.get(match["user_b"]) and not decision_b:
+        decision_b = "continue"
+
+    grace_over = (now - match["paired_at"]).total_seconds() >= (
+        REVEAL_SECONDS + TIMED_CHAT_SECONDS + DECISION_GRACE_SECONDS
+    )
+
+    # An unmatch from either side was already handled above, so the only
+    # outcomes left here are a bot's auto-continue completing the pair, or
+    # nobody answering in time.
+    new_status = None
+    if decision_a == "continue" and decision_b == "continue":
+        new_status = "active"
+    elif grace_over:
+        new_status = "ended"  # no decision from someone within the window
+
+    if decision_a != match["decision_a"] or decision_b != match["decision_b"]:
+        db.execute(
+            "UPDATE matches SET decision_a = ?, decision_b = ? WHERE id = ?",
+            (decision_a, decision_b, match_id),
+        )
+
+    if new_status:
+        db.execute(
+            "UPDATE matches SET status = ?, ended_at = CASE WHEN ? = 'ended' THEN NOW() ELSE ended_at END WHERE id = ?",
+            (new_status, new_status, match_id),
+        )
+
+    db.commit()
+    return db.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
+
+
+def match_state_payload(match, user_id):
+    """JSON body for /match/<id>/state, polled by the chat page."""
+    now = dt.now(timezone.utc)
+    phase = match_phase(match, now)
+    my_col, their_col = ("decision_a", "decision_b") if user_id == match["user_a"] \
+        else ("decision_b", "decision_a")
+    my_reason, their_reason = ("reason_a", "reason_b") if user_id == match["user_a"] \
+        else ("reason_b", "reason_a")
+
+    seconds_left = None
+    if match["paired_at"] is not None:
+        elapsed = (now - match["paired_at"]).total_seconds()
+        if phase == "reveal":
+            seconds_left = max(0, round(REVEAL_SECONDS - elapsed))
+        elif phase == "timed":
+            seconds_left = max(0, round(REVEAL_SECONDS + TIMED_CHAT_SECONDS - elapsed))
+        elif phase == "deciding":
+            # The deciding screen states its own deadline, so it needs the
+            # third branch — without it the countdown has no number to show.
+            seconds_left = max(0, round(
+                REVEAL_SECONDS + TIMED_CHAT_SECONDS + DECISION_GRACE_SECONDS - elapsed
+            ))
+
+    return {
+        "phase": phase,
+        "seconds_left": seconds_left,
+        "locked": phase not in ("timed", "active"),
+        "my_decision": match[my_col] or None,
+        "their_decision": match[their_col] or None,
+        "my_reason": match[my_reason] or None,
+        "their_reason": match[their_reason] or None,
+        "chat_url": url_for("chat", match_id=match["id"]),
+    }
+
+
+@app.route("/match/<int:match_id>/state")
+@login_required
+def match_state(match_id):
+    match, _ = get_match_participants(match_id)
+    user_id = session["user_id"]
+    if match is None:
+        return {"error": "not found"}, 404
+    if user_id not in (match["user_a"], match["user_b"]):
+        return {"error": "forbidden"}, 403
+
+    match = resolve_match(match_id) or match
+    return match_state_payload(match, user_id)
+
+
+@app.route("/match/<int:match_id>/decide", methods=["POST"])
+@login_required
+def match_decide(match_id):
+    match, _ = get_match_participants(match_id)
+    user_id = session["user_id"]
+    if match is None:
+        return {"error": "not found"}, 404
+    if user_id not in (match["user_a"], match["user_b"]):
+        return {"error": "forbidden"}, 403
+
+    choice = request.form.get("choice", "")
+    if choice not in ("continue", "unmatch"):
+        return {"error": "invalid choice"}, 400
+
+    # Leaving carries an optional reason. A key we don't recognise, a
+    # "rather not say", or nothing at all all store '' — the ended screen
+    # must not be able to tell those three apart.
+    reason = ""
+    if choice == "unmatch":
+        key = request.form.get("reason", "")
+        if key == "custom":
+            reason = request.form.get(
+                "reason_text", ""
+            ).strip()[:DECLINE_REASON_MAX_CHARS]
+        else:
+            reason = DECLINE_REASONS.get(key, "")
+
+    match = resolve_match(match_id) or match
+    # Continue belongs to the decision itself; leaving is allowed from
+    # inside the timed room too, so nobody has to sit out a chat they've
+    # already decided against.
+    phase = match_phase(match)
+    if phase == "deciding" or (phase == "timed" and choice == "unmatch"):
+        col = "decision_a" if user_id == match["user_a"] else "decision_b"
+        reason_col = "reason_a" if user_id == match["user_a"] else "reason_b"
+        db = get_db()
+        db.execute(
+            f"UPDATE matches SET {col} = ?, {reason_col} = ? WHERE id = ?",
+            (choice, reason, match_id),
+        )
+        db.commit()
+        match = resolve_match(match_id) or match
+
+    wants_json = "application/json" in request.headers.get("Accept", "")
+    if wants_json:
+        return match_state_payload(match, user_id)
+    return redirect(url_for("chat", match_id=match_id))
 
 
 @app.route("/match/<int:other_id>", methods=["POST"])
@@ -1661,7 +2699,7 @@ def create_match(other_id):
 def chats():
     user = current_user()
     query = """
-        SELECT m.id, m.created_at,
+        SELECT m.*,
                pa.name AS name_a, pb.name AS name_b,
                (SELECT body FROM messages WHERE match_id = m.id
                 ORDER BY id DESC LIMIT 1) AS last_message
@@ -1679,7 +2717,17 @@ def chats():
             query.format(where="WHERE ? IN (m.user_a, m.user_b)"),
             (user["id"],),
         ).fetchall()
-    return render_template("chats.html", rooms=rows)
+
+    # Phase labels so a timed/awaiting-decision room reads differently from
+    # a permanent one; ended rooms sort last regardless of recency.
+    rooms = []
+    for row in rows:
+        room = dict(row)
+        room["phase"] = match_phase(row)
+        rooms.append(room)
+    rooms.sort(key=lambda r: (r["phase"] == "ended", -r["id"]))
+
+    return render_template("chats.html", rooms=rooms)
 
 
 @app.route("/chat/<int:match_id>")
@@ -1696,6 +2744,10 @@ def chat(match_id):
         flash("That chatroom is private.")
         return redirect(url_for("chats"))
 
+    if is_participant:
+        match = resolve_match(match_id) or match
+    phase = match_phase(match)
+
     messages = get_db().execute(
         """
         SELECT msg.*, p.name AS sender_name FROM messages msg
@@ -1706,6 +2758,8 @@ def chat(match_id):
         (match_id,),
     ).fetchall()
 
+    state = match_state_payload(match, user["id"]) if is_participant else None
+
     return render_template(
         "chat.html",
         match=match,
@@ -1713,6 +2767,10 @@ def chat(match_id):
         messages=messages,
         me_id=session["user_id"],
         is_participant=is_participant,
+        phase=phase,
+        state=state,
+        decline_reasons=DECLINE_REASONS,
+        decision_grace_minutes=DECISION_GRACE_SECONDS // 60,
     )
 
 
@@ -1738,6 +2796,109 @@ def fetch_messages_after(match_id, after):
     ).fetchall()
 
 
+# --- demo-profile bot replies -------------------------------------------
+#
+# No LLM dependency (see CLAUDE.md): a small template engine seeded with
+# the bot's own profile, picked deterministically from (match_id, message
+# count) so a chat replays identically rather than depending on `random` in
+# the request path. It will repeat itself over a long conversation — the
+# accepted cost of staying offline and dependency-free — but comfortably
+# covers a five-minute timed chat.
+BOT_LOCK_NAMESPACE = 9_213_005
+
+
+def _bot_seed(match_id, count, salt=""):
+    digest = hashlib.md5(f"{match_id}:{count}:{salt}".encode()).hexdigest()
+    return int(digest, 16)
+
+
+def _bot_delay_seconds(match_id, count):
+    """Deterministic pseudo-random 2-6s 'typing' delay."""
+    return 2 + (_bot_seed(match_id, count, "delay") % 4001) / 1000.0
+
+
+def bot_reply_line(bot_profile, history, match_id, count):
+    """Pick the bot's next line, grounded in its own profile."""
+    topic = (bot_profile.get("interests") or bot_profile.get("hobbies") or "").split(",")[0].strip()
+    topic = topic or "getting to know people"
+    city = bot_profile.get("location") or "around here"
+    name = bot_profile.get("name") or "there"
+
+    if count == 0:
+        openers = [
+            f"Hey! I'm {name}, really into {topic}. How's your day going?",
+            f"Hi there — {name} here, based in {city}. What made you start searching today?",
+            f"Hello! Always happy to talk {topic}. What are you looking for?",
+        ]
+        return openers[_bot_seed(match_id, count, "line") % len(openers)]
+
+    last_body = history[-1]["body"] if history else ""
+    if last_body.strip().endswith("?"):
+        answers = [
+            f"Good question! Honestly, {topic} takes up most of my free time these days.",
+            f"I'd say {city} keeps me pretty busy, but I'd love to hear more about you.",
+            "Ha, depends on the day — ask me again tomorrow!",
+        ]
+        return answers[_bot_seed(match_id, count, "line") % len(answers)]
+
+    rotating = [
+        f"That's cool! I'm big on {topic} myself.",
+        f"Nice — {city} has a lot to offer if you're into that.",
+        "Tell me more, I'm curious!",
+        f"I could talk about {topic} all day, honestly.",
+        "Haha, I like that.",
+    ]
+    return rotating[_bot_seed(match_id, count, "line") % len(rotating)]
+
+
+def maybe_bot_reply(match, profiles):
+    """Generate the demo bot's next reply, lazily, inside the chat poll.
+
+    There is no background worker and the app is multi-instance, so this
+    is where the typing delay and the insert happen. Guarded by a per-match
+    advisory lock so two concurrent polls from the same open tab set can't
+    double-post (same pattern as try_pair()'s pairing lock).
+    """
+    if match_phase(match) not in ("timed", "active"):
+        return
+    bot_profile = next((p for p in profiles if p and p["is_bot"]), None)
+    if bot_profile is None:
+        return
+    bot_id = bot_profile["user_id"]
+
+    db = get_db()
+    db.execute("SELECT pg_advisory_xact_lock(?, ?)", (BOT_LOCK_NAMESPACE, match["id"]))
+    try:
+        history = db.execute(
+            "SELECT * FROM messages WHERE match_id = ? ORDER BY id", (match["id"],)
+        ).fetchall()
+
+        last = history[-1] if history else None
+        if last is not None and last["sender_id"] == bot_id:
+            db.commit()
+            return  # already replied to the last human message
+
+        anchor = last["created_at"] if last is not None else match["paired_at"]
+        if anchor is None:
+            db.commit()
+            return
+
+        count = len(history)
+        if (dt.now(timezone.utc) - anchor).total_seconds() < _bot_delay_seconds(match["id"], count):
+            db.commit()
+            return
+
+        line = bot_reply_line(bot_profile, history, match["id"], count)
+        db.execute(
+            "INSERT INTO messages (match_id, sender_id, body) VALUES (?, ?, ?)",
+            (match["id"], bot_id, line),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+
 @app.route("/chat/<int:match_id>/messages")
 @login_required
 def chat_messages(match_id):
@@ -1748,12 +2909,16 @@ def chat_messages(match_id):
     stores a message is usually not the one holding the recipient's open
     request, so an in-process wake-up could never reach them.
     """
-    match, _ = get_match_participants(match_id)
+    match, profiles = get_match_participants(match_id)
     user = current_user()
     if match is None:
         return {"error": "not found"}, 404
     if user["id"] not in (match["user_a"], match["user_b"]) and not user["is_admin"]:
         return {"error": "forbidden"}, 403
+
+    if user["id"] in (match["user_a"], match["user_b"]):
+        match = resolve_match(match_id) or match
+        maybe_bot_reply(match, profiles)
 
     try:
         after = int(request.args.get("after", 0))
@@ -1787,6 +2952,17 @@ def send_message(match_id):
     sender_id = session["user_id"]
     if sender_id not in (match["user_a"], match["user_b"]):
         return fail("Only the two matched members can write in this chatroom.", 403)
+
+    # The 5-minute lock is server-authoritative: a disabled composer in the
+    # browser is not enough, since this endpoint can be hit directly.
+    match = resolve_match(match_id) or match
+    phase = match_phase(match)
+    if phase not in ("timed", "active"):
+        msg = "The match hasn't opened for chat yet." if phase == "reveal" \
+            else "Time's up — press Continue or Unmatch to move on." if phase == "deciding" \
+            else "This match has ended."
+        return fail(msg, 409)
+
     if not body:
         return fail("Message can't be empty.", 400)
 
@@ -1835,10 +3011,71 @@ def browse():
     )
 
 
+@app.route("/photo/<int:photo_id>")
+@login_required
+def photo(photo_id):
+    """Serve a single photo, gated by can_view_photos().
+
+    404s for anything the caller shouldn't see rather than 403 — a 403
+    would itself confirm the photo exists. mime comes from the row (set by
+    sniff_image_mime() at upload time, never from client input), and the
+    response carries nosniff plus a private cache so it isn't handed to a
+    shared cache or reinterpreted by the browser.
+    """
+    row = get_db().execute(
+        "SELECT user_id, data, mime FROM photos WHERE id = ?", (photo_id,)
+    ).fetchone()
+    if row is None:
+        abort(404)
+
+    user = current_user()
+    if not can_view_photos(row["user_id"], user["id"], user["is_admin"]):
+        abort(404)
+
+    return Response(
+        bytes(row["data"]),
+        mimetype=row["mime"],
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": "inline",
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
+
+
+STARTUP_ERROR = None
+
+
 def startup():
-    """Open the pool and make sure the schema is in place."""
-    POOL.open()
-    init_db()
+    """Open the pool and make sure the schema is in place.
+
+    A failure here must not kill the worker. Gunicorn binds the port before
+    forking, so a worker that dies on import still looks like a healthy
+    deploy — the revision goes live and every request 503s with the real
+    error nowhere in sight. Record it instead and let /healthz report it.
+    """
+    global STARTUP_ERROR
+    try:
+        POOL.open()
+        init_db()
+        STARTUP_ERROR = None
+    except Exception as exc:  # surfaced via /healthz, logged for Cloud Run
+        STARTUP_ERROR = exc
+        app.logger.exception("startup failed: cannot reach the database")
+
+
+@app.get("/healthz")
+def healthz():
+    """Readiness for Cloud Run's startup probe.
+
+    Retries the schema init, so a database that was merely slow to accept
+    connections recovers on its own rather than needing a redeploy.
+    """
+    if STARTUP_ERROR is not None:
+        startup()
+    if STARTUP_ERROR is not None:
+        return f"db unavailable: {STARTUP_ERROR}", 503
+    return "ok", 200
 
 
 startup()

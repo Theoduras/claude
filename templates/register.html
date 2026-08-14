@@ -11,7 +11,7 @@
   <form method="post" action="{{ url_for('register') }}">
     <label for="username">Username</label>
     <input id="username" name="username" type="text" autocomplete="username"
-           minlength="3" required autofocus>
+           value="{{ username }}" minlength="3" required autofocus>
 
     <label for="password">Password</label>
     <input id="password" name="password" type="password" autocomplete="new-password"

@@ -16,6 +16,24 @@
     <span class="tag">Wants: {{ profile['relationship_type'] }}</span>
   {% endif %}
 
+  {% if not is_own %}
+    {% if can_view_photos and photos %}
+      <div class="photo-grid">
+        {% for photo in photos %}
+          <img src="{{ url_for('photo', photo_id=photo['id']) }}" alt="Photo of {{ profile['name'] }}" loading="lazy">
+        {% endfor %}
+      </div>
+    {% elif not can_view_photos %}
+      <div class="photo-locked">Photos unlock once you both continue the match.</div>
+    {% endif %}
+  {% elif photos %}
+    <div class="photo-grid">
+      {% for photo in photos %}
+        <img src="{{ url_for('photo', photo_id=photo['id']) }}" alt="Your photo" loading="lazy">
+      {% endfor %}
+    </div>
+  {% endif %}
+
   <dl>
     {% if profile['bio'] %}<dt>Bio</dt><dd>{{ profile['bio'] }}</dd>{% endif %}
     {% if profile['interests'] %}<dt>Interests</dt><dd>{{ profile['interests'] }}</dd>{% endif %}

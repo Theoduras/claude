@@ -9,60 +9,83 @@
     Looking for someone who fits — and who's looking for you.
   </p>
 
-  <dl style="text-align: left; margin-bottom: 1.25rem;">
-    <dt>Looking for</dt>
-    <dd>{{ search['seeking'] or 'Anyone' }}, age {{ search['age_min'] }}–{{ search['age_max'] }}</dd>
-    {% if search['relationship_type'] %}
-      <dt>Connection</dt><dd>{{ search['relationship_type'] }}</dd>
+  <p class="muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;">
+    {{ waiting }} {{ 'person' if waiting == 1 else 'people' }} searching right now
+    {% if blockers.current_count is defined %}
+      &middot; {{ blockers.current_count }} {{ 'person' if blockers.current_count == 1 else 'people' }}
+      fit everything below right now
     {% endif %}
-    <dt>Where</dt>
-    <dd>
-      {% if search['location'] %}{{ search['location'] }}{% else %}Anywhere{% endif %}
-      {% if search['location'] %}
-        &middot; {% if search['radius_km'] >= radius_max %}any distance{% else %}within {{ search['radius_km'] }} km{% endif %}
-      {% endif %}
-    </dd>
-    {% if search['interests'] %}
-      <dt>Interests</dt><dd>{{ search['interests'] }}</dd>
-    {% endif %}
-  </dl>
-
-  <p class="muted" style="font-size: 0.85rem;">
-    {{ waiting }} {{ 'person' if waiting == 1 else 'people' }} searching right now.
   </p>
 
-  {% set hints = [] %}
-  {% if blockers.if_any_distance %}
-    {% set _ = hints.append(('widen your radius', blockers.if_any_distance)) %}
-  {% endif %}
-  {% if blockers.if_any_age %}
-    {% set _ = hints.append(('widen your age range', blockers.if_any_age)) %}
-  {% endif %}
-  {% if blockers.if_any_connection %}
-    {% set _ = hints.append(('accept another kind of connection', blockers.if_any_connection)) %}
-  {% endif %}
-  {% if blockers.if_any_gender %}
-    {% set _ = hints.append(('broaden who you are looking for', blockers.if_any_gender)) %}
-  {% endif %}
+  <p class="filter-note" style="text-align: left; margin: 0.3rem 0 0.9rem;">
+    These are your own filters. Turning one off only relaxes your side —
+    the other person's filters still apply, so it doesn't guarantee a match.
+  </p>
 
-  {% if hints or blockers.if_all_relaxed %}
+  <div class="filter-list">
+    {% for row in filter_rows %}
+      <div class="filter-row-wrap {{ 'filter-off' if row.enabled == false else '' }}">
+        <div class="filter-row">
+          <div class="filter-row-main">
+            <div class="filter-row-label">{{ row.label }}</div>
+            <div class="filter-row-value">{{ row.value_text }}</div>
+            {% if row.note %}<div class="filter-note">{{ row.note }}</div>{% endif %}
+          </div>
+          {% if row.enabled is not none %}
+            <form method="post" action="{{ url_for('search_filters_toggle') }}">
+              <input type="hidden" name="filter" value="{{ row.key }}">
+              <label class="switch" aria-label="Toggle {{ row.label }}">
+                <input type="checkbox" onchange="this.form.submit()" {% if row.enabled %}checked{% endif %}>
+                <span class="switch-track"></span>
+              </label>
+            </form>
+          {% endif %}
+        </div>
+        {% if row.enabled != false and row.constrains and row.suggestion %}
+          <div class="filter-row" style="padding-top: 0;">
+            <div class="filter-fix" style="width: 100%;">
+              {% if row.key == 'age' %}
+                <span class="tag tag-teal">
+                  Widen to {{ row.suggestion.age_min }}–{{ row.suggestion.age_max }}
+                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+                </span>
+              {% elif row.key == 'distance' %}
+                <span class="tag tag-teal">
+                  Widen to {{ row.suggestion.radius_km }} km
+                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+                </span>
+              {% elif row.key == 'relationship' %}
+                <span class="tag tag-teal">
+                  Switch to {{ row.suggestion.relationship_type }}
+                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+                </span>
+              {% elif row.key == 'gender' %}
+                <span class="tag tag-teal">
+                  Switch to {{ row.suggestion.seeking }}
+                  &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
+                </span>
+              {% endif %}
+              <form method="post" action="{{ url_for('search_filters_apply') }}">
+                <input type="hidden" name="filter" value="{{ row.key }}">
+                <button class="btn btn-secondary btn-small" type="submit">Fix</button>
+              </form>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if blockers.pool and blockers.current_count == 0 and blockers.if_all_relaxed == 0 %}
     <div class="flash" style="text-align: left;">
-      Nobody fits every filter yet.
-      {% if hints %}
-        You would match:
-        <ul style="margin: 0.4rem 0 0; padding-left: 1.2rem;">
-          {% for label, count in hints %}
-            <li>{{ count }} {{ 'person' if count == 1 else 'people' }} if you {{ label }}</li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        Your filters are quite narrow — {{ blockers.if_all_relaxed }}
-        {{ 'person' if blockers.if_all_relaxed == 1 else 'people' }} would fit if you
-        opened up the distance, age range and connection type.
-      {% endif %}
-      <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Adjust your filters</a>
+      Nobody in the pool fits even with every filter above turned off. Try a
+      different connection type, or check back once more people are searching.
     </div>
   {% endif %}
+
+  <p style="margin-top: 1.1rem;">
+    <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Change values in the full form instead</a>
+  </p>
 
   <form method="post" action="{{ url_for('search_cancel') }}">
     <button class="btn btn-secondary" type="submit">Stop searching</button>

@@ -9,6 +9,15 @@
     <div class="card room-row">
       <div>
         <strong>{{ room['name_a'] }} &amp; {{ room['name_b'] }}</strong>
+        {% if room['phase'] == 'reveal' %}
+          <span class="tag">It's a match</span>
+        {% elif room['phase'] == 'timed' %}
+          <span class="tag tag-timed">Timed chat</span>
+        {% elif room['phase'] == 'deciding' %}
+          <span class="tag tag-timed">Awaiting decision</span>
+        {% elif room['phase'] == 'ended' %}
+          <span class="tag tag-ended">Ended</span>
+        {% endif %}
         <div class="muted" style="font-size: 0.85rem;">
           {% if room['last_message'] %}
             {{ room['last_message'] | truncate(80) }}

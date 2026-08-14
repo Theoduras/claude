@@ -7,4 +7,6 @@ __pycache__
 *.db
 docs
 setup.ps1
+setup.sh
+docker-compose.yml
 README.md

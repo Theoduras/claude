@@ -344,6 +344,119 @@
       cursor: pointer;
     }
 
+    /* ---------- filter list: live-search's "what's blocking me" panel -- */
+
+    /* A toggle switch, not a checkbox: this is a persistent setting you flip
+       (a filter is on/off), not a one-off selection in a group. Violet when
+       on, because it's the searcher's own control over their own criteria —
+       the same "violet acts" role a checked .checkgroup box plays. */
+    .switch {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+      width: 2.6rem;
+      height: 1.5rem;
+      cursor: pointer;
+    }
+    .switch input {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .switch-track {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      background: rgba(8, 5, 14, 0.7);
+      border: 1px solid var(--ink-hairline);
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .switch-track::before {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 1.1rem;
+      height: 1.1rem;
+      border-radius: 50%;
+      background: var(--text-faint);
+      transition: transform 0.18s ease, background 0.18s ease;
+    }
+    .switch input:checked ~ .switch-track {
+      background: linear-gradient(150deg, rgba(138, 43, 226, 0.55), rgba(59, 11, 102, 0.7));
+      border-color: var(--violet-crest);
+    }
+    .switch input:checked ~ .switch-track::before {
+      transform: translateX(1.1rem);
+      background: #F0E2FF;
+    }
+    .switch input:focus-visible ~ .switch-track {
+      outline: 2px solid var(--champagne);
+      outline-offset: 2px;
+    }
+
+    .filter-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 1rem 0;
+      border: 1px solid var(--ink-hairline);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .filter-row {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      padding: 0.85rem 1rem;
+    }
+    .filter-row + .filter-row {
+      border-top: 1px solid var(--ink-hairline);
+    }
+    .filter-row-main {
+      flex: 1;
+      min-width: 0;
+    }
+    .filter-row-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--text-faint);
+    }
+    .filter-row-value {
+      font-size: 0.95rem;
+      margin-top: 0.15rem;
+    }
+    /* An off filter is still legible, just visibly inert. */
+    .filter-off .filter-row-value { color: var(--text-muted); text-decoration: line-through; }
+    .filter-off .filter-row-label { color: var(--text-faint); opacity: 0.6; }
+
+    .filter-note {
+      font-size: 0.78rem;
+      color: var(--text-faint);
+      margin-top: 0.3rem;
+      font-style: italic;
+    }
+
+    /* Fix action: teal not violet (the existing .btn-secondary), because
+       fixing a filter is about the pool of other people fitting, the same
+       "teal responds" role live-state chips already play. */
+    .filter-fix {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+      border-top: 1px dashed var(--ink-hairline);
+    }
+    .filter-fix form { margin: 0; }
+
     /* ---------- buttons: sheen sweeps as the pile is brushed ---------- */
     .btn {
       position: relative;
@@ -392,6 +505,7 @@
       background-image: linear-gradient(160deg, rgba(29, 166, 162, 0.5), rgba(6, 56, 59, 0.7));
       box-shadow: 0 12px 28px -14px rgba(18, 128, 127, 0.9);
     }
+    .btn-small { padding: 0.4rem 0.9rem; font-size: 0.82rem; }
 
     /* ---------- notices ---------------------------------------------- */
     .flash {
@@ -550,6 +664,206 @@
       letter-spacing: 0.04em;
       color: var(--champagne);
     }
+
+    /* ---------- dual-thumb range (age slider) ------------------------- */
+    .range-dual {
+      position: relative;
+      height: 1.6rem;
+      margin-bottom: 0.9rem;
+    }
+    .range-dual-track {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 0.35rem;
+      transform: translateY(-50%);
+      border-radius: 999px;
+      background: rgba(168, 85, 247, 0.2);
+    }
+    .range-dual-fill {
+      position: absolute;
+      top: 50%;
+      height: 0.35rem;
+      transform: translateY(-50%);
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--violet-deep), var(--violet-crest));
+    }
+    .range-dual input[type="range"] {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      margin: 0;
+      background: transparent;
+      pointer-events: none;
+    }
+    .range-dual input[type="range"]::-webkit-slider-runnable-track { background: transparent; }
+    .range-dual input[type="range"]::-moz-range-track { background: transparent; }
+    .range-dual input[type="range"]::-webkit-slider-thumb { pointer-events: auto; }
+    .range-dual input[type="range"]::-moz-range-thumb { pointer-events: auto; }
+
+    /* ---------- location combobox ------------------------------------- */
+    .ac-wrap { position: relative; }
+    .ac-list {
+      position: absolute;
+      z-index: 5;
+      left: 0;
+      right: 0;
+      margin: -0.9rem 0 0;
+      padding: 0.3rem;
+      list-style: none;
+      max-height: 14rem;
+      overflow-y: auto;
+      border: 1px solid var(--ink-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--ink-raised);
+      box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.9);
+    }
+    .ac-list:empty { display: none; }
+    .ac-option {
+      padding: 0.55rem 0.7rem;
+      font-size: 0.9rem;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .ac-option:hover, .ac-option.active {
+      background: rgba(138, 43, 226, 0.28);
+      color: var(--text);
+    }
+
+    /* ---------- wizard review card ------------------------------------ */
+    .review-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 1rem 0;
+      border: 1px solid var(--ink-hairline);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .review-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.6rem 1rem;
+      font-size: 0.9rem;
+    }
+    .review-row + .review-row { border-top: 1px solid var(--ink-hairline); }
+    .review-row dt {
+      margin: 0;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--text-faint);
+    }
+    .review-row dd { margin: 0; text-align: right; }
+    .review-pool {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      margin: 0.9rem 0;
+    }
+
+    /* ---------- match lifecycle: countdown & decision ------------------ */
+    .countdown {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.8rem;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--champagne);
+      border: 1px solid var(--ink-hairline);
+      border-radius: 999px;
+    }
+    .countdown.countdown-low { color: var(--danger); border-color: rgba(255, 122, 138, 0.4); }
+    .decision-actions {
+      display: flex;
+      gap: 0.7rem;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+    }
+    .decision-actions .btn { flex: 1; min-width: 9rem; }
+    .btn-danger {
+      color: #fff;
+      background-color: var(--danger);
+      background-image: linear-gradient(160deg, #FF97A3, var(--danger) 55%, var(--danger-deep));
+      box-shadow: 0 12px 30px -12px rgba(255, 122, 138, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    }
+    .reveal-card { text-align: center; }
+    .reveal-card .pulse-heart { width: 5.5rem; height: 5.5rem; }
+    .btn-small { padding: 0.4rem 0.9rem; font-size: 0.85rem; }
+    .leave-panel {
+      margin-top: 0.8rem;
+      padding: 0.9rem 1rem;
+      border: 1px solid var(--ink-hairline);
+      border-radius: var(--radius-sm);
+      background: rgba(8, 5, 14, 0.4);
+    }
+    .leave-reasons {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin: 0.6rem 0;
+      font-size: 0.92rem;
+    }
+    .leave-reasons label { display: flex; align-items: center; gap: 0.5rem; }
+    .leave-custom {
+      margin-left: 1.6rem;
+      max-width: 20rem;
+    }
+    .leave-reason {
+      margin: 0.6rem 0 0;
+      font-style: italic;
+      color: var(--text-faint);
+    }
+    .tag-ended {
+      color: var(--text-faint);
+      border-color: var(--ink-hairline);
+      background: rgba(8, 5, 14, 0.6);
+    }
+    .tag-timed { color: var(--champagne); border-color: rgba(232, 211, 169, 0.4);
+      background: linear-gradient(150deg, rgba(232, 211, 169, 0.22), rgba(59, 11, 102, 0.4)); }
+
+    /* ---------- photos -------------------------------------------------- */
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+      gap: 0.6rem;
+      margin: 0.9rem 0;
+    }
+    .photo-grid img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--ink-hairline);
+    }
+    .photo-locked {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1;
+      max-width: 14rem;
+      border-radius: var(--radius-sm);
+      border: 1px dashed var(--ink-hairline);
+      color: var(--text-faint);
+      font-size: 0.8rem;
+      text-align: center;
+      padding: 1rem;
+    }
+    .field-fill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      float: right;
+      margin-top: -0.1rem;
+    }
+    .field-fill .btn-small { padding: 0.2rem 0.65rem; font-size: 0.72rem; }
 
     /* ---------- searching state -------------------------------------- */
     .pulse-heart {

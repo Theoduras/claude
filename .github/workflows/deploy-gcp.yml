@@ -1,0 +1,56 @@
+name: Deploy to Cloud Run
+
+# Ships the current code straight to the Velvet Cloud Run service described
+# in docs/deploy-gcp.md. Runs on every push to this branch, or on demand.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+env:
+  REGION: ${{ vars.GCP_REGION || 'europe-west4' }}
+  SERVICE: velvet
+  INSTANCE: velvet-db-eu
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Authenticate to GCP
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/733528989325/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: '733528989325-compute@developer.gserviceaccount.com'
+
+      # 2. Set up gcloud
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # 3. Get the Cloud SQL connection string (FORCED PROJECT FLAG)
+      - name: Look up the Cloud SQL connection name
+        id: sql
+        run: |
+          conn="$(gcloud sql instances describe "$INSTANCE" --project="velvet-app-505108" --format='value(connectionName)')"
+          echo "conn_name=$conn" >> "$GITHUB_OUTPUT"
+
+      # 4. Deploy to Cloud Run (FORCED PROJECT FLAG)
+      - name: Deploy
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --project="velvet-app-505108" \
+            --source . \
+            --region="$REGION" \
+            --allow-unauthenticated \
+            --add-cloudsql-instances="${{ steps.sql.outputs.conn_name }}" \
+            --set-env-vars="INSTANCE_CONNECTION_NAME=${{ steps.sql.outputs.conn_name }},DB_USER=velvet_app,DB_NAME=velvet,AUTO_LOGIN=0,FLASK_DEBUG=0" \
+            --set-secrets="DB_PASS=velvet-db-pass:latest,APP_SECRET_KEY=velvet-secret-key:latest,APP_ADMIN_PASSWORD=velvet-admin-pass:latest" \
+            --min-instances=0 \
+            --max-instances=10 \
+            --concurrency=80 \
+            --startup-probe=httpGet.path=/healthz,periodSeconds=5,timeoutSeconds=5,failureThreshold=6

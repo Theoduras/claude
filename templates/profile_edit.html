@@ -5,7 +5,8 @@
   <h1>Your profile</h1>
   <p class="subtitle">Tell others who you are and what you're looking for.</p>
 
-  <form method="post" action="{{ url_for('edit_profile') }}">
+  <form method="post" action="{{ url_for('edit_profile') }}" enctype="multipart/form-data">
+    {% set allow_photos = true %}
     {% include "_profile_fields.html" %}
     <button class="btn" type="submit">Save profile</button>
   </form>
