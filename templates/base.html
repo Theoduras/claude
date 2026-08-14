@@ -1505,6 +1505,37 @@
     .viewport-toggle:hover { border-color: rgba(168, 85, 247, 0.42); }
     /* sits above the tab bar rather than behind it on a forced-mobile preview */
     html[data-viewport="mobile"] .viewport-toggle { bottom: 5.5rem; }
+
+    /* Forcing mobile on a wide screen: sink the app into an actual
+       phone-sized frame instead of just re-flowing the full-width page,
+       so the preview looks like a phone, not a squeezed desktop layout. */
+    @media (min-width: 721px) {
+      html[data-viewport="mobile"] body {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 3rem 1rem;
+        min-height: 100vh;
+        box-sizing: border-box;
+      }
+      html[data-viewport="mobile"] .app-shell {
+        width: 390px;
+        height: 844px;
+        max-height: calc(100vh - 6rem);
+        overflow-y: auto;
+        overflow-x: hidden;
+        position: relative;
+        border-radius: 2.5rem;
+        border: 1px solid var(--ink-hairline);
+        box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.85);
+        background-color: var(--ink);
+      }
+      /* .tabbar is normally fixed to the browser viewport; inside the
+         frame it needs to stick to the frame's own scroll box instead. */
+      html[data-viewport="mobile"] .app-shell .tabbar {
+        position: sticky;
+      }
+    }
   </style>
   {# Runs before body paint so the forced layout never flashes the wrong
        one first. Falls back to the real viewport on the very first visit,
@@ -1520,6 +1551,7 @@
     </script>
 </head>
 <body>
+  <div class="app-shell">
   <nav>
     <a class="brand" href="{{ url_for('index') }}"><span class="mark"></span>Velvet</a>
     {% if current_user %}
@@ -1582,6 +1614,7 @@
       </a>
     </nav>
   {% endif %}
+  </div>
   {# Previews the mobile layout on a wide monitor (or vice
        versa) without resizing the window. Sits outside <nav>/<main>/the
        tab bar, so it never participates in their layout. #}
