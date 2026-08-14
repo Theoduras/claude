@@ -1506,7 +1506,7 @@
     /* sits above the tab bar rather than behind it on a forced-mobile preview */
     html[data-viewport="mobile"] .viewport-toggle { bottom: 5.5rem; }
   </style>
-  {% if config.DEBUG %}
+  {% if dev_tools %}
     {# Runs before body paint so the forced layout never flashes the wrong
        one first. Falls back to the real viewport on the very first visit,
        then a click pins it either way until cleared. #}
@@ -1584,7 +1584,7 @@
       </a>
     </nav>
   {% endif %}
-  {% if config.DEBUG %}
+  {% if dev_tools %}
     {# Dev-only: previews the mobile layout on a wide monitor (or vice
        versa) without resizing the window. Sits outside <nav>/<main>/the
        tab bar, so it never participates in their layout. #}
