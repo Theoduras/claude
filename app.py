@@ -1666,11 +1666,15 @@ def searches_compatible(s1, s2):
     def interests_ok(searcher, candidate_interests):
         # Empty interests means "no preference" -- same convention as the
         # other filters, and how a searcher who left this blank (or
-        # switched it off, which stores '') already reads. Non-empty means
-        # the candidate has to share at least one interest, judged the same
-        # way try_pair()'s ranking does (stemmed tokens, so near-misses
-        # like "hiking"/"hike" still count).
-        if not searcher.get("interests"):
+        # switched it off, which stores '') already reads. That "no
+        # preference" reading has to apply from either side: a candidate
+        # who never filled in interests has none to share by definition,
+        # so treat their blank field the same as the searcher's own blank
+        # field rather than an automatic non-match. Only require overlap
+        # when both sides actually listed something, judged the same way
+        # try_pair()'s ranking does (stemmed tokens, so near-misses like
+        # "hiking"/"hike" still count).
+        if not searcher.get("interests") or not candidate_interests:
             return True
         return bool(_tokens(searcher["interests"]) & _tokens(candidate_interests))
 
