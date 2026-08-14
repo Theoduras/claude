@@ -920,6 +920,73 @@
       vertical-align: middle;
       margin-right: 0.3rem;
     }
+
+    /* ---------- bottom tab bar: the phone-width primary navigation ----
+       Mirrors the mockup's three destinations. Above the phone breakpoint
+       it disappears entirely and the top nav carries every link again. */
+    .tabbar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 3;
+      display: none;
+      align-items: center;
+      padding: 0.7rem 0.9rem calc(1rem + env(safe-area-inset-bottom, 0px));
+      border-top: 1px solid var(--ink-hairline);
+      background: rgba(8, 5, 14, 0.86);
+      backdrop-filter: blur(14px);
+    }
+    .tabbar a {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.32rem;
+      padding: 0.15rem 0;
+      color: var(--text-faint);
+      transition: color 0.18s ease;
+    }
+    .tabbar a:hover { color: var(--text-muted); }
+    /* the icons are drawn with stroke="currentColor" so one rule tints both
+       the glyph and its label as the tab lights up */
+    .tabbar svg { display: block; }
+    .tabbar .tab-label {
+      font-weight: 700;
+      font-size: 0.5625rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+    /* the active pip: always laid out, only painted when current, so the
+       three tabs keep identical heights whichever one is selected */
+    .tabbar .tab-dot { width: 4px; height: 4px; border-radius: 50%; }
+    .tabbar a.is-active { color: var(--violet-crest); }
+    .tabbar a.is-active .tab-dot {
+      background: var(--violet-crest);
+      box-shadow: 0 0 8px rgba(168, 85, 247, 0.9);
+    }
+
+    @media (max-width: 720px) {
+      .tabbar { display: flex; }
+      /* the three links the tab bar now owns; the rest stay reachable in a
+         single scrollable strip so no route is orphaned on a phone */
+      nav .tab-dup { display: none; }
+      nav {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        gap: 0.15rem;
+        padding-inline: 1.25rem;
+      }
+      nav::-webkit-scrollbar { display: none; }
+      .brand { margin-right: 0.6rem; }
+      nav a:not(.brand) { white-space: nowrap; }
+      main {
+        padding: 1.5rem 1.5rem 7rem;
+        gap: 1rem;
+      }
+    }
   </style>
 </head>
 <body>
@@ -927,12 +994,12 @@
     <a class="brand" href="{{ url_for('index') }}"><span class="mark"></span>Velvet</a>
     {% if current_user %}
       {% if current_user['is_admin'] %}<span class="tag">Admin</span>{% endif %}
-      <a href="{{ url_for('live_search') }}">Live search</a>
+      <a class="tab-dup" href="{{ url_for('live_search') }}">Live search</a>
       <a href="{{ url_for('find') }}">Find a match</a>
       <a href="{{ url_for('browse') }}">Browse</a>
       <a href="{{ url_for('matches') }}">Matches</a>
-      <a href="{{ url_for('chats') }}">Chats</a>
-      <a href="{{ url_for('view_profile', user_id=current_user['id']) }}">Profile</a>
+      <a class="tab-dup" href="{{ url_for('chats') }}">Chats</a>
+      <a class="tab-dup" href="{{ url_for('view_profile', user_id=current_user['id']) }}">Profile</a>
       {% if current_user['is_admin'] %}
         <a href="{{ url_for('admin_new_profile') }}">New profile</a>
       {% endif %}
@@ -949,5 +1016,45 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+  {% if current_user %}
+    {#- which tab lights up: every search-ish route collapses onto Search -#}
+    {% set ep = request.endpoint %}
+    {% set search_eps = ['live_search', 'search_criteria', 'search_waiting',
+                         'find', 'find_results', 'browse', 'matches'] %}
+    {% set chat_eps = ['chats', 'chat'] %}
+    {% set you_eps = ['view_profile', 'edit_profile'] %}
+    <nav class="tabbar" aria-label="Primary">
+      <a href="{{ url_for('live_search') }}"
+         class="{% if ep in search_eps %}is-active{% endif %}"
+         {% if ep in search_eps %}aria-current="page"{% endif %}>
+        <svg width="21" height="21" viewBox="0 0 21 21" fill="none" aria-hidden="true">
+          <circle cx="9" cy="9" r="6.2" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M13.6 13.6L18.5 18.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <span class="tab-label">Search</span>
+        <span class="tab-dot"></span>
+      </a>
+      <a href="{{ url_for('chats') }}"
+         class="{% if ep in chat_eps %}is-active{% endif %}"
+         {% if ep in chat_eps %}aria-current="page"{% endif %}>
+        <svg width="21" height="21" viewBox="0 0 21 21" fill="none" aria-hidden="true">
+          <rect x="2" y="3.5" width="14" height="10.5" rx="3.4" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M6.5 17.5v-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <span class="tab-label">Chats</span>
+        <span class="tab-dot"></span>
+      </a>
+      <a href="{{ url_for('view_profile', user_id=current_user['id']) }}"
+         class="{% if ep in you_eps %}is-active{% endif %}"
+         {% if ep in you_eps %}aria-current="page"{% endif %}>
+        <svg width="21" height="21" viewBox="0 0 21 21" fill="none" aria-hidden="true">
+          <circle cx="10.5" cy="7" r="3.6" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M3.8 18c0-3.4 3-5.4 6.7-5.4s6.7 2 6.7 5.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <span class="tab-label">You</span>
+        <span class="tab-dot"></span>
+      </a>
+    </nav>
+  {% endif %}
 </body>
 </html>
