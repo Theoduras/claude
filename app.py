@@ -239,8 +239,6 @@ RELATIONSHIP_TYPES = [
     "Long-term relationship",
     "Short-term relationship",
     "Friendship",
-    "Casual dating",
-    "Marriage",
     "Not sure yet",
 ]
 

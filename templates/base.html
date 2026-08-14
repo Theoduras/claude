@@ -600,25 +600,46 @@
     }
     dd { margin: 0.3rem 0 0; white-space: pre-line; }
 
-    /* ---------- choice cards ----------------------------------------- */
-    .choice {
+    /* ---------- choice tiles ------------------------------------------
+       Whole-tile selection with no visible radio bullet: the input hides
+       (.visually-hidden) and .tile-face is styled off its :checked state,
+       the same hidden-input + sibling-selector pattern .switch uses. */
+    .tile-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.9rem;
+    }
+    .tile { display: block; cursor: pointer; }
+    .tile-face {
       display: flex;
-      align-items: center;
-      gap: 0.7rem;
-      padding: 1rem 1.1rem;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.6rem;
+      height: 100%;
+      box-sizing: border-box;
+      padding: 1.3rem;
       border-radius: var(--radius-sm);
       border: 1px solid var(--ink-hairline);
       background-image: linear-gradient(155deg, rgba(75, 20, 124, 0.3), rgba(11, 7, 19, 0.85));
-      cursor: pointer;
-      transition: border-color 0.18s ease, transform 0.18s ease;
+      transition: border-color 0.18s ease, transform 0.18s ease, background-image 0.18s ease;
     }
-    .choice:hover { border-color: rgba(168, 85, 247, 0.5); transform: translateY(-2px); }
-    .choice input { width: auto; margin: 0; accent-color: var(--violet-crest); }
-    .choice span { display: flex; flex-direction: column; gap: 0.1rem; }
-    .choice strong { font-family: var(--serif); font-size: 1.02rem; font-weight: 500; }
-    .choice-suggested {
-      border-color: rgba(168, 85, 247, 0.6);
-      background-image: linear-gradient(155deg, rgba(138, 43, 226, 0.34), rgba(30, 10, 52, 0.9));
+    .tile:hover .tile-face { border-color: rgba(168, 85, 247, 0.5); transform: translateY(-2px); }
+    .tile input:checked ~ .tile-face {
+      border-color: rgba(168, 85, 247, 0.7);
+      background-image: linear-gradient(155deg, rgba(138, 43, 226, 0.4), rgba(30, 10, 52, 0.92));
+      box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.5) inset;
+    }
+    .tile-icon { width: 1.6rem; height: 1.6rem; color: var(--violet-crest); }
+    .tile-face strong { font-family: var(--serif); font-size: 1.02rem; font-weight: 500; }
+    .tile-tag {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--teal-crest);
+      font-weight: 700;
+    }
+    @media (max-width: 480px) {
+      .tile-grid { grid-template-columns: 1fr; }
     }
 
     /* ---------- sliders --------------------------------------------- */
@@ -870,7 +891,7 @@
     @media (prefers-reduced-motion: reduce) {
       .pulse-heart { animation: none; }
       .btn::before { transition: none; }
-      .btn:hover, .profile-card:hover, .choice:hover { transform: none; }
+      .btn:hover, .profile-card:hover, .tile:hover .tile-face { transform: none; }
     }
 
     /* ---------- chat -------------------------------------------------- */
