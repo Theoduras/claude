@@ -1059,6 +1059,13 @@
     }
     .reveal-card { text-align: center; }
     .reveal-card .pulse-heart { width: 5.5rem; height: 5.5rem; }
+    /* The reveal's headline wraps to two lines ("Congratulations — /
+       you matched"), so the global h1 + .subtitle pull-up (tuned for a
+       one-line h1) overlaps the subtitle instead of just tightening the
+       gap. Give this one room instead, and trim the headline itself --
+       full display size reads oversized against the chips/buttons under it. */
+    .reveal-card h1 { font-size: clamp(1.6rem, 3.4vw, 2.3rem); }
+    .reveal-card h1 + .subtitle { margin-top: 0.5rem; }
     .tag-ended {
       color: var(--text-faint);
       border-color: var(--ink-hairline);
