@@ -4,18 +4,56 @@
 {% set left = profiles[0] %}
 {% set right = profiles[1] %}
 {% set other = right if left['user_id'] == me_id else left %}
-<div class="card{% if phase == 'reveal' %} reveal-card{% endif %}">
-  {% if is_participant and phase == 'reveal' %}
-    <div class="pulse-heart"></div>
-    <p class="eyebrow">It's a match</p>
-    <h1 style="font-size: 1.4rem;">You and {{ other['name'] }} both said yes</h1>
-    <p class="subtitle" style="margin-inline: auto;">Opening your chat in <span id="reveal-count">{{ state.seconds_left }}</span>s…</p>
+{% set in_reveal = is_participant and phase == 'reveal' %}
 
-  {% elif is_participant and phase == 'deciding' %}
+{# The leave panel: the Unmatch button opens this rather than posting, so
+   choosing a reason *is* the confirmation step. Reasons are optional and
+   "Rather not say" stores nothing at all. #}
+{% macro leave_panel(form_id) %}
+  <div class="leave-panel" id="{{ form_id }}" hidden>
+    <p class="hint" style="margin-top: 0;">Leaving {{ other['name'] }}. Want to say why?</p>
+    <div class="leave-reasons">
+      {% for key, label in decline_reasons.items() if label %}
+        <label><input type="radio" name="reason-{{ form_id }}" value="{{ key }}"> {{ label }}</label>
+      {% endfor %}
+      <label><input type="radio" name="reason-{{ form_id }}" value="custom"> I'd rather write it</label>
+      <input type="text" class="leave-custom" maxlength="240" disabled
+             placeholder="In your own words (optional)">
+      <label><input type="radio" name="reason-{{ form_id }}" value="quiet" checked> Rather not say</label>
+    </div>
+    <div class="decision-actions">
+      <button class="btn btn-secondary" type="button" data-leave-cancel>Cancel</button>
+      <button class="btn btn-danger" type="button" data-leave-confirm>Leave</button>
+    </div>
+  </div>
+{% endmacro %}
+
+{% if in_reveal %}
+<div class="card reveal-card" id="reveal-card">
+  <div class="pulse-heart"></div>
+  <p class="eyebrow">It's a match</p>
+  <h1 style="font-size: 1.4rem;">You and {{ other['name'] }} both said yes</h1>
+  <p class="subtitle" style="margin-inline: auto;">Opening your chat in <span id="reveal-count">{{ state.seconds_left }}</span>s…</p>
+  <p style="margin-top: 1.2rem;">
+    <button class="btn btn-secondary" type="button" id="reveal-skip">Enter the room</button>
+  </p>
+  <p class="hint" style="margin-top: 0.4rem;">
+    You can look around — messages open when the countdown ends.
+  </p>
+</div>
+{% endif %}
+
+<div class="card"{% if in_reveal %} hidden id="room-card"{% endif %}>
+  {% if is_participant and phase == 'deciding' %}
     <h1 style="font-size: 1.25rem;">Time's up — continue with {{ other['name'] }}?</h1>
     <p class="subtitle">
       Your 5 minutes are over. Press Continue if you'd like to keep talking, or Unmatch to move on.
       {% if state.their_decision %}{{ other['name'] }} has already decided.{% endif %}
+    </p>
+    <p class="subtitle" id="decide-deadline"
+       data-state-url="{{ url_for('match_state', match_id=match['id']) }}">
+      You have <span class="countdown" id="decide-countdown">{{ (state.seconds_left // 60) }}:{{ '%02d' % (state.seconds_left % 60) }}</span>
+      to answer before the match closes quietly.
     </p>
 
     <div class="chat-log" id="chat-log-static">
@@ -34,22 +72,36 @@
       </p>
       <div id="decision-status" data-state-url="{{ url_for('match_state', match_id=match['id']) }}" data-chat-url="{{ url_for('chat', match_id=match['id']) }}"></div>
     {% else %}
-      <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}" class="decision-actions" id="decision-form">
-        <input type="hidden" name="choice" id="decision-choice" value="">
-        <button class="btn" type="submit" data-choice="continue">Continue match</button>
-        <button class="btn btn-danger" type="submit" data-choice="unmatch">Unmatch</button>
-      </form>
+      <div class="decision-actions" id="decision-form">
+        <button class="btn" type="button" data-choice="continue">Continue match</button>
+        <button class="btn btn-danger" type="button" data-leave-open="leave-deciding">Unmatch</button>
+      </div>
+      {{ leave_panel('leave-deciding') }}
     {% endif %}
 
   {% elif is_participant and phase == 'ended' %}
     <h1 style="font-size: 1.25rem;">This match has ended</h1>
+    {# Four different endings were all reading as one. Whoever answered
+       deserves to be told what actually happened; a reason is shown only
+       here, never in the chat list, so it can't ambush anyone scrolling. #}
+    {% set i_left = state.my_decision == 'unmatch' %}
+    {% set they_left = state.their_decision == 'unmatch' %}
     <p class="subtitle">
-      {% if state.my_decision == 'unmatch' or state.their_decision == 'unmatch' %}
-        One of you chose to unmatch.
+      {% if i_left and they_left %}
+        You both chose not to continue.
+      {% elif they_left %}
+        {{ other['name'] }} chose not to continue.
+      {% elif i_left %}
+        You left this match.
       {% else %}
-        The decision window closed without an answer from both sides.
+        The {{ decision_grace_minutes }} minutes passed without an answer.
       {% endif %}
     </p>
+    {% if they_left and not i_left and state.their_reason %}
+      <p class="leave-reason">“{{ state.their_reason }}”</p>
+    {% elif i_left and not they_left and state.my_reason %}
+      <p class="leave-reason">You said: “{{ state.my_reason }}”</p>
+    {% endif %}
     <div class="chat-log" id="chat-log-static">
       {% for msg in messages %}
         {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
@@ -76,6 +128,13 @@
       {% endif %}
     </p>
 
+    {% if is_participant and phase == 'timed' %}
+      <p style="margin: 0 0 0.6rem;">
+        <button class="btn btn-secondary btn-small" type="button" data-leave-open="leave-timed">Unmatch</button>
+      </p>
+      {{ leave_panel('leave-timed') }}
+    {% endif %}
+
     <div class="chat-log" id="chat-log"
          data-me="{{ me_id }}"
          data-left="{{ left['user_id'] }}"
@@ -99,7 +158,16 @@
       </p>
     </div>
 
-    {% if is_participant %}
+    {% if is_participant and phase == 'reveal' %}
+      <p class="hint" id="composer-lock" style="margin-top: 0.5rem;">
+        Opens in <span id="composer-lock-count">{{ state.seconds_left }}</span>s.
+      </p>
+      <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}" hidden>
+        <input type="text" name="body" id="chat-input" placeholder="Type a message..." disabled
+               required autocomplete="off">
+        <button class="btn" type="submit" disabled>Send</button>
+      </form>
+    {% elif is_participant %}
       <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
         <input type="text" name="body" id="chat-input" placeholder="Type a message..."
                autofocus required autocomplete="off">
@@ -118,45 +186,110 @@
   var POLL_MS = 1500;
   var RETRY_MS = 4000;
 
-  // ---- reveal countdown: redirect to the chat once the server says so ----
+  // ---- reveal skip: peek into the room without moving the phase ----
+  var revealCard = document.getElementById("reveal-card");
+  var roomCard = document.getElementById("room-card");
+  var revealSkip = document.getElementById("reveal-skip");
+  if (revealSkip) {
+    revealSkip.addEventListener("click", function () {
+      revealCard.hidden = true;
+      roomCard.hidden = false;
+    });
+  }
+
+  // ---- reveal countdown: reload once the server says the phase moved on ----
   var revealCount = document.getElementById("reveal-count");
+  var lockCount = document.getElementById("composer-lock-count");
   if (revealCount) {
-    var chatUrl = "{{ url_for('chat', match_id=match['id']) }}";
     var stateUrl = "{{ url_for('match_state', match_id=match['id']) }}";
     (function pollReveal() {
       fetch(stateUrl, { headers: { "Accept": "application/json" } })
         .then(function (res) { return res.json(); })
         .then(function (data) {
           if (data.phase !== "reveal") {
-            window.location.href = chatUrl;
+            window.location.reload();
             return;
           }
           revealCount.textContent = data.seconds_left;
+          if (lockCount) lockCount.textContent = data.seconds_left;
           setTimeout(pollReveal, POLL_MS);
         })
         .catch(function () { setTimeout(pollReveal, RETRY_MS); });
     })();
   }
 
-  // ---- deciding: submit choice, then poll until the other side answers ----
+  // ---- deciding: submit "continue" straight away; poll for the other side ----
   var decisionForm = document.getElementById("decision-form");
   if (decisionForm) {
     decisionForm.querySelectorAll("button[data-choice]").forEach(function (btn) {
       btn.addEventListener("click", function (ev) {
         ev.preventDefault();
-        document.getElementById("decision-choice").value = btn.dataset.choice;
-        var body = "choice=" + encodeURIComponent(btn.dataset.choice);
-        fetch(decisionForm.action, {
-          method: "POST",
-          headers: {
-            "Accept": "application/json",
-            "Content-Type": "application/x-www-form-urlencoded"
-          },
-          body: body
-        }).then(function () { window.location.reload(); });
+        submitDecision("continue", "quiet", "");
       });
     });
   }
+
+  // ---- deciding countdown ----
+  var decideCountdown = document.getElementById("decide-countdown");
+  var decideDeadline = document.getElementById("decide-deadline");
+  if (decideCountdown && decideDeadline) {
+    (function pollDecideCountdown() {
+      fetch(decideDeadline.dataset.stateUrl, { headers: { "Accept": "application/json" } })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.phase !== "deciding") {
+            window.location.reload();
+            return;
+          }
+          var s = data.seconds_left;
+          decideCountdown.textContent = Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60);
+          setTimeout(pollDecideCountdown, POLL_MS);
+        })
+        .catch(function () { setTimeout(pollDecideCountdown, RETRY_MS); });
+    })();
+  }
+
+  // ---- leave panel: open/cancel/confirm, shared between the timed room ----
+  // and the deciding screen. Choosing a reason (or "Rather not say") IS the
+  // confirm — there is no separate posting step.
+  function submitDecision(choice, reasonKey, customText) {
+    var body = "choice=" + encodeURIComponent(choice) +
+      "&reason=" + encodeURIComponent(reasonKey) +
+      "&reason_text=" + encodeURIComponent(customText || "");
+    fetch("{{ url_for('match_decide', match_id=match['id']) }}", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: body
+    }).then(function () { window.location.reload(); });
+  }
+
+  document.querySelectorAll("[data-leave-open]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.getElementById(btn.dataset.leaveOpen).hidden = false;
+    });
+  });
+
+  document.querySelectorAll(".leave-panel").forEach(function (panel) {
+    var customRadio = panel.querySelector('input[value="custom"]');
+    var customInput = panel.querySelector(".leave-custom");
+    panel.querySelectorAll('input[type="radio"]').forEach(function (radio) {
+      radio.addEventListener("change", function () {
+        customInput.disabled = !customRadio.checked;
+        if (customRadio.checked) customInput.focus();
+      });
+    });
+    panel.querySelector("[data-leave-cancel]").addEventListener("click", function () {
+      panel.hidden = true;
+    });
+    panel.querySelector("[data-leave-confirm]").addEventListener("click", function () {
+      var checked = panel.querySelector('input[type="radio"]:checked');
+      var key = checked ? checked.value : "quiet";
+      submitDecision("unmatch", key, customInput.value);
+    });
+  });
 
   var decisionStatus = document.getElementById("decision-status");
   if (decisionStatus) {

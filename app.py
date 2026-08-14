@@ -168,7 +168,19 @@ RADIUS_MAX_KM = 500  # slider maximum; at the top it means "anywhere"
 # --- match lifecycle (live-search pairings only; /find stays instant) -----
 REVEAL_SECONDS = 20          # "it's a match" card before the chat opens
 TIMED_CHAT_SECONDS = 300     # 5 minutes to talk before a decision is forced
-DECISION_GRACE_SECONDS = 86400  # no answer within a day counts as unmatch
+DECISION_GRACE_SECONDS = 600  # no answer within 10 minutes counts as unmatch
+
+# What someone can say on their way out. Free text arrives under the
+# "custom" key; "" covers both "rather not say" and never having been
+# asked, so the ended screen reads the same way for either.
+DECLINE_REASON_MAX_CHARS = 240
+DECLINE_REASONS = {
+    "no_spark": "Not feeling a connection",
+    "too_far": "Too far away",
+    "no_flow": "The conversation didn't flow",
+    "different": "Looking for something different",
+    "quiet": "",
+}
 
 # --- photos -----------------------------------------------------------
 PHOTO_MAX_BYTES = 2 * 1024 * 1024
@@ -436,6 +448,8 @@ CREATE TABLE IF NOT EXISTS matches (
     paired_at TIMESTAMPTZ,
     decision_a TEXT NOT NULL DEFAULT '',
     decision_b TEXT NOT NULL DEFAULT '',
+    reason_a TEXT NOT NULL DEFAULT '',
+    reason_b TEXT NOT NULL DEFAULT '',
     ended_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (user_a, user_b),
@@ -447,6 +461,8 @@ ALTER TABLE matches ADD COLUMN IF NOT EXISTS paired_at TIMESTAMPTZ;
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS decision_a TEXT NOT NULL DEFAULT '';
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS decision_b TEXT NOT NULL DEFAULT '';
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS reason_a TEXT NOT NULL DEFAULT '';
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS reason_b TEXT NOT NULL DEFAULT '';
 
 -- One row per member currently looking for a live match.
 CREATE TABLE IF NOT EXISTS searches (
@@ -680,9 +696,12 @@ def register():
                 flash("Welcome! Now set up your profile.")
                 return redirect(url_for("edit_profile"))
 
+        # Re-render with the username filled in: "that username is taken"
+        # shouldn't also cost you everything else you typed.
         flash(error)
+        return render_template("register.html", username=username)
 
-    return render_template("register.html")
+    return render_template("register.html", username="")
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -2477,6 +2496,30 @@ def resolve_match(match_id):
 
     now = dt.now(timezone.utc)
     phase = match_phase(match, now)
+
+    # An outcome both sides have already settled doesn't need the clock.
+    # Both pressed Continue at 0:40, or someone left the room early — making
+    # anyone watch four more minutes of a timer whose result is decided is
+    # theatre. These two run before the phase guard; everything below it
+    # (bot auto-continue, the lapsed window) still belongs to 'deciding'.
+    settled = None
+    if "unmatch" in (match["decision_a"], match["decision_b"]):
+        settled = "ended"
+    elif match["decision_a"] == "continue" and match["decision_b"] == "continue":
+        settled = "active"
+
+    if settled:
+        db.execute(
+            "UPDATE matches SET status = ?, "
+            "ended_at = CASE WHEN ? = 'ended' THEN NOW() ELSE ended_at END "
+            "WHERE id = ?",
+            (settled, settled, match_id),
+        )
+        db.commit()
+        return db.execute(
+            "SELECT * FROM matches WHERE id = ?", (match_id,)
+        ).fetchone()
+
     if phase not in ("deciding",):
         return match
 
@@ -2496,10 +2539,11 @@ def resolve_match(match_id):
         REVEAL_SECONDS + TIMED_CHAT_SECONDS + DECISION_GRACE_SECONDS
     )
 
+    # An unmatch from either side was already handled above, so the only
+    # outcomes left here are a bot's auto-continue completing the pair, or
+    # nobody answering in time.
     new_status = None
-    if decision_a == "unmatch" or decision_b == "unmatch":
-        new_status = "ended"
-    elif decision_a == "continue" and decision_b == "continue":
+    if decision_a == "continue" and decision_b == "continue":
         new_status = "active"
     elif grace_over:
         new_status = "ended"  # no decision from someone within the window
@@ -2526,6 +2570,8 @@ def match_state_payload(match, user_id):
     phase = match_phase(match, now)
     my_col, their_col = ("decision_a", "decision_b") if user_id == match["user_a"] \
         else ("decision_b", "decision_a")
+    my_reason, their_reason = ("reason_a", "reason_b") if user_id == match["user_a"] \
+        else ("reason_b", "reason_a")
 
     seconds_left = None
     if match["paired_at"] is not None:
@@ -2534,6 +2580,12 @@ def match_state_payload(match, user_id):
             seconds_left = max(0, round(REVEAL_SECONDS - elapsed))
         elif phase == "timed":
             seconds_left = max(0, round(REVEAL_SECONDS + TIMED_CHAT_SECONDS - elapsed))
+        elif phase == "deciding":
+            # The deciding screen states its own deadline, so it needs the
+            # third branch — without it the countdown has no number to show.
+            seconds_left = max(0, round(
+                REVEAL_SECONDS + TIMED_CHAT_SECONDS + DECISION_GRACE_SECONDS - elapsed
+            ))
 
     return {
         "phase": phase,
@@ -2541,6 +2593,8 @@ def match_state_payload(match, user_id):
         "locked": phase not in ("timed", "active"),
         "my_decision": match[my_col] or None,
         "their_decision": match[their_col] or None,
+        "my_reason": match[my_reason] or None,
+        "their_reason": match[their_reason] or None,
         "chat_url": url_for("chat", match_id=match["id"]),
     }
 
@@ -2573,11 +2627,32 @@ def match_decide(match_id):
     if choice not in ("continue", "unmatch"):
         return {"error": "invalid choice"}, 400
 
+    # Leaving carries an optional reason. A key we don't recognise, a
+    # "rather not say", or nothing at all all store '' — the ended screen
+    # must not be able to tell those three apart.
+    reason = ""
+    if choice == "unmatch":
+        key = request.form.get("reason", "")
+        if key == "custom":
+            reason = request.form.get(
+                "reason_text", ""
+            ).strip()[:DECLINE_REASON_MAX_CHARS]
+        else:
+            reason = DECLINE_REASONS.get(key, "")
+
     match = resolve_match(match_id) or match
-    if match_phase(match) == "deciding":
+    # Continue belongs to the decision itself; leaving is allowed from
+    # inside the timed room too, so nobody has to sit out a chat they've
+    # already decided against.
+    phase = match_phase(match)
+    if phase == "deciding" or (phase == "timed" and choice == "unmatch"):
         col = "decision_a" if user_id == match["user_a"] else "decision_b"
+        reason_col = "reason_a" if user_id == match["user_a"] else "reason_b"
         db = get_db()
-        db.execute(f"UPDATE matches SET {col} = ? WHERE id = ?", (choice, match_id))
+        db.execute(
+            f"UPDATE matches SET {col} = ?, {reason_col} = ? WHERE id = ?",
+            (choice, reason, match_id),
+        )
         db.commit()
         match = resolve_match(match_id) or match
 
@@ -2694,6 +2769,8 @@ def chat(match_id):
         is_participant=is_participant,
         phase=phase,
         state=state,
+        decline_reasons=DECLINE_REASONS,
+        decision_grace_minutes=DECISION_GRACE_SECONDS // 60,
     )
 
 
