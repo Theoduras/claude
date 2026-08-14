@@ -41,6 +41,8 @@
 
       --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
       --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      /* numbers that must not reflow as they tick: timers, counts, readouts */
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
       --measure: 62rem;
       --radius: 18px;
@@ -659,9 +661,13 @@
     .slider-pair { margin-bottom: 0.9rem; }
     .slider-value {
       float: right;
-      font-family: var(--sans);
+      /* tabular monospace so the readout keeps its width as the digits
+         change — a proportional face makes it twitch while dragging */
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.82rem;
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.02em;
       color: var(--champagne);
     }
 
