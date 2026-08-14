@@ -165,6 +165,11 @@ CITY_CHOICES = [
 
 RADIUS_MAX_KM = 500  # slider maximum; at the top it means "anywhere"
 
+# How long a search must run before it can be paired. The demo pool is
+# always populated, so without this every search resolves on its first
+# attempt and the waiting screen never actually shows.
+MIN_SEARCH_SECONDS = 7
+
 # --- match lifecycle (live-search pairings only; /find stays instant) -----
 REVEAL_SECONDS = 20          # "it's a match" card before the chat opens
 TIMED_CHAT_SECONDS = 300     # 5 minutes to talk before a decision is forced
@@ -1556,6 +1561,14 @@ def try_pair(user_id):
 
     Returns the match id when a pair is formed (or already was), else None.
 
+    A search only becomes eligible once it has been running for
+    MIN_SEARCH_SECONDS. Without that, a compatible partner already in the
+    pool pairs on the very first attempt and the searcher is thrown into a
+    chat before the waiting screen has drawn a frame -- the app looks like
+    it is handing out canned matches rather than looking for one. The gate
+    applies to both sides (this searcher and the candidates), so being the
+    second one to arrive does not skip the wait either.
+
     Pairing is serialized with a Postgres advisory lock rather than an
     in-process one, so two searchers cannot claim the same partner even
     when they are being served by different instances. The lock is held
@@ -1567,11 +1580,13 @@ def try_pair(user_id):
     try:
         mine = db.execute(
             """
-            SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
+            SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos,
+                   s.created_at <= NOW() - (? * INTERVAL '1 second') AS ripe
+            FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
             WHERE s.user_id = ?
             """,
-            (user_id,),
+            (MIN_SEARCH_SECONDS, user_id),
         ).fetchone()
 
         if mine is None:
@@ -1583,15 +1598,19 @@ def try_pair(user_id):
         if mine["status"] != "waiting":
             db.commit()
             return None
+        if not mine["ripe"]:
+            db.commit()
+            return None
 
         others = db.execute(
             """
             SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
             WHERE s.status = 'waiting' AND s.user_id != ?
+              AND s.created_at <= NOW() - (? * INTERVAL '1 second')
             ORDER BY s.created_at
             """,
-            (user_id,),
+            (user_id, MIN_SEARCH_SECONDS),
         ).fetchall()
 
         best = None
@@ -1765,6 +1784,15 @@ def search_criteria():
                     pref_hair_color = excluded.pref_hair_color,
                     pref_eye_color = excluded.pref_eye_color,
                     pref_tattoos = excluded.pref_tattoos,
+                    -- Values carry over to the next search (the form above
+                    -- is prefilled from this row), but the on/off switches
+                    -- do not: the form shows every value as applying, so a
+                    -- filter silently left off from a previous search would
+                    -- contradict what the user just confirmed here.
+                    use_gender = TRUE,
+                    use_age = TRUE,
+                    use_relationship = TRUE,
+                    use_distance = TRUE,
                     status = 'waiting',
                     match_id = NULL,
                     created_at = NOW()
@@ -1780,10 +1808,9 @@ def search_criteria():
             )
             db.commit()
 
-            match_id = try_pair(user_id)
-            if match_id:
-                flash("It's a match! You were paired instantly — say hi.")
-                return redirect(url_for("chat", match_id=match_id))
+            # No try_pair() here: the search is brand new, so it cannot be
+            # paired yet anyway (see MIN_SEARCH_SECONDS). The waiting page's
+            # poll picks it up once it ripens.
             return redirect(url_for("search_waiting"))
 
     return render_template(

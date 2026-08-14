@@ -14,11 +14,6 @@
       &middot; {{ blockers.current_count }} fit everything below{% endif %}
   </p>
 
-  <p class="filter-note" style="text-align: left; margin: 0.3rem 0 0.9rem;">
-    These are your own filters. Turning one off only relaxes your side —
-    the other person's filters still apply, so it doesn't guarantee a match.
-  </p>
-
   <div class="filter-list">
     {% for row in filter_rows %}
       <div class="filter-row-wrap {{ 'filter-off' if row.enabled == false else '' }}">
@@ -73,6 +68,10 @@
     {% endfor %}
   </div>
 
+  <p class="filter-note" style="text-align: left; margin: 0.7rem 0 0;">
+    Turning one off only relaxes your side — their filters still apply.
+  </p>
+
   {% if blockers.pool and blockers.current_count == 0 and blockers.if_all_relaxed == 0 %}
     <div class="flash" style="text-align: left;">
       Nobody in the pool fits even with every filter above turned off. Try a
@@ -85,7 +84,7 @@
   </p>
 
   <form method="post" action="{{ url_for('search_cancel') }}">
-    <button class="btn btn-secondary" type="submit">Stop searching</button>
+    <button class="btn btn-secondary btn-block" type="submit">Stop searching</button>
   </form>
 </div>
 
@@ -93,6 +92,23 @@
 (function () {
   var statusLine = document.getElementById("status-line");
   var statusUrl = "{{ url_for('search_status') }}";
+
+  // The pairing attempt below only starts returning a match once the search
+  // has run for a few seconds (MIN_SEARCH_SECONDS server-side). Cycling the
+  // line gives that wait something to show rather than one frozen sentence.
+  var PHRASES = [
+    "Looking for someone who fits — and who's looking for you.",
+    "Checking who's searching right now…",
+    "Matching your filters against theirs…",
+    "Both sides have to fit — holding out for that…"
+  ];
+  var phrase = 0;
+  var connected = true;  // paused while reconnecting, so it can say so
+  var cycle = setInterval(function () {
+    if (!connected) return;
+    phrase = (phrase + 1) % PHRASES.length;
+    statusLine.textContent = PHRASES[phrase];
+  }, 2600);
 
   // Short-poll loop — see the note in chat.html. Each poll also re-runs
   // the pairing attempt server-side, so a partner who starts searching
@@ -108,17 +124,21 @@
       })
       .then(function (data) {
         if (data.status === "matched" && data.chat_url) {
+          clearInterval(cycle);
           statusLine.textContent = "It's a match! Opening your chat…";
           window.location.href = data.chat_url;
           return;
         }
         if (data.status === "none" || data.status === "cancelled") {
+          clearInterval(cycle);
           window.location.href = "{{ url_for('live_search') }}";
           return;
         }
+        connected = true;
         setTimeout(listen, POLL_MS);
       })
       .catch(function () {
+        connected = false;
         statusLine.textContent = "Reconnecting…";
         setTimeout(listen, RETRY_MS);
       });
