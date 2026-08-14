@@ -1,38 +1,52 @@
 {% extends "base.html" %}
 {% block title %}Chats — Velvet{% endblock %}
 {% block content %}
-<h1>Chatrooms</h1>
-<p class="subtitle">Matched pairs and their conversations.</p>
+<h1>Chats</h1>
+<p class="subtitle">Your matches and their conversations.</p>
 
 {% if rooms %}
-  {% for room in rooms %}
-    <div class="card room-row">
-      <div>
-        <strong>{{ room['name_a'] }} &amp; {{ room['name_b'] }}</strong>
-        {% if room['phase'] == 'reveal' %}
-          <span class="tag">It's a match</span>
-        {% elif room['phase'] == 'timed' %}
-          <span class="tag tag-timed">Timed chat</span>
-        {% elif room['phase'] == 'deciding' %}
-          <span class="tag tag-timed">Awaiting decision</span>
-        {% elif room['phase'] == 'ended' %}
-          <span class="tag tag-ended">Ended</span>
+  <div class="chat-rows">
+    {% for room in rooms %}
+      <a class="card chat-row {{ 'chat-row-ended' if room['phase'] == 'ended' else '' }}"
+         href="{{ url_for('chat', match_id=room['id']) }}">
+        {% if not is_admin and room['other_photo_id'] %}
+          <img class="avatar" src="{{ url_for('photo', photo_id=room['other_photo_id']) }}" alt="">
+        {% else %}
+          {# admin's pair-wise view, or a participant whose match isn't
+             active yet: photos stay locked until both sides continue #}
+          <span class="avatar ph"></span>
         {% endif %}
-        <div class="muted" style="font-size: 0.85rem;">
-          {% if room['last_message'] %}
-            {{ room['last_message'] | truncate(80) }}
-          {% else %}
-            No messages yet — say hi!
-          {% endif %}
+        <div class="chat-row-main">
+          <div class="chat-row-top">
+            <strong>
+              {% if is_admin %}{{ room['name_a'] }} &amp; {{ room['name_b'] }}
+              {% else %}{{ room['other_name'] }}{% endif %}
+            </strong>
+            {% if room['phase'] == 'reveal' %}
+              <span class="tag">It's a match</span>
+            {% elif room['phase'] == 'timed' %}
+              <span class="tag tag-timed">Timed chat</span>
+            {% elif room['phase'] == 'deciding' %}
+              <span class="tag tag-timed">Awaiting decision</span>
+            {% elif room['phase'] == 'ended' %}
+              <span class="tag tag-ended">Ended</span>
+            {% endif %}
+          </div>
+          <div class="chat-row-bottom">
+            <span class="chat-row-preview">
+              {% if room['last_message'] %}{{ room['last_message'] | truncate(70) }}
+              {% else %}No messages yet — say hi!{% endif %}
+            </span>
+            {% if room['when'] %}<span class="chat-row-time">{{ room['when'] }}</span>{% endif %}
+          </div>
         </div>
-      </div>
-      <a class="btn btn-secondary" href="{{ url_for('chat', match_id=room['id']) }}">Open chat</a>
-    </div>
-  {% endfor %}
+      </a>
+    {% endfor %}
+  </div>
 {% else %}
   <div class="card">
     <p class="muted" style="margin: 0;">
-      No chatrooms yet. Start a <a href="{{ url_for('live_search') }}">live search</a>
+      No chats yet. Start a <a href="{{ url_for('live_search') }}">live search</a>
       and we'll pair you the moment someone is looking for you too.
     </p>
   </div>

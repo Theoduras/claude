@@ -1302,6 +1302,13 @@ def edit_profile():
     strength_pct, strength_hint = profile_strength(profile, len(photos))
     chips, chosen = interest_choices(profile.get("interests"))
 
+    # The Fill buttons are a dev affordance -- _profile_fields.html renders
+    # them only when sample_profile is defined, so passing it unconditionally
+    # shipped them to every real user. Admins keep them everywhere.
+    extra = {}
+    if current_user()["is_admin"]:
+        extra["sample_profile"] = sample_profile_data()
+
     return render_template(
         "profile_edit.html",
         profile=profile,
@@ -1321,9 +1328,10 @@ def edit_profile():
         tattoo_levels=TATTOO_LEVELS,
         height_min=HEIGHT_MIN_CM,
         height_max=HEIGHT_MAX_CM,
-        sample_profile=sample_profile_data(),
+        city_choices=CITY_CHOICES,
         photo_max_bytes=PHOTO_MAX_BYTES,
         photo_max_per_user=PHOTO_MAX_PER_USER,
+        **extra,
     )
 
 
@@ -1463,6 +1471,7 @@ def admin_new_profile():
         tattoo_levels=TATTOO_LEVELS,
         height_min=HEIGHT_MIN_CM,
         height_max=HEIGHT_MAX_CM,
+        city_choices=CITY_CHOICES,
         sample_profile=sample_profile_data(),
     )
 
@@ -2943,6 +2952,22 @@ def match_skip_reveal(match_id):
     return redirect(url_for("chat", match_id=match_id))
 
 
+def relative_time_label(when):
+    """Short relative label ('now', '2m', '3h', '5d') for a chat-row timestamp."""
+    if when is None:
+        return ""
+    seconds = int((dt.now(timezone.utc) - when).total_seconds())
+    if seconds < 60:
+        return "now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h"
+    return f"{hours // 24}d"
+
+
 @app.route("/chats")
 @login_required
 def chats():
@@ -2951,7 +2976,9 @@ def chats():
         SELECT m.*,
                pa.name AS name_a, pb.name AS name_b,
                (SELECT body FROM messages WHERE match_id = m.id
-                ORDER BY id DESC LIMIT 1) AS last_message
+                ORDER BY id DESC LIMIT 1) AS last_message,
+               (SELECT created_at FROM messages WHERE match_id = m.id
+                ORDER BY id DESC LIMIT 1) AS last_message_at
         FROM matches m
         JOIN profiles pa ON pa.user_id = m.user_a
         JOIN profiles pb ON pb.user_id = m.user_b
@@ -2973,10 +3000,34 @@ def chats():
     for row in rows:
         room = dict(row)
         room["phase"] = match_phase(row)
+        room["when"] = relative_time_label(
+            room["last_message_at"] or room["paired_at"] or room["created_at"]
+        )
+
+        # A participant reads their own row as being about the OTHER
+        # person, not both names in third person -- the admin's moderation
+        # view keeps the pair-wise rendering below, since neither name is
+        # "you" from that seat.
+        if not user["is_admin"]:
+            if row["user_a"] == user["id"]:
+                room["other_id"], room["other_name"] = row["user_b"], row["name_b"]
+            else:
+                room["other_id"], room["other_name"] = row["user_a"], row["name_a"]
+            # Same gate can_view_photos() enforces (status='active'); no
+            # need for its self/admin branches here since the viewer is
+            # always the other, non-admin participant in this loop.
+            room["other_photo_id"] = None
+            if room["status"] == "active":
+                photo = get_db().execute(
+                    "SELECT id FROM photos WHERE user_id = ? ORDER BY id LIMIT 1",
+                    (room["other_id"],),
+                ).fetchone()
+                room["other_photo_id"] = photo["id"] if photo else None
+
         rooms.append(room)
     rooms.sort(key=lambda r: (r["phase"] == "ended", -r["id"]))
 
-    return render_template("chats.html", rooms=rooms)
+    return render_template("chats.html", rooms=rooms, is_admin=user["is_admin"])
 
 
 @app.route("/chat/<int:match_id>")

@@ -5,6 +5,59 @@
   <script id="sample-profile-data" type="application/json">{{ sample_profile | tojson }}</script>
 {% endif %}
 
+{# ---- who you are ----------------------------------------------------- #}
+<div class="field-group">
+  <h2>About you</h2>
+</div>
+
+<div class="field-pair">
+  <div>
+    <label for="name">Name
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="name">Fill</button></span>{% endif %}
+    </label>
+    <input id="name" name="name" type="text" value="{{ profile['name'] or '' }}" required>
+  </div>
+  <div>
+    <label for="age">Age
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="age">Fill</button></span>{% endif %}
+    </label>
+    <input id="age" name="age" type="number" min="18" max="39"
+           value="{{ profile['age'] or '' }}" required>
+  </div>
+</div>
+
+<div class="field-pair">
+  <div>
+    <label for="gender">Gender
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="gender">Fill</button></span>{% endif %}
+    </label>
+    <select id="gender" name="gender">
+      <option value="">— Select —</option>
+      {% for g in genders %}
+        <option value="{{ g }}" {% if profile['gender'] == g %}selected{% endif %}>{{ g }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="seeking">Looking for
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="seeking">Fill</button></span>{% endif %}
+    </label>
+    <select id="seeking" name="seeking">
+      <option value="">— Select —</option>
+      {% for s in seeking_options %}
+        <option value="{{ s }}" {% if profile['seeking'] == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+{# Everything past the four fields above is optional: a profile only
+   needs a name to search (require_profile()), and /search asks for
+   location and connection type anyway. #}
+<details class="more-fields">
+  <summary>Add more</summary>
+  <div class="more-fields-body">
+
 {# ---- photos: what you have, and a slot to add more ------------------- #}
 {% if allow_photos is defined and allow_photos %}
   <label>Photos</label>
@@ -53,57 +106,11 @@
   {% endfor %}
 </div>
 
-{# ---- who you are ----------------------------------------------------- #}
-<div class="field-group">
-  <h2>About you</h2>
-</div>
 
-<div class="field-pair">
-  <div>
-    <label for="name">Name
-      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="name">Fill</button></span>{% endif %}
-    </label>
-    <input id="name" name="name" type="text" value="{{ profile['name'] or '' }}" required>
-  </div>
-  <div>
-    <label for="age">Age
-      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="age">Fill</button></span>{% endif %}
-    </label>
-    <input id="age" name="age" type="number" min="18" max="39"
-           value="{{ profile['age'] or '' }}" required>
-  </div>
-</div>
-
-<div class="field-pair">
-  <div>
-    <label for="gender">Gender
-      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="gender">Fill</button></span>{% endif %}
-    </label>
-    <select id="gender" name="gender">
-      <option value="">— Select —</option>
-      {% for g in genders %}
-        <option value="{{ g }}" {% if profile['gender'] == g %}selected{% endif %}>{{ g }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div>
-    <label for="seeking">Looking for
-      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="seeking">Fill</button></span>{% endif %}
-    </label>
-    <select id="seeking" name="seeking">
-      <option value="">— Select —</option>
-      {% for s in seeking_options %}
-        <option value="{{ s }}" {% if profile['seeking'] == s %}selected{% endif %}>{{ s }}</option>
-      {% endfor %}
-    </select>
-  </div>
-</div>
-
-<label for="location">Location
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="location">Fill</button></span>{% endif %}
-</label>
-<input id="location" name="location" type="text" value="{{ profile['location'] or '' }}"
-       placeholder="e.g. Berlin, Germany">
+{% with loc_label = 'Location', loc_value = profile['location'] or '',
+        loc_placeholder = 'e.g. Berlin, Germany' %}
+  {% include "_location_field.html" with context %}
+{% endwith %}
 
 <label for="relationship_type">Relationship type
   {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="relationship_type">Fill</button></span>{% endif %}
@@ -232,6 +239,9 @@
     {% endfor %}
   </select>
 {% endfor %}
+
+  </div>
+</details>
 
 <script>
 (function () {

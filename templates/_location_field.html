@@ -1,0 +1,134 @@
+{# Location text input with /api/places typeahead, shared by the search
+   wizard and the profile form so both ask for a place the same way.
+
+   Set before including (via {% with %}):
+     loc_id        - input id and name (default 'location')
+     loc_value     - current text value
+     loc_label     - visible label text
+     loc_placeholder
+     loc_lat_id / loc_lng_id     - hidden coord fields; omit both to skip
+     loc_lat_value / loc_lng_value
+
+   The profile form omits the coord fields: profiles has no lat/lng
+   columns, and the typeahead is still worth having there for consistent
+   city names, which is what city_coords() matches on. #}
+{% set _id = loc_id | default('location') %}
+
+<label for="{{ _id }}">{{ loc_label | default('Location') }}</label>
+<div class="ac-wrap">
+  <input id="{{ _id }}" name="{{ _id }}" type="text" autocomplete="off" list="city-list-{{ _id }}"
+         value="{{ loc_value | default('') }}"
+         placeholder="{{ loc_placeholder | default('e.g. Maastricht') }}"
+         role="combobox" aria-expanded="false"
+         aria-controls="{{ _id }}-ac-list" aria-autocomplete="list">
+  <ul class="ac-list" id="{{ _id }}-ac-list" role="listbox"></ul>
+</div>
+<datalist id="city-list-{{ _id }}">
+  {% for city in city_choices %}<option value="{{ city }}"></option>{% endfor %}
+</datalist>
+{% if loc_lat_id is defined and loc_lat_id %}
+  <input type="hidden" name="{{ loc_lat_id }}" id="{{ loc_lat_id }}"
+         value="{{ loc_lat_value | default('') }}">
+  <input type="hidden" name="{{ loc_lng_id }}" id="{{ loc_lng_id }}"
+         value="{{ loc_lng_value | default('') }}">
+{% endif %}
+
+<script>
+(function () {
+  var locInput = document.getElementById("{{ _id }}");
+  var locList = document.getElementById("{{ _id }}-ac-list");
+  {% if loc_lat_id is defined and loc_lat_id %}
+  var latEl = document.getElementById("{{ loc_lat_id }}");
+  var lngEl = document.getElementById("{{ loc_lng_id }}");
+  {% else %}
+  var latEl = null, lngEl = null;
+  {% endif %}
+  if (!locInput || !locList) return;
+
+  var acTimer = null;
+  var acController = null;
+  var acActive = -1;
+  var acItems = [];
+
+  function closeAc() {
+    locList.innerHTML = "";
+    acItems = [];
+    acActive = -1;
+    locInput.setAttribute("aria-expanded", "false");
+  }
+
+  function renderAc(results) {
+    locList.innerHTML = "";
+    acItems = results;
+    acActive = -1;
+    results.forEach(function (r, i) {
+      var li = document.createElement("li");
+      li.className = "ac-option";
+      li.id = "{{ _id }}-ac-opt-" + i;
+      li.setAttribute("role", "option");
+      li.textContent = r.label;
+      li.addEventListener("mousedown", function (ev) {
+        ev.preventDefault();
+        selectAc(i);
+      });
+      locList.appendChild(li);
+    });
+    locInput.setAttribute("aria-expanded", results.length ? "true" : "false");
+  }
+
+  function selectAc(i) {
+    var r = acItems[i];
+    if (!r) return;
+    locInput.value = r.label;
+    if (latEl && lngEl) { latEl.value = r.lat; lngEl.value = r.lng; }
+    closeAc();
+  }
+
+  locInput.addEventListener("input", function () {
+    // A stale coordinate must never survive a re-type of the text.
+    if (latEl && lngEl) { latEl.value = ""; lngEl.value = ""; }
+    var q = locInput.value.trim();
+    clearTimeout(acTimer);
+    if (q.length < 2) { closeAc(); return; }
+    acTimer = setTimeout(function () {
+      if (acController) acController.abort();
+      acController = new AbortController();
+      fetch("{{ url_for('api_places') }}?q=" + encodeURIComponent(q), {
+        headers: { "Accept": "application/json" },
+        signal: acController.signal
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) { renderAc(data.results || []); })
+        .catch(function () { /* offline: free text still works */ });
+    }, 250);
+  });
+
+  locInput.addEventListener("keydown", function (ev) {
+    if (!acItems.length) return;
+    if (ev.key === "ArrowDown") {
+      ev.preventDefault();
+      acActive = Math.min(acActive + 1, acItems.length - 1);
+    } else if (ev.key === "ArrowUp") {
+      ev.preventDefault();
+      acActive = Math.max(acActive - 1, 0);
+    } else if (ev.key === "Enter" && acActive >= 0) {
+      ev.preventDefault();
+      selectAc(acActive);
+      return;
+    } else if (ev.key === "Escape") {
+      closeAc();
+      return;
+    } else {
+      return;
+    }
+    Array.prototype.forEach.call(locList.children, function (li, i) {
+      li.classList.toggle("active", i === acActive);
+    });
+    locInput.setAttribute("aria-activedescendant", "{{ _id }}-ac-opt-" + acActive);
+  });
+
+  locInput.addEventListener("blur", function () {
+    setTimeout(closeAc, 120);
+  });
+})();
+</script>

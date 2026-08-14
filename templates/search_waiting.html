@@ -14,6 +14,8 @@
     <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Change</a>
   </p>
 
+  <p class="elapsed" id="elapsed">Searching for 0:00</p>
+
   <p class="live-count">
     {{ waiting }} searching{% if blockers.current_count is defined %}
       &middot; {{ blockers.current_count }} fit everything below{% endif %}
@@ -98,6 +100,17 @@
   var statusLine = document.getElementById("status-line");
   var statusUrl = "{{ url_for('search_status') }}";
 
+  // One honest number, so a screen that is otherwise motionless reads as
+  // running rather than stuck. Counts from page load, which is when this
+  // search actually started (the criteria POST redirects straight here).
+  var elapsedEl = document.getElementById("elapsed");
+  var startedAt = Date.now();
+  var elapsedTimer = setInterval(function () {
+    var s = Math.floor((Date.now() - startedAt) / 1000);
+    elapsedEl.textContent = "Searching for " + Math.floor(s / 60) + ":"
+      + String(s % 60).padStart(2, "0");
+  }, 1000);
+
   // The pairing attempt below only starts returning a match once the search
   // has run for a few seconds (MIN_SEARCH_SECONDS server-side). Cycling the
   // line gives that wait something to show rather than one frozen sentence.
@@ -130,12 +143,14 @@
       .then(function (data) {
         if (data.status === "matched" && data.chat_url) {
           clearInterval(cycle);
+          clearInterval(elapsedTimer);
           statusLine.textContent = "It's a match! Opening your chat…";
           window.location.href = data.chat_url;
           return;
         }
         if (data.status === "none" || data.status === "cancelled") {
           clearInterval(cycle);
+          clearInterval(elapsedTimer);
           window.location.href = "{{ url_for('live_search') }}";
           return;
         }
