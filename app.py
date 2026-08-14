@@ -1076,6 +1076,35 @@ def mutual_score(a, b):
     return harmonic, sorted(all_reasons)
 
 
+# Bio length the editor counts against. Generous next to what people
+# actually write (the seeded profiles top out around 85 characters), so it
+# reads as a target rather than a wall. Enforced in the browser only — an
+# existing longer bio still saves untouched rather than being rejected.
+BIO_MAX_CHARS = 240
+
+# Offered as chips in the editor. Interests stay free text in the database:
+# these are the common values, and anything already on a profile is shown
+# alongside them, so nothing anyone wrote is lost by picking from a list.
+INTEREST_SUGGESTIONS = [
+    "anime", "art", "board games", "books", "cars", "cooking", "cycling",
+    "festivals", "films", "food", "football", "gaming", "gardening",
+    "hiking", "jazz", "languages", "museums", "music", "photography",
+    "poetry", "sailing", "techno", "travel", "whisky", "wine",
+]
+
+
+def interest_choices(raw):
+    """Chips to show, and which are on, for a profile's interests CSV.
+
+    Anything the profile already carries leads the list even when it is not
+    a suggestion, so a custom interest survives a round trip through the
+    editor instead of being quietly dropped.
+    """
+    chosen = [p.strip() for p in (raw or "").split(",") if p.strip()]
+    extras = [c for c in chosen if c not in INTEREST_SUGGESTIONS]
+    return extras + INTEREST_SUGGESTIONS, chosen
+
+
 # The fields other people's filters actually read. Profile strength is just
 # how many of them are filled in — no hidden weighting — and the hint names
 # the first real gap instead of nagging in general terms.
@@ -1212,6 +1241,7 @@ def edit_profile():
         (user_id,),
     ).fetchall()
     strength_pct, strength_hint = profile_strength(profile, len(photos))
+    chips, chosen = interest_choices(profile.get("interests"))
 
     return render_template(
         "profile_edit.html",
@@ -1219,6 +1249,9 @@ def edit_profile():
         photos=photos,
         strength_pct=strength_pct,
         strength_hint=strength_hint,
+        bio_max=BIO_MAX_CHARS,
+        interest_chips=chips,
+        interest_chosen=chosen,
         relationship_types=RELATIONSHIP_TYPES,
         genders=GENDERS,
         seeking_options=SEEKING_OPTIONS,
@@ -1353,9 +1386,14 @@ def admin_new_profile():
         profile[PREF_BODY_TYPES_FIELD] = ""
         profile["username"] = ""
 
+    chips, chosen = interest_choices(profile.get("interests"))
+
     return render_template(
         "admin_profile_new.html",
         profile=profile,
+        bio_max=BIO_MAX_CHARS,
+        interest_chips=chips,
+        interest_chosen=chosen,
         relationship_types=RELATIONSHIP_TYPES,
         genders=GENDERS,
         seeking_options=SEEKING_OPTIONS,

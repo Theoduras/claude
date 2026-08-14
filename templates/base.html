@@ -1012,6 +1012,87 @@
       color: var(--text);
     }
 
+    /* offscreen but still focusable — the file inputs are driven by their
+       labels (the + tile), not by showing the browser's own control */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .inline-link { display: inline; color: var(--violet-crest); cursor: pointer; }
+    .inline-link:hover { color: var(--champagne); }
+
+    /* ---------- edit profile: compact header --------------------------- */
+    .edit-head {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding-bottom: 0.9rem;
+      margin-bottom: 1.1rem;
+      border-bottom: 1px solid var(--ink-hairline);
+    }
+    .edit-head-title {
+      flex: 1;
+      text-align: center;
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 1.25rem;
+    }
+    /* a text button, not a pill — the full-width Save sits at the bottom */
+    .edit-head-save {
+      padding: 0;
+      font-family: var(--sans);
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--violet-crest);
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .edit-head-save:hover { color: var(--champagne); }
+
+    /* character counter under a textarea */
+    .char-count {
+      margin: -0.5rem 0 1rem;
+      text-align: right;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.6875rem;
+      color: var(--text-faint);
+    }
+
+    /* ---------- toggleable chips (interests) --------------------------- */
+    .pillset {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .pill {
+      padding: 0.5rem 0.875rem;
+      font-family: var(--sans);
+      font-size: 0.845rem;
+      color: var(--text-muted);
+      background: none;
+      border: 1px solid var(--ink-hairline);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    }
+    .pill:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
+    .pill.is-on {
+      color: #F0E2FF;
+      border-color: rgba(168, 85, 247, 0.42);
+      background-image: linear-gradient(150deg, rgba(138, 43, 226, 0.4), rgba(59, 11, 102, 0.55));
+    }
+    .pill:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
+
     /* ---------- edit profile: photo tiles and strength ----------------- */
     .photo-tiles {
       display: flex;

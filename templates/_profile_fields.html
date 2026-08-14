@@ -5,36 +5,99 @@
   <script id="sample-profile-data" type="application/json">{{ sample_profile | tojson }}</script>
 {% endif %}
 
-<label for="name">Name
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="name">Fill</button></span>{% endif %}
-</label>
-<input id="name" name="name" type="text" value="{{ profile['name'] or '' }}" required>
+{# ---- photos: what you have, and a slot to add more ------------------- #}
+{% if allow_photos is defined and allow_photos %}
+  <label>Photos</label>
+  <div class="photo-tiles">
+    {% for photo in (photos if photos is defined else []) %}
+      <div class="photo-tile">
+        <img src="{{ url_for('photo', photo_id=photo['id']) }}" alt="Your photo" loading="lazy">
+        {% if loop.first %}<span class="photo-tile-label">main</span>{% endif %}
+      </div>
+    {% endfor %}
+    {% if (photos is not defined) or (photos | length < photo_max_per_user) %}
+      {# the file inputs themselves are offscreen; these labels are the UI #}
+      <label class="photo-tile photo-tile-add" for="photos" title="Add photos">+</label>
+    {% endif %}
+  </div>
+  <p class="hint" style="margin-top: 0;">
+    Only visible to someone else once you've both chosen to continue a match.
+    JPEG, PNG or WebP, up to 2 MB each, {{ photo_max_per_user }} total.
+    &middot; <label for="profile_picture" class="inline-link">Set the main photo</label>
+  </p>
 
-<label for="age">Age
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="age">Fill</button></span>{% endif %}
-</label>
-<input id="age" name="age" type="number" min="18" max="120"
-       value="{{ profile['age'] or '' }}" required>
+  <input class="visually-hidden" id="profile_picture" name="profile_picture" type="file"
+         accept="image/jpeg,image/png,image/webp">
+  <input class="visually-hidden" id="photos" name="photos" type="file"
+         accept="image/jpeg,image/png,image/webp" multiple>
+{% endif %}
 
-<label for="gender">Gender
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="gender">Fill</button></span>{% endif %}
+{# ---- bio ------------------------------------------------------------- #}
+<label for="bio">Bio
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="bio">Fill</button></span>{% endif %}
 </label>
-<select id="gender" name="gender">
-  <option value="">— Select —</option>
-  {% for g in genders %}
-    <option value="{{ g }}" {% if profile['gender'] == g %}selected{% endif %}>{{ g }}</option>
+<textarea id="bio" name="bio" maxlength="{{ bio_max }}"
+          placeholder="A few sentences about yourself...">{{ profile['bio'] or '' }}</textarea>
+<div class="char-count"><span id="bio-count">0</span> / {{ bio_max }}</div>
+
+{# ---- interests: chips over the free-text value ----------------------- #}
+<label for="interests">Interests
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="interests">Fill</button></span>{% endif %}
+</label>
+{# the real field stays a plain CSV string; the chips just edit it #}
+<input type="hidden" id="interests" name="interests" value="{{ profile['interests'] or '' }}">
+<div class="pillset" id="interest-pills">
+  {% for opt in interest_chips %}
+    <button type="button" class="pill{% if opt in interest_chosen %} is-on{% endif %}"
+            data-value="{{ opt }}" aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ opt }}</button>
   {% endfor %}
-</select>
+</div>
 
-<label for="seeking">Looking for
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="seeking">Fill</button></span>{% endif %}
-</label>
-<select id="seeking" name="seeking">
-  <option value="">— Select —</option>
-  {% for s in seeking_options %}
-    <option value="{{ s }}" {% if profile['seeking'] == s %}selected{% endif %}>{{ s }}</option>
-  {% endfor %}
-</select>
+{# ---- who you are ----------------------------------------------------- #}
+<div class="field-group">
+  <h2>About you</h2>
+</div>
+
+<div class="field-pair">
+  <div>
+    <label for="name">Name
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="name">Fill</button></span>{% endif %}
+    </label>
+    <input id="name" name="name" type="text" value="{{ profile['name'] or '' }}" required>
+  </div>
+  <div>
+    <label for="age">Age
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="age">Fill</button></span>{% endif %}
+    </label>
+    <input id="age" name="age" type="number" min="18" max="120"
+           value="{{ profile['age'] or '' }}" required>
+  </div>
+</div>
+
+<div class="field-pair">
+  <div>
+    <label for="gender">Gender
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="gender">Fill</button></span>{% endif %}
+    </label>
+    <select id="gender" name="gender">
+      <option value="">— Select —</option>
+      {% for g in genders %}
+        <option value="{{ g }}" {% if profile['gender'] == g %}selected{% endif %}>{{ g }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="seeking">Looking for
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="seeking">Fill</button></span>{% endif %}
+    </label>
+    <select id="seeking" name="seeking">
+      <option value="">— Select —</option>
+      {% for s in seeking_options %}
+        <option value="{{ s }}" {% if profile['seeking'] == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
 
 <label for="location">Location
   {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="location">Fill</button></span>{% endif %}
@@ -42,15 +105,15 @@
 <input id="location" name="location" type="text" value="{{ profile['location'] or '' }}"
        placeholder="e.g. Berlin, Germany">
 
-<label for="bio">Bio
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="bio">Fill</button></span>{% endif %}
+<label for="relationship_type">Relationship type
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="relationship_type">Fill</button></span>{% endif %}
 </label>
-<textarea id="bio" name="bio" placeholder="A few sentences about yourself...">{{ profile['bio'] or '' }}</textarea>
-
-<label for="interests">Interests
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="interests">Fill</button></span>{% endif %}
-</label>
-<textarea id="interests" name="interests" placeholder="e.g. music, travel, cooking">{{ profile['interests'] or '' }}</textarea>
+<select id="relationship_type" name="relationship_type">
+  <option value="">— Select —</option>
+  {% for rt in relationship_types %}
+    <option value="{{ rt }}" {% if profile['relationship_type'] == rt %}selected{% endif %}>{{ rt }}</option>
+  {% endfor %}
+</select>
 
 <label for="hobbies">Hobbies
   {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="hobbies">Fill</button></span>{% endif %}
@@ -67,64 +130,38 @@
 </label>
 <textarea id="needs" name="needs" placeholder="What matters most to you in a partner...">{{ profile['needs'] or '' }}</textarea>
 
-<label for="relationship_type">Relationship type
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="relationship_type">Fill</button></span>{% endif %}
-</label>
-<select id="relationship_type" name="relationship_type">
-  <option value="">— Select —</option>
-  {% for rt in relationship_types %}
-    <option value="{{ rt }}" {% if profile['relationship_type'] == rt %}selected{% endif %}>{{ rt }}</option>
-  {% endfor %}
-</select>
-
-{% if allow_photos is defined and allow_photos %}
-  <div class="field-group">
-    <h2>Photos</h2>
-    <p class="subtitle">
-      Only visible to someone else once you've both chosen to continue a match.
-      JPEG, PNG, or WebP, up to 2 MB each, {{ photo_max_per_user }} total.
-    </p>
-  </div>
-  {# What you already have. Only edit_profile passes photos, so the admin
-     "new profile" form — where there is nothing uploaded yet — skips this. #}
-  {% if photos is defined and photos %}
-    <div class="photo-tiles">
-      {% for photo in photos %}
-        <div class="photo-tile">
-          <img src="{{ url_for('photo', photo_id=photo['id']) }}" alt="Your photo" loading="lazy">
-          {% if loop.first %}<span class="photo-tile-label">main</span>{% endif %}
-        </div>
-      {% endfor %}
-      {% if photos | length < photo_max_per_user %}
-        <label class="photo-tile photo-tile-add" for="photos" title="Add another photo">+</label>
-      {% endif %}
-    </div>
-  {% endif %}
-
-  <label for="profile_picture">Profile picture</label>
-  <input id="profile_picture" name="profile_picture" type="file" accept="image/jpeg,image/png,image/webp">
-
-  <label for="photos">More photos</label>
-  <input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple>
-{% endif %}
-
+{# ---- physical -------------------------------------------------------- #}
 <div class="field-group">
   <h2>Physical attributes</h2>
   <p class="subtitle">All optional — anything you leave blank is simply skipped when matching.</p>
 </div>
 
-<label for="height_cm">Height (cm)
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="height_cm">Fill</button></span>{% endif %}
-</label>
-<input id="height_cm" name="height_cm" type="number"
-       min="{{ height_min }}" max="{{ height_max }}"
-       value="{{ profile['height_cm'] or '' }}" placeholder="e.g. 175">
+<div class="field-pair">
+  <div>
+    <label for="height_cm">Height (cm)
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="height_cm">Fill</button></span>{% endif %}
+    </label>
+    <input id="height_cm" name="height_cm" type="number"
+           min="{{ height_min }}" max="{{ height_max }}"
+           value="{{ profile['height_cm'] or '' }}" placeholder="e.g. 175">
+  </div>
+  <div>
+    <label for="eye_color">Eyes
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="eye_color">Fill</button></span>{% endif %}
+    </label>
+    <select id="eye_color" name="eye_color">
+      <option value="">— Select —</option>
+      {% for opt in eye_colors %}
+        <option value="{{ opt }}" {% if profile['eye_color'] == opt %}selected{% endif %}>{{ opt }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
 
 {% for field, label, options in [
      ('body_type', 'Body type', body_types),
      ('fitness_level', 'Fitness level', fitness_levels),
      ('hair_color', 'Hair colour', hair_colors),
-     ('eye_color', 'Eye colour', eye_colors),
      ('tattoos', 'Tattoos', tattoo_levels),
    ] %}
   <label for="{{ field }}">{{ label }}
@@ -138,6 +175,7 @@
   </select>
 {% endfor %}
 
+{# ---- what you're looking for ----------------------------------------- #}
 <div class="field-group">
   <h2>What I'm looking for (physical)</h2>
   <p class="subtitle">
@@ -195,6 +233,55 @@
   </select>
 {% endfor %}
 
+<script>
+(function () {
+  // ---- bio counter ----
+  var bio = document.getElementById("bio");
+  var bioCount = document.getElementById("bio-count");
+  if (bio && bioCount) {
+    var syncBio = function () { bioCount.textContent = bio.value.length; };
+    bio.addEventListener("input", syncBio);
+    syncBio();
+  }
+
+  // ---- interest chips over the hidden CSV field ----
+  var interests = document.getElementById("interests");
+  var pills = document.getElementById("interest-pills");
+  if (interests && pills) {
+    var buttons = pills.querySelectorAll(".pill");
+
+    // hidden field -> chips, so the Fill helper (which writes the field
+    // directly) still lights up the right ones
+    function syncFromField() {
+      var on = interests.value.split(",").map(function (s) { return s.trim(); });
+      buttons.forEach(function (b) {
+        var isOn = on.indexOf(b.dataset.value) !== -1;
+        b.classList.toggle("is-on", isOn);
+        b.setAttribute("aria-pressed", isOn ? "true" : "false");
+      });
+    }
+
+    // chips -> hidden field, keeping the order the chips are shown in
+    function syncFromPills() {
+      var on = [];
+      buttons.forEach(function (b) {
+        if (b.classList.contains("is-on")) on.push(b.dataset.value);
+      });
+      interests.value = on.join(", ");
+    }
+
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        b.classList.toggle("is-on");
+        b.setAttribute("aria-pressed", b.classList.contains("is-on") ? "true" : "false");
+        syncFromPills();
+      });
+    });
+    interests.addEventListener("change", syncFromField);
+  }
+})();
+</script>
+
 {% if sample_profile is defined %}
 <script>
 (function () {
@@ -241,8 +328,12 @@
     if (!el) return;
     if (el.value && !force) return;
 
-    if (el.tagName === "SELECT" || el.type === "text" || el.tagName === "TEXTAREA") {
+    if (el.tagName === "SELECT" || el.type === "text" || el.type === "hidden"
+        || el.tagName === "TEXTAREA") {
       el.value = pick(data);
+      // interests is a hidden field behind the chips, and bio has a counter;
+      // both listen rather than being poked directly from here
+      el.dispatchEvent(new Event(el.type === "hidden" ? "change" : "input"));
     } else if (el.type === "number") {
       var lo = data.min, hi = data.max;
       el.value = Math.floor(lo + Math.random() * (hi - lo + 1));
