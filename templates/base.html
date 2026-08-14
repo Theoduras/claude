@@ -1168,6 +1168,28 @@
     .field-fill .btn-small { padding: 0.2rem 0.65rem; font-size: 0.72rem; }
 
     /* ---------- searching state -------------------------------------- */
+    /* The lottie and the pulse-heart share one grid cell so the animation
+       fades in over the fallback instead of the card jumping when it
+       arrives. The heart shows first and stays put if the CDN player
+       never loads -- see the swap in search_waiting.html. */
+    .search-anim {
+      display: grid;
+      justify-items: center;
+      margin: 0 auto 0.5rem;
+    }
+    .search-anim > * { grid-area: 1 / 1; }
+    .search-anim dotlottie-wc {
+      display: block;
+      /* The artwork is 1024x655, so a square box would letterbox it. */
+      width: min(300px, 70%);
+      aspect-ratio: 1024 / 655;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    .search-anim .pulse-heart { transition: opacity 0.4s ease; }
+    .search-anim.anim-ready dotlottie-wc { opacity: 1; }
+    .search-anim.anim-ready .pulse-heart { opacity: 0; }
+
     .pulse-heart {
       width: 4.5rem;
       height: 4.5rem;
