@@ -12,7 +12,9 @@ see the other side of a chat.
 
 import argparse
 import hashlib
+import struct
 import sys
+import zlib
 
 from werkzeug.security import generate_password_hash
 
@@ -25,12 +27,16 @@ from app import (
     HAIR_COLORS,
     HEIGHT_MAX_CM,
     HEIGHT_MIN_CM,
+    PHOTO_ALLOWED_MIMES,
+    PHOTO_MAX_BYTES,
+    PHOTO_MAX_PER_USER,
     POOL,
     RADIUS_MAX_KM,
     RELATIONSHIP_TYPES,
     SEEKING_OPTIONS,
     TATTOO_LEVELS,
     Db,
+    sniff_image_mime,
     startup,
 )
 
@@ -194,6 +200,74 @@ PREF_DEFAULTS = {
 }
 
 
+# --- demo profile photos --------------------------------------------------
+# Not real (or fabricated-to-look-real) photos of a person: hand-built
+# gradient PNGs in the app's own palette. No Pillow dependency (see
+# app.py's photo-upload notes), so this is a minimal from-scratch PNG
+# encoder rather than a real image library. First entry in each list
+# becomes the primary photo, same convention edit_profile() uses.
+DEMO_PHOTOS = {
+    "theo_r": [
+        ((58, 20, 90), (18, 128, 127)),    # violet -> teal
+        ((138, 43, 226), (11, 7, 19)),     # violet -> ink
+        ((232, 211, 169), (59, 11, 102)),  # champagne -> violet-deep
+    ],
+}
+
+
+def make_gradient_png(w, h, top_rgb, bottom_rgb):
+    """A flat vertical-gradient PNG: raw scanlines, zlib-compressed by hand."""
+    def lerp(a, b, t):
+        return int(a + (b - a) * t)
+
+    rows = bytearray()
+    for y in range(h):
+        t = y / (h - 1)
+        r = lerp(top_rgb[0], bottom_rgb[0], t)
+        g = lerp(top_rgb[1], bottom_rgb[1], t)
+        bl = lerp(top_rgb[2], bottom_rgb[2], t)
+        rows.append(0)  # filter type: none
+        rows.extend([r, g, bl] * w)
+
+    def chunk(tag, data):
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data)))
+
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+    idat = chunk(b"IDAT", zlib.compress(bytes(rows), 9))
+    iend = chunk(b"IEND", b"")
+    return sig + ihdr + idat + iend
+
+
+def seed_photos(db, username, user_id):
+    """Add DEMO_PHOTOS[username], but only if that member has none yet —
+    reset() cascades photos away with the user row, so a plain re-run stays
+    idempotent without needing its own delete-then-reinsert here."""
+    gradients = DEMO_PHOTOS.get(username)
+    if not gradients:
+        return 0
+    existing = db.execute(
+        "SELECT COUNT(*) AS n FROM photos WHERE user_id = ?", (user_id,)
+    ).fetchone()["n"]
+    if existing:
+        return 0
+
+    gradients = gradients[:PHOTO_MAX_PER_USER]
+    added = 0
+    for i, (top, bottom) in enumerate(gradients):
+        data = make_gradient_png(600, 600, top, bottom)
+        assert len(data) <= PHOTO_MAX_BYTES
+        mime = sniff_image_mime(data)
+        assert mime in PHOTO_ALLOWED_MIMES, mime
+        db.execute(
+            "INSERT INTO photos (user_id, data, mime, is_primary) VALUES (?, ?, ?, ?)",
+            (user_id, data, mime, i == 0),
+        )
+        added += 1
+    return added
+
+
 def validate():
     """Fail loudly if the demo data drifts from the app's allowed values."""
     usernames = set()
@@ -277,7 +351,7 @@ def reset(db):
 
 def seed(db):
     password_hash = generate_password_hash(DEMO_PASSWORD)
-    added = refreshed = 0
+    added = refreshed = photos_added = 0
 
     for (
         username, name, age, gender, location, relationship_type,
@@ -301,6 +375,8 @@ def seed(db):
             user_id = row["id"]
             db.execute("UPDATE users SET is_bot = TRUE WHERE id = ?", (user_id,))
             refreshed += 1
+
+        photos_added += seed_photos(db, username, user_id)
 
         phys = derive_physical(username, age, gender)
         prefs = {**PREF_DEFAULTS, **PHYSICAL_PREFS.get(username, {})}
@@ -376,7 +452,7 @@ def seed(db):
         )
 
     db.commit()
-    return added, refreshed
+    return added, refreshed, photos_added
 
 
 def main():
@@ -396,12 +472,14 @@ def main():
             removed = reset(db)
             print(f"Removed {removed} existing demo member(s).")
 
-        added, refreshed = seed(db)
+        added, refreshed, photos_added = seed(db)
         waiting = db.execute(
             "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
         ).fetchone()["n"]
 
     print(f"Added {added} new member(s), refreshed {refreshed}.")
+    if photos_added:
+        print(f"Added {photos_added} profile photo(s).")
     print(f"{waiting} member(s) are now live-searching at the same time.")
     print(f"They all log in with the password: {DEMO_PASSWORD}")
     print("\nStart the app and hit \N{LEFT-POINTING MAGNIFYING GLASS} Live search "

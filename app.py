@@ -165,6 +165,8 @@ CITY_CHOICES = [
 
 RADIUS_MAX_KM = 500  # slider maximum; at the top it means "anywhere"
 
+AGE_MIN_YEARS, AGE_MAX_YEARS = 18, 39
+
 # How long a search must run before it can be paired. The demo pool is
 # always populated, so without this every search resolves on its first
 # attempt and the waiting screen never actually shows.
@@ -289,7 +291,7 @@ def sample_profile_data():
     """
     return {
         "name": SAMPLE_NAMES,
-        "age": {"min": 18, "max": 75},
+        "age": {"min": AGE_MIN_YEARS, "max": AGE_MAX_YEARS},
         "gender": GENDERS,
         "seeking": SEEKING_OPTIONS,
         "location": CITY_CHOICES,
@@ -456,7 +458,7 @@ CREATE TABLE IF NOT EXISTS searches (
     user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     seeking TEXT NOT NULL DEFAULT '',
     age_min INTEGER NOT NULL DEFAULT 18,
-    age_max INTEGER NOT NULL DEFAULT 120,
+    age_max INTEGER NOT NULL DEFAULT 39,
     relationship_type TEXT NOT NULL DEFAULT '',
     interests TEXT NOT NULL DEFAULT '',
     location TEXT NOT NULL DEFAULT '',
@@ -734,8 +736,8 @@ def validate_profile(values):
     else:
         try:
             age = int(values["age"])
-            if not 18 <= age <= 120:
-                error = "Age must be between 18 and 120."
+            if not AGE_MIN_YEARS <= age <= AGE_MAX_YEARS:
+                error = f"Age must be between {AGE_MIN_YEARS} and {AGE_MAX_YEARS}."
         except (TypeError, ValueError):
             error = "Please enter a valid age."
 
@@ -1792,16 +1794,16 @@ def search_criteria():
             error = "Please choose who you're looking for."
 
         try:
-            age_min = int(request.form.get("age_min", 18))
-            age_max = int(request.form.get("age_max", 120))
+            age_min = int(request.form.get("age_min", AGE_MIN_YEARS))
+            age_max = int(request.form.get("age_max", AGE_MAX_YEARS))
             radius_km = int(request.form.get("radius_km", RADIUS_MAX_KM))
         except ValueError:
             error = "Please check the age range and radius."
-            age_min, age_max, radius_km = 18, 120, RADIUS_MAX_KM
+            age_min, age_max, radius_km = AGE_MIN_YEARS, AGE_MAX_YEARS, RADIUS_MAX_KM
 
         if error is None:
-            if not 18 <= age_min <= age_max <= 120:
-                error = "Age range must run from 18 up to 120."
+            if not AGE_MIN_YEARS <= age_min <= age_max <= AGE_MAX_YEARS:
+                error = f"Age range must run from {AGE_MIN_YEARS} up to {AGE_MAX_YEARS}."
             elif not 1 <= radius_km <= RADIUS_MAX_KM:
                 error = f"Radius must be between 1 and {RADIUS_MAX_KM} km."
 
@@ -1926,6 +1928,8 @@ def search_criteria():
         tattoo_levels=TATTOO_LEVELS,
         height_min=HEIGHT_MIN_CM,
         height_max=HEIGHT_MAX_CM,
+        age_min_bound=AGE_MIN_YEARS,
+        age_max_bound=AGE_MAX_YEARS,
     )
 
 
@@ -2020,8 +2024,8 @@ def search_preview():
         lat = lng = None
 
     try:
-        age_min = int(request.form.get("age_min", 18))
-        age_max = int(request.form.get("age_max", 120))
+        age_min = int(request.form.get("age_min", AGE_MIN_YEARS))
+        age_max = int(request.form.get("age_max", AGE_MAX_YEARS))
         radius_km = int(request.form.get("radius_km", RADIUS_MAX_KM))
     except ValueError:
         return {"error": "invalid age or radius"}, 400

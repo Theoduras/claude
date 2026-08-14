@@ -74,11 +74,11 @@
         <div class="range-dual">
           <div class="range-dual-track"></div>
           <div class="range-dual-fill" id="age-fill"></div>
-          <input type="range" id="age_min" name="age_min" min="18" max="120"
-                 value="{{ existing['age_min'] if existing else 21 }}"
+          <input type="range" id="age_min" name="age_min" min="{{ age_min_bound }}" max="{{ age_max_bound }}"
+                 value="{{ existing['age_min'] if existing else age_min_bound }}"
                  aria-label="Minimum age">
-          <input type="range" id="age_max" name="age_max" min="18" max="120"
-                 value="{{ existing['age_max'] if existing else 35 }}"
+          <input type="range" id="age_max" name="age_max" min="{{ age_min_bound }}" max="{{ age_max_bound }}"
+                 value="{{ existing['age_max'] if existing else age_max_bound }}"
                  aria-label="Maximum age">
         </div>
       </div></div>

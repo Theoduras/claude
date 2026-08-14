@@ -69,7 +69,7 @@
     <label for="age">Age
       {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="age">Fill</button></span>{% endif %}
     </label>
-    <input id="age" name="age" type="number" min="18" max="120"
+    <input id="age" name="age" type="number" min="18" max="39"
            value="{{ profile['age'] or '' }}" required>
   </div>
 </div>
