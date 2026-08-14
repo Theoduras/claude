@@ -802,6 +802,21 @@
       background: var(--ink-hairline);
     }
 
+    /* ---------- recap line: "here's what's running" -------------------
+       Shared by the criteria screen (screen 2's own choices) and the
+       waiting screen (what actually got saved, including the escape
+       hatch's silent defaults). */
+    .recap {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.45rem;
+      margin: 0.9rem 0 1.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .recap > span:first-child { color: var(--champagne); }
+
     /* ---------- toggle rows: "which parts are important?" -------------
        One grid template for every row, so switches line up down one edge
        and help buttons down the other however long a label runs. */

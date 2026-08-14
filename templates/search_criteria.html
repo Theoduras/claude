@@ -180,7 +180,7 @@
       <div class="toggle-head">
         <label class="switch">
           <input type="checkbox" name="use_interests"
-                 {% if existing and existing['interests'] %}checked{% endif %}>
+                 {% if not existing or existing['interests'] %}checked{% endif %}>
           <span class="switch-track"></span>
         </label>
         <span class="toggle-label">
@@ -220,16 +220,6 @@
 </div>
 
 <style>
-  .recap {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.45rem;
-    margin: 0.9rem 0 1.5rem;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-  }
-  .recap > span:first-child { color: var(--champagne); }
   .pool-live {
     display: flex;
     flex-wrap: wrap;
@@ -388,12 +378,18 @@
         poolLive.appendChild(chip(
           fit + (fit === 1 ? " person fits" : " people fit") + " what you picked", true));
 
+        // A rescue, not an upsell: only offer a fix once nobody fits, not
+        // alongside a count that's already nonzero.
+        if (fit !== 0) return;
+
         (result.suggestions || []).forEach(function (s) {
           var text = "";
           if (s.key === "age") {
             text = "Widen to " + s.age_min + "–" + s.age_max;
           } else if (s.key === "distance") {
-            text = "Widen to " + s.radius_km + " km";
+            // Clicking this only switches distance off (see apply() below);
+            // it never actually widens the radius, so it must not claim to.
+            text = "Match at any distance";
           } else if (s.key === "gender") {
             text = "Switch to " + s.seeking;
           } else {

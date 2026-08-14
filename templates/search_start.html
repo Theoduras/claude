@@ -95,7 +95,8 @@
       <p class="hint" id="radius-hint"></p>
     </div>
 
-    <button class="btn btn-block" type="submit">Continue &rarr;</button>
+    <button class="btn btn-block" type="submit" name="mode" value="continue">Continue &rarr;</button>
+    <button class="skip-link" type="submit" name="mode" value="skip">or just start searching</button>
   </form>
 </div>
 
@@ -103,6 +104,21 @@
   .where-block { margin-top: 1.6rem; }
   .where-block > label:first-child { margin-top: 0; }
   #start-form > .btn { margin-top: 1.4rem; }
+  /* A real escape hatch, not a peer of Continue -- text-sized and quiet,
+     so screen 2 stays the primary path for anyone who doesn't press it. */
+  .skip-link {
+    display: block;
+    width: 100%;
+    margin-top: 0.7rem;
+    padding: 0.4rem;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: center;
+    cursor: pointer;
+  }
+  .skip-link:hover { color: var(--violet-crest); }
 </style>
 
 <script>

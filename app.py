@@ -1805,6 +1805,73 @@ def require_profile():
     return me if me is not None and me["name"] else None
 
 
+def save_search(
+    user_id, *, seeking, age_min, age_max, relationship_type, interests,
+    location, lat, lng, radius_km,
+    pref_height_min, pref_height_max, pref_body_types, pref_fitness_level,
+    pref_hair_color, pref_eye_color, pref_tattoos,
+    use_gender, use_age, use_distance, use_physical,
+):
+    """Upsert one user's live-search row and mark it 'waiting'.
+
+    Shared by the criteria screen and the "just start searching" escape
+    hatch on screen 1, which calls this with the column defaults instead
+    of the values a completed screen 2 would have produced.
+    """
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO searches
+            (user_id, seeking, age_min, age_max, relationship_type,
+             interests, location, lat, lng, radius_km,
+             pref_height_min, pref_height_max, pref_body_types,
+             pref_fitness_level, pref_hair_color, pref_eye_color,
+             pref_tattoos, use_gender, use_age, use_distance,
+             use_physical, status, match_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                'waiting', NULL, NOW())
+        ON CONFLICT(user_id) DO UPDATE SET
+            seeking = excluded.seeking,
+            age_min = excluded.age_min,
+            age_max = excluded.age_max,
+            relationship_type = excluded.relationship_type,
+            interests = excluded.interests,
+            location = excluded.location,
+            lat = excluded.lat,
+            lng = excluded.lng,
+            radius_km = excluded.radius_km,
+            pref_height_min = excluded.pref_height_min,
+            pref_height_max = excluded.pref_height_max,
+            pref_body_types = excluded.pref_body_types,
+            pref_fitness_level = excluded.pref_fitness_level,
+            pref_hair_color = excluded.pref_hair_color,
+            pref_eye_color = excluded.pref_eye_color,
+            pref_tattoos = excluded.pref_tattoos,
+            -- The switches are explicit user intent now -- the criteria
+            -- screen asks which filters matter -- so they are written from
+            -- the caller rather than forced back on. use_relationship
+            -- stays on: it *is* the connection type picked on screen 1,
+            -- which has no switch of its own.
+            use_gender = excluded.use_gender,
+            use_age = excluded.use_age,
+            use_relationship = TRUE,
+            use_distance = excluded.use_distance,
+            use_physical = excluded.use_physical,
+            status = 'waiting',
+            match_id = NULL,
+            created_at = NOW()
+        """,
+        (
+            user_id, seeking, age_min, age_max, relationship_type, interests,
+            location, lat, lng, radius_km,
+            pref_height_min, pref_height_max, pref_body_types,
+            pref_fitness_level, pref_hair_color, pref_eye_color, pref_tattoos,
+            use_gender, use_age, use_distance, use_physical,
+        ),
+    )
+    db.commit()
+
+
 @app.route("/search", methods=["GET", "POST"])
 @login_required
 def live_search():
@@ -1825,6 +1892,47 @@ def live_search():
         wanted = request.form.get("relationship_type", "")
         if wanted not in RELATIONSHIP_TYPES:
             flash("Please choose what kind of connection you want.")
+        elif request.form.get("mode") == "skip":
+            # The escape hatch: screen 1 already collected everything a
+            # search needs (connection type + place), so this saves and
+            # starts searching immediately rather than stashing a draft for
+            # screen 2. Location/radius parsed the same way search_criteria()
+            # parses them; physical prefs get the same "no preference" shape
+            # validate_physical() would produce from a blank form.
+            location = request.form.get("location", "").strip()
+            lat = lng = None
+            raw_lat = request.form.get("location_lat", "").strip()
+            raw_lng = request.form.get("location_lng", "").strip()
+            if raw_lat and raw_lng:
+                try:
+                    cand_lat, cand_lng = float(raw_lat), float(raw_lng)
+                    if -90 <= cand_lat <= 90 and -180 <= cand_lng <= 180:
+                        lat, lng = cand_lat, cand_lng
+                except ValueError:
+                    pass
+            try:
+                radius_km = int(request.form.get("radius_km", RADIUS_MAX_KM))
+            except ValueError:
+                radius_km = RADIUS_MAX_KM
+            radius_km = max(1, min(radius_km, RADIUS_MAX_KM))
+
+            _, phys = validate_physical({})
+            save_search(
+                session["user_id"], seeking=me["seeking"],
+                age_min=AGE_MIN_YEARS, age_max=AGE_MAX_YEARS,
+                relationship_type=wanted, interests="",
+                location=location, lat=lat, lng=lng, radius_km=radius_km,
+                pref_height_min=phys["pref_height_min"],
+                pref_height_max=phys["pref_height_max"],
+                pref_body_types=phys[PREF_BODY_TYPES_FIELD],
+                pref_fitness_level=phys["pref_fitness_level"],
+                pref_hair_color=phys["pref_hair_color"],
+                pref_eye_color=phys["pref_eye_color"],
+                pref_tattoos=phys["pref_tattoos"],
+                use_gender=True, use_age=True, use_distance=True, use_physical=True,
+            )
+            session.pop("search_draft", None)
+            return redirect(url_for("search_waiting"))
         else:
             session["search_draft"] = {
                 "location": request.form.get("location", "").strip(),
@@ -1850,6 +1958,7 @@ def live_search():
         draft=draft,
         city_choices=CITY_CHOICES,
         radius_max=RADIUS_MAX_KM,
+        step=1,
     )
 
 
@@ -1937,59 +2046,20 @@ def search_criteria():
         if error:
             flash(error)
         else:
-            db.execute(
-                """
-                INSERT INTO searches
-                    (user_id, seeking, age_min, age_max, relationship_type,
-                     interests, location, lat, lng, radius_km,
-                     pref_height_min, pref_height_max, pref_body_types,
-                     pref_fitness_level, pref_hair_color, pref_eye_color,
-                     pref_tattoos, use_gender, use_age, use_distance,
-                     use_physical, status, match_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        'waiting', NULL, NOW())
-                ON CONFLICT(user_id) DO UPDATE SET
-                    seeking = excluded.seeking,
-                    age_min = excluded.age_min,
-                    age_max = excluded.age_max,
-                    relationship_type = excluded.relationship_type,
-                    interests = excluded.interests,
-                    location = excluded.location,
-                    lat = excluded.lat,
-                    lng = excluded.lng,
-                    radius_km = excluded.radius_km,
-                    pref_height_min = excluded.pref_height_min,
-                    pref_height_max = excluded.pref_height_max,
-                    pref_body_types = excluded.pref_body_types,
-                    pref_fitness_level = excluded.pref_fitness_level,
-                    pref_hair_color = excluded.pref_hair_color,
-                    pref_eye_color = excluded.pref_eye_color,
-                    pref_tattoos = excluded.pref_tattoos,
-                    -- The switches are explicit user intent now — the
-                    -- criteria screen asks which filters matter — so they are
-                    -- written from the form rather than forced back on.
-                    -- use_relationship stays on: it *is* the connection type
-                    -- picked on screen 1, which has no switch of its own.
-                    use_gender = excluded.use_gender,
-                    use_age = excluded.use_age,
-                    use_relationship = TRUE,
-                    use_distance = excluded.use_distance,
-                    use_physical = excluded.use_physical,
-                    status = 'waiting',
-                    match_id = NULL,
-                    created_at = NOW()
-                """,
-                (
-                    user_id, seeking, age_min, age_max, wanted, interests,
-                    location, lat, lng, radius_km,
-                    phys["pref_height_min"], phys["pref_height_max"],
-                    phys[PREF_BODY_TYPES_FIELD], phys["pref_fitness_level"],
-                    phys["pref_hair_color"], phys["pref_eye_color"],
-                    phys["pref_tattoos"],
-                    use_gender, use_age, use_distance, use_physical,
-                ),
+            save_search(
+                user_id, seeking=seeking, age_min=age_min, age_max=age_max,
+                relationship_type=wanted, interests=interests,
+                location=location, lat=lat, lng=lng, radius_km=radius_km,
+                pref_height_min=phys["pref_height_min"],
+                pref_height_max=phys["pref_height_max"],
+                pref_body_types=phys[PREF_BODY_TYPES_FIELD],
+                pref_fitness_level=phys["pref_fitness_level"],
+                pref_hair_color=phys["pref_hair_color"],
+                pref_eye_color=phys["pref_eye_color"],
+                pref_tattoos=phys["pref_tattoos"],
+                use_gender=use_gender, use_age=use_age,
+                use_distance=use_distance, use_physical=use_physical,
             )
-            db.commit()
             # The draft has been saved for real; leaving it behind would let a
             # later visit to screen 1 prefill from a search already underway.
             session.pop("search_draft", None)
@@ -2038,6 +2108,7 @@ def search_criteria():
         height_max=HEIGHT_MAX_CM,
         age_min_bound=AGE_MIN_YEARS,
         age_max_bound=AGE_MAX_YEARS,
+        step=2,
     )
 
 
@@ -2370,6 +2441,24 @@ def search_blockers(mine, others):
     }
 
 
+def search_summary_text(search):
+    """One-line human summary of who/age/distance for a live search row.
+
+    Shown on the waiting screen so a search that skipped screen 2 (or one
+    whose filters someone forgot they'd set) still states plainly what is
+    actually running, rather than leaving it to the expandable filter list.
+    """
+    seeking = search["seeking"] or "Anyone"
+    age = f"{search['age_min']}–{search['age_max']}"
+    if not search["location"]:
+        distance = "anywhere"
+    elif search["radius_km"] >= RADIUS_MAX_KM:
+        distance = "any distance"
+    else:
+        distance = f"within {search['radius_km']} km"
+    return f"{seeking}, {age}, {distance}"
+
+
 def search_filter_rows(mine, others, blockers):
     """One dict per filter parameter, for a uniform template loop.
 
@@ -2479,6 +2568,7 @@ def search_waiting():
     return render_template(
         "search_waiting.html",
         search=mine,
+        summary=search_summary_text(mine),
         waiting=len(others),
         radius_max=RADIUS_MAX_KM,
         blockers=blockers,

@@ -9,6 +9,11 @@
     Looking for someone who fits — and who's looking for you.
   </p>
 
+  <p class="recap" style="justify-content: center;">
+    <span>Looking for: {{ summary }}</span>
+    <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Change</a>
+  </p>
+
   <p class="live-count">
     {{ waiting }} searching{% if blockers.current_count is defined %}
       &middot; {{ blockers.current_count }} fit everything below{% endif %}
