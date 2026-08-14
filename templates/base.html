@@ -1773,8 +1773,11 @@
         box-sizing: border-box;
       }
       html[data-viewport="mobile"] .app-shell {
-        width: 390px;
-        height: 844px;
+        /* iPhone X's 375×812 — the narrowest phone still in real use — is the
+           floor the mobile layout is built to, so the debug preview frame
+           should show exactly that rather than a newer, wider phone. */
+        width: 375px;
+        height: 812px;
         max-height: calc(100vh - 6rem);
         overflow-y: auto;
         overflow-x: hidden;
