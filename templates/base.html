@@ -606,10 +606,11 @@
        the same hidden-input + sibling-selector pattern .switch uses. */
     .tile-grid {
       display: grid;
-      /* auto-fit rather than a fixed pair: four across on a wide card, two on a
-         tablet, one on a phone, with no breakpoint doing the arithmetic */
-      grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+      /* a deliberate 2x2 block: two even columns, capped so the tiles stay
+         square-ish on a wide card instead of stretching into banners */
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.9rem;
+      max-width: 34rem;
     }
     .tile { display: block; cursor: pointer; }
     .tile-face {
@@ -682,8 +683,13 @@
       color: var(--teal-crest);
       font-weight: 700;
     }
+    /* stays 2x2 on a phone rather than collapsing to a column, so all four
+       options fit one screen; the tile just gets shorter and tighter */
     @media (max-width: 480px) {
-      .tile-grid { grid-template-columns: 1fr; }
+      .tile-grid { gap: 0.65rem; }
+      .tile-face { min-height: 7.6rem; padding: 1.1rem 0.7rem; gap: 0.55rem; }
+      .tile-icon { width: 1.7rem; height: 1.7rem; }
+      .tile-face strong { font-size: 0.88rem; }
     }
 
     /* ---------- sliders --------------------------------------------- */
