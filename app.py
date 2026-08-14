@@ -2786,6 +2786,41 @@ def match_decide(match_id):
     return redirect(url_for("chat", match_id=match_id))
 
 
+@app.route("/match/<int:match_id>/skip-reveal", methods=["POST"])
+@login_required
+def match_skip_reveal(match_id):
+    """Let either participant open the room early, before the 20s reveal ends.
+
+    Rewinds paired_at by REVEAL_SECONDS so match_phase() reads 'timed' for
+    both sides on the very next request -- no separate "ready" flag needed,
+    and it can't be abused to skip the timed chat itself: only the reveal
+    phase is eligible.
+    """
+    match, _ = get_match_participants(match_id)
+    user_id = session["user_id"]
+    if match is None:
+        return {"error": "not found"}, 404
+    if user_id not in (match["user_a"], match["user_b"]):
+        return {"error": "forbidden"}, 403
+
+    if match_phase(match) == "reveal":
+        db = get_db()
+        db.execute(
+            """
+            UPDATE matches SET paired_at = paired_at - (? * INTERVAL '1 second')
+            WHERE id = ? AND status = 'timed'
+            """,
+            (REVEAL_SECONDS, match_id),
+        )
+        db.commit()
+
+    wants_json = "application/json" in request.headers.get("Accept", "")
+    if wants_json:
+        match = get_match_participants(match_id)[0] or match
+        return match_state_payload(match, user_id)
+    return redirect(url_for("chat", match_id=match_id))
+
+
 @app.route("/chats")
 @login_required
 def chats():

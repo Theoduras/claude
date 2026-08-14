@@ -43,8 +43,13 @@
         <p class="subtitle" style="margin-inline: auto;">
           The room opens on its own when the countdown ends.
         </p>
-        {# Accepting is implicit — waiting is the yes. Only leaving needs a
-           button, and it ends the match before the room ever opens. #}
+        {# Accepting is implicit — waiting is the yes. Leaving needs a
+           button and ends the match before the room ever opens; entering
+           early needs one too, since it opens the room for both sides. #}
+        <form method="post" action="{{ url_for('match_skip_reveal', match_id=match['id']) }}"
+              style="width: 100%;">
+          <button class="btn btn-primary btn-block" type="submit">Enter chat now</button>
+        </form>
         <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
               style="width: 100%;">
           <input type="hidden" name="choice" value="unmatch">
