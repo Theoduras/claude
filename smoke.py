@@ -11,10 +11,24 @@ Needs a reachable database (DATABASE_URL), same as the app: importing app.py
 opens the connection pool and creates the schema.
 """
 
+import re
 import sys
 import uuid
 
+import app as app_module
 from app import app
+
+
+def csrf_token(client):
+    """Pull a CSRF token out of a rendered form.
+
+    Every POST needs one now, so the smoke test has to behave like a browser
+    rather than posting bare form data.
+    """
+    html = client.get("/register").get_data(as_text=True)
+    match = re.search(r'name="csrf_token" value="([^"]+)"', html)
+    return match.group(1) if match else ""
+
 
 def url_for_rule(rule, me_id):
     """Turn a rule into a concrete URL, or None if we can't fill its args."""
@@ -51,17 +65,31 @@ def main():
 
         resp = client.post(
             "/register",
-            data={"username": username, "password": password, "confirm": password},
+            data={
+                "username": username,
+                "email": f"{username}@example.test",
+                "dob": "1995-06-15",
+                "password": password,
+                "confirm": password,
+                "accept_terms": "1",
+                "accept_sensitive": "1",
+                "csrf_token": csrf_token(client),
+            },
             follow_redirects=False,
         )
         if resp.status_code >= 400:
             print(f"FAIL  /register returned {resp.status_code} — cannot continue")
             return 1
 
-        with client.session_transaction() as sess:
-            me_id = sess.get("user_id")
+        # The cookie carries an opaque session token now, not the user id, so
+        # ask the database who we just became.
+        with app.test_request_context():
+            row = app_module.get_db().execute(
+                "SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (username,)
+            ).fetchone()
+        me_id = None if row is None else row["id"]
         if me_id is None:
-            print("FAIL  /register did not establish a session — cannot continue")
+            print("FAIL  /register did not create an account — cannot continue")
             return 1
 
         print(f"registered {username} (id={me_id})\n")

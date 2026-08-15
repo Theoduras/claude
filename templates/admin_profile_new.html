@@ -10,6 +10,7 @@
 
   <div class="wiz-body wiz-scroll">
     <form id="new-profile-form" method="post" action="{{ url_for('admin_new_profile') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label for="username">Username</label>
       <input id="username" name="username" type="text" minlength="3" required autofocus
              value="{{ profile['username'] or '' }}" placeholder="unique handle, e.g. maria92">

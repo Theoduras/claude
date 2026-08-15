@@ -1,0 +1,723 @@
+<title>Velvt Launch Readiness</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+    /* Ground and ink — violet-biased neutrals lifted from the app's own tokens */
+    --paper: #F7F1FB;
+    --paper-raised: #FDFAFF;
+    --ink: #150C22;
+    --ink-muted: #5C4E70;
+    --ink-faint: #877A99;
+    --hairline: #DCC9F5;
+    --hairline-soft: #E9DDF7;
+
+    --violet: #6A15B4;
+    --violet-bright: #8A2BE2;
+
+    /* Severity — semantic, deliberately not the accent hue */
+    --stop: #A8123F;
+    --stop-ground: #FBE4EB;
+    --soon: #7A5A12;
+    --soon-ground: #F7EDD6;
+    --later: #0B5F60;
+    --later-ground: #DCF2F1;
+    --ok: #12807F;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0B0713;
+      --paper-raised: #150C22;
+      --ink: #F0E2FF;
+      --ink-muted: #B7A6CB;
+      --ink-faint: #7C6B92;
+      --hairline: #2E1A47;
+      --hairline-soft: #221136;
+
+      --violet: #C08CF7;
+      --violet-bright: #A855F7;
+
+      --stop: #FF7A8A;
+      --stop-ground: #3A0A19;
+      --soon: #E8D3A9;
+      --soon-ground: #332608;
+      --later: #1DA6A2;
+      --later-ground: #06383B;
+      --ok: #1DA6A2;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #0B0713;
+    --paper-raised: #150C22;
+    --ink: #F0E2FF;
+    --ink-muted: #B7A6CB;
+    --ink-faint: #7C6B92;
+    --hairline: #2E1A47;
+    --hairline-soft: #221136;
+
+    --violet: #C08CF7;
+    --violet-bright: #A855F7;
+
+    --stop: #FF7A8A;
+    --stop-ground: #3A0A19;
+    --soon: #E8D3A9;
+    --soon-ground: #332608;
+    --later: #1DA6A2;
+    --later-ground: #06383B;
+    --ok: #1DA6A2;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 6vw, 5rem) clamp(1.1rem, 4vw, 2.5rem) 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3.5rem;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead { display: flex; flex-direction: column; gap: 1rem; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--violet);
+    margin: 0;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(2.1rem, 6vw, 3.4rem);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .standfirst {
+    font-family: var(--serif);
+    font-size: clamp(1.05rem, 2.4vw, 1.28rem);
+    line-height: 1.5;
+    color: var(--ink-muted);
+    max-width: 42ch;
+    margin: 0;
+  }
+
+  /* ---------- verdict tiles ---------- */
+
+  .tally {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+  }
+
+  .tile {
+    background: var(--paper-raised);
+    padding: 1.15rem 1.25rem 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .tile .n {
+    font-family: var(--serif);
+    font-size: 2.4rem;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tile .lbl {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .tile .sub { font-size: 0.86rem; color: var(--ink-faint); line-height: 1.4; }
+
+  .tile.stop  .n, .tile.stop  .lbl { color: var(--stop); }
+  .tile.soon  .n, .tile.soon  .lbl { color: var(--soon); }
+  .tile.later .n, .tile.later .lbl { color: var(--later); }
+
+  /* ---------- sections ---------- */
+
+  section { display: flex; flex-direction: column; gap: 1.75rem; }
+
+  .sec-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding-bottom: 0.9rem;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(1.45rem, 3.4vw, 1.9rem);
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .sec-head p { margin: 0; color: var(--ink-muted); font-size: 0.95rem; max-width: 60ch; }
+
+  /* ---------- findings ---------- */
+
+  .findings { display: flex; flex-direction: column; }
+
+  .finding {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--hairline-soft);
+  }
+  .finding:first-child { padding-top: 0.25rem; }
+  .finding:last-child { border-bottom: 0; }
+
+  .f-top { display: flex; align-items: baseline; gap: 0.85rem; flex-wrap: wrap; }
+
+  h3 {
+    font-family: var(--sans);
+    font-weight: 650;
+    font-size: 1.06rem;
+    line-height: 1.35;
+    margin: 0;
+    letter-spacing: -0.005em;
+    flex: 1 1 18rem;
+  }
+
+  .chip {
+    font-family: var(--mono);
+    font-size: 0.63rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    padding: 0.28em 0.6em;
+    white-space: nowrap;
+    border: 1px solid currentColor;
+  }
+  .chip.stop  { color: var(--stop);  background: var(--stop-ground); }
+  .chip.soon  { color: var(--soon);  background: var(--soon-ground); }
+  .chip.later { color: var(--later); background: var(--later-ground); }
+  .chip.done  { color: var(--ok); background: var(--later-ground); }
+  .chip.part  { color: var(--soon); background: var(--soon-ground); }
+
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.1rem 2rem;
+  }
+  @media (max-width: 46rem) { .pair { grid-template-columns: 1fr; gap: 0.9rem; } }
+
+  .cell { display: flex; flex-direction: column; gap: 0.3rem; }
+
+  .cell > .k {
+    font-family: var(--mono);
+    font-size: 0.63rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .cell > p { margin: 0; font-size: 0.93rem; line-height: 1.55; color: var(--ink-muted); }
+  .cell.add > p { color: var(--ink); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.85em;
+    background: var(--hairline-soft);
+    padding: 0.1em 0.35em;
+    color: var(--ink);
+    word-break: break-word;
+  }
+
+  ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.3rem; }
+  li { font-size: 0.93rem; line-height: 1.55; color: var(--ink); }
+  li::marker { color: var(--violet); }
+
+  /* ---------- callout ---------- */
+
+  .note {
+    background: var(--paper-raised);
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--violet-bright);
+    padding: 1.1rem 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .note .k {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--violet);
+  }
+  .note p { margin: 0; font-size: 0.93rem; line-height: 1.55; }
+
+  /* ---------- sequencing ---------- */
+
+  .gates { display: flex; flex-direction: column; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); }
+  .gate { background: var(--paper-raised); padding: 1.25rem 1.35rem; display: flex; flex-direction: column; gap: 0.6rem; }
+  .gate h4 {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+  }
+  .gate.stop h4 { color: var(--stop); }
+  .gate.soon h4 { color: var(--soon); }
+  .gate.later h4 { color: var(--later); }
+  .gate .why { margin: 0; font-family: var(--serif); font-size: 1.05rem; line-height: 1.45; }
+
+  /* ---------- sources ---------- */
+
+  .sources { display: flex; flex-direction: column; gap: 0.5rem; }
+  .sources a { color: var(--violet); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  .sources li { font-size: 0.87rem; color: var(--ink-muted); }
+
+  a:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--violet-bright);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Velvt · pre-launch audit · updated August 2026</p>
+    <h1>What Velvt still needs before real people can join</h1>
+    <p class="standfirst">The infrastructure that makes a dating service survivable — recoverable accounts, a way to report someone, a lawful basis for the data — has now been built. What's left is mostly not code.</p>
+  </header>
+
+  <div class="tally">
+    <div class="tile later">
+      <span class="n">17</span>
+      <span class="lbl">Resolved</span>
+      <span class="sub">Built, tested and merged. Every Gate 1 and Gate 2 item.</span>
+    </div>
+    <div class="tile soon">
+      <span class="n">3</span>
+      <span class="lbl">Part done</span>
+      <span class="sub">Plumbing built; each needs something that isn't code — legal copy, a provider, registered details.</span>
+    </div>
+    <div class="tile stop">
+      <span class="n">10</span>
+      <span class="lbl">Outstanding</span>
+      <span class="sub">Gates 3 and 4. Of these, image scanning is the one that should not wait.</span>
+    </div>
+  </div>
+
+  <div class="note">
+    <span class="k">Status, August 2026</span>
+    <p><strong>Everything in Gates 1 and 2 has been implemented</strong> across three commits on <code>claude/app-launch-readiness-vc0yui</code>, covered by 51 behaviour checks in <code>check_auth.py</code>. Findings below are marked <em>Resolved</em> where that is the case, with what was actually built. What remains is listed in the sequencing section at the end — and two of those cannot be closed by writing code at all.</p>
+  </div>
+
+  <!-- ================= ACCOUNTS ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>Accounts, login, and staying logged in</h2>
+      <p>Registration today is a username and a password. Nothing else is collected, which means nothing can be recovered, verified, or revoked.</p>
+    </div>
+
+    <div class="findings">
+
+      <article class="finding">
+        <div class="f-top"><h3>There is no way to reset a forgotten password</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>No email, no phone, no recovery contact of any kind is stored. A user who forgets their password is locked out permanently, and you have no way to prove they own the account even if they write to you.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Collect a verified email at registration. Reset via a single-use, time-limited, hashed token stored server-side. Invalidate every session on reset. This is the single biggest support burden you would otherwise ship.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>Login does not survive closing the tab</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p><code>session.permanent</code> is never set, so Flask issues a browser-session cookie and <code>PERMANENT_SESSION_LIFETIME</code> is never configured. Close the browser and you are logged out. On mobile that happens constantly.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>A "keep me signed in" choice at login: <code>session.permanent = True</code> with a lifetime of ~30 days, refreshed on activity. Keep a short-lived session for people who decline.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>Sessions cannot be revoked</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>Auth is a signed Flask cookie with no server-side record. There is no "sign out other devices", no session list, and no remedy for a stolen or borrowed phone. Rotating <code>APP_SECRET_KEY</code> is the only lever, and it logs out everyone at once.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>A <code>sessions</code> table keyed by an opaque token, with device label, IP, and last-seen. Let people see and end their sessions. Revoke all on password change or reset.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>Nothing throttles login or registration</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>No rate limiting anywhere in the app. Credential stuffing against <code>/login</code> is free and unlimited, and <code>/register</code> will mint accounts as fast as a script can post. <code>/api/places</code> is also an unauthenticated proxy to a third-party geocoder, billable to you.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Flask-Limiter backed by Redis (per-IP and per-account), progressive delays on failed logins, and a bot check on registration. Rate-limit <code>/api/places</code> and message sending too.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>Password policy is below the 2026 baseline</h3><span class="chip part">Part done</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>An 8-character minimum and nothing else. Werkzeug's hashing default is fine; the policy around it is not.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>NIST SP 800-63B-4 (final July 2025) keeps 8 as the floor but recommends 15, requires screening new passwords against a breach corpus, and drops composition rules and forced rotation. Screen against Have I Been Pwned's k-anonymity range API. Longer term, passkeys — Rev 4 recognises synced passkeys at AAL2 — are where consumer auth is going. <strong>Status:</strong> Floor kept at 8 with no composition rules or rotation, per SP 800-63B-4. Breach-list screening and passkeys are still outstanding.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No email verification, so no trustworthy identity</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>Accounts are anonymous by construction. A banned user re-registers in ten seconds under a new username.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Verify the email before a profile can go live-searching. Keep a hash of banned identifiers so a ban actually holds.</p></div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ================= SAFETY ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>Safety and moderation</h2>
+      <p>This is the largest gap. There is currently no way for a user to report anyone, no way to block anyone, and no way for you to remove anyone. For a dating product that is the category-defining risk, and parts of it are a legal requirement rather than a feature choice.</p>
+    </div>
+
+    <div class="findings">
+
+      <article class="finding">
+        <div class="f-top"><h3>No reporting mechanism</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>Nothing in the app lets a user flag a profile, a message, or a photo.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>DSA Article 16 requires every hosting provider offering services in the EU to run an easy, electronic notice-and-action mechanism, and to send the reporter a statement of reasons. The micro/small-enterprise exemption covers internal complaint handling, trusted flaggers and out-of-court settlement — it does not cover this. Report from a profile, a chat, and a photo, with a reason list and a free-text field.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No block, and unmatch is only available in the decision window</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>Unmatch exists only as a decision-phase button. Once a match goes <code>active</code> there is no way to get away from someone.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Block from anywhere: ends the match, hides both profiles from each other, and excludes the pair from future <code>try_pair()</code> results permanently.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>You cannot suspend or remove a user</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p><code>users</code> has <code>is_admin</code> and <code>is_bot</code> and no status column. The only admin tooling is <code>/admin/profiles/new</code>, which creates profiles. There is no queue, no case history, no action log.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>A <code>users.status</code> column (<code>active</code> / <code>suspended</code> / <code>banned</code>) enforced in <code>login_required</code> and in pairing, plus a <code>reports</code> table and a minimal admin queue: open reports, the reported content in context, and act/dismiss with a recorded reason.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No content moderation on messages or photos</h3><span class="chip soon">Before scale</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p><code>send_message()</code> stores any body verbatim with no length cap and no filtering. Photos are accepted as raw bytes with a MIME sniff and a size limit, and nothing else.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>A message length cap and a per-minute send limit. For images, scan on upload — CSAM detection is non-negotiable for a service where strangers exchange photos, and you should be talking to a provider before launch, not after your first incident.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No photo verification</h3><span class="chip later">Fast-follow</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>Nothing links a profile photo to the person using the account.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Selfie-to-profile-photo verification with a visible badge is now table stakes — Tinder, Bumble and Hinge all run some form of it, and it is the feature users cite most when choosing an app. It also gives you a lever short of a ban: restrict unverified accounts.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No safety guidance anywhere in the product</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>No safety centre, no advice about meeting in person, no scam warnings, no emergency resources.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>A safety page linked from the footer and the first match, covering meeting in public, telling a friend, and not moving to another platform or sending money. Romance-scam losses reported to the FTC ran to $1.16bn in the first nine months of 2025 — an in-context warning when a conversation turns to money is cheap and effective.</p></div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ================= AGE ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>Age assurance</h2>
+      <p>The city list points at Germany, Austria, Switzerland and the Netherlands. That is the jurisdiction where age assurance is tightening fastest, and a dating service is exactly the category regulators look at first.</p>
+    </div>
+
+    <div class="findings">
+
+      <article class="finding">
+        <div class="f-top"><h3>Age is self-declared, optional, and collected after the account exists</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>Registration asks only for a username and password. Age lives on the profile, bounded to 18–39 by <code>AGE_MIN_YEARS</code>/<code>AGE_MAX_YEARS</code> only when the profile form is submitted. An account can exist, and reach the app, with no age at all.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Ask for date of birth at registration, not age — store the DOB, derive the age. Hard-gate under-18s, and don't let a rejected attempt immediately retry with a different date.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No route to real age verification</h3><span class="chip part">Part done</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>Self-declaration is the whole system.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>The Commission is pushing member states to roll out the EU age-verification app by the end of 2026, ahead of the EUDI wallet; it returns only an over-18 yes/no without identifying the user. Germany's child-and-youth-protection commission reports in summer 2026 and the Netherlands is legislating nationally. Build the seam now — an <code>age_verified_at</code> column and a pluggable provider — so you can drop the EU app in rather than re-architecting. <strong>Status:</strong> An age_verified_at column exists as the integration seam. No provider is wired in yet.</p></div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ================= PRIVACY ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>Privacy and legal</h2>
+      <p>A dating profile that records gender and who you are seeking makes sexual orientation inferable. Under GDPR that is special category data, and the app currently has no consent, no policy, and no way to delete an account.</p>
+    </div>
+
+    <div class="findings">
+
+      <article class="finding">
+        <div class="f-top"><h3>Special category data processed with no lawful basis</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p><code>profiles.gender</code> plus <code>profiles.seeking</code> reveals sexual orientation. <code>searches</code> stores precise <code>lat</code>/<code>lng</code>. No consent of any kind is captured.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Article 9 prohibits processing this by default; you need an Article 9 exception <em>and</em> a separate Article 6 basis. In practice that means explicit, specific, freely given, withdrawable consent, captured at the point the data is entered and recorded with a timestamp. Note that the Norwegian DPA has held that using a dating app does <em>not</em> amount to manifestly making orientation public — so that exception is not available to you.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No account deletion and no data export</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>There is no delete route and no export route in <code>app.py</code>. Once someone joins, they cannot leave.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Self-service deletion (Article 17) and export (Articles 15 and 20). <code>ON DELETE CASCADE</code> already covers profiles and photos; decide deliberately what happens to messages the other party still sees. A short grace period before hard deletion is normal and prevents rage-quit regret.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No terms, privacy policy, or imprint</h3><span class="chip part">Part done</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>The landing page goes straight from "Start searching" to registration. No document is presented or accepted.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Terms of service and a privacy policy, both linked from registration with an explicit acceptance step and a stored record of which version was accepted when. Germany (DDG §5) and Austria (ECG §5) require an Impressum; the DSA requires a published point of contact and clear terms. Add a cookie/consent notice if you ever add analytics. <strong>Status:</strong> Routes, versioned acceptance and the footer are built. The copy is placeholder and the imprint still needs the operator's registered details.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No retention limits</h3><span class="chip soon">Before scale</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>Messages, photos, ended matches and searches with precise coordinates persist forever.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>A written retention schedule and a job that enforces it — purge ended matches and their messages after a defined window, drop <code>searches</code> rows once resolved, and coarsen or discard stored coordinates.</p></div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ================= SECURITY ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>Production security</h2>
+      <p>Several of these are configuration defaults that are safe locally and dangerous the moment the app is public.</p>
+    </div>
+
+    <div class="findings">
+
+      <article class="finding">
+        <div class="f-top"><h3>The admin account has a known default password</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p><code>ADMIN_PASSWORD</code> falls back to <code>"admin12345"</code> and <code>init_db()</code> creates the admin at import time. If <code>APP_ADMIN_PASSWORD</code> is not set in the deployment environment, a publicly reachable admin account exists with a password published in this repository.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Refuse to start in production when <code>APP_ADMIN_PASSWORD</code> is unset, rather than falling back. Same treatment for <code>AUTO_LOGIN</code> — it currently logs every anonymous visitor in as admin, and nothing ties it to debug mode.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>A missing secret key silently breaks sessions across workers</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p><code>app.secret_key</code> falls back to <code>secrets.token_hex(32)</code>. The Dockerfile runs gunicorn with two workers, so each worker signs cookies with a <em>different</em> key. Users would be logged out at random depending on which worker answers.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Hard-fail at startup if <code>APP_SECRET_KEY</code> is unset and the app is not in debug mode. The random fallback is the right call locally and a silent outage in production.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No CSRF protection on any POST</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>No tokens anywhere. Every state-changing endpoint is forgeable from another site: <code>/profile/edit</code>, <code>/chat/&lt;id&gt;/send</code>, <code>/match/&lt;id&gt;/decide</code>, <code>/search/*</code>, <code>/logout</code>.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Flask-WTF's <code>CSRFProtect</code> with a token in every form and on the fetch-based endpoints. <code>SameSite=Lax</code> mitigates the classic case but is not a substitute, and is only set when <code>CANONICAL_HOST</code> happens to be configured.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>Cookie hardening depends on an unrelated env var</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p><code>SESSION_COOKIE_SECURE</code>, <code>HTTPONLY</code> and <code>SAMESITE</code> are set only inside <code>if CANONICAL_HOST:</code>. A deployment that hasn't mapped a domain yet runs over HTTPS with none of them.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Key the hardening off "is this production" rather than off the canonical-host redirect. The instinct — not setting <code>Secure</code> on plain-http localhost — is right; the trigger is wrong.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No security headers</h3><span class="chip soon">Before scale</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p><code>X-Content-Type-Options</code> is set on <code>/photo/&lt;id&gt;</code> and nowhere else. No CSP, no HSTS, no frame-ancestors, no Referrer-Policy.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>An <code>after_request</code> hook applying a Content-Security-Policy, <code>Strict-Transport-Security</code>, <code>frame-ancestors 'none'</code>, and <code>Referrer-Policy: strict-origin-when-cross-origin</code> to every response.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>Debug defaults on, and the design lab is public</h3><span class="chip done">Resolved</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p><code>FLASK_DEBUG</code> defaults to <code>1</code> in the <code>__main__</code> block. Gunicorn bypasses it, so this is latent rather than live — but the default is the wrong way round. <code>/lab</code> serves the mockup file unauthenticated. There is also no <code>MAX_CONTENT_LENGTH</code>, so oversized uploads are parsed before <code>PHOTO_MAX_BYTES</code> rejects them.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Default debug to off and opt in locally. Gate <code>/lab</code> behind admin or drop it from the production image. Set <code>MAX_CONTENT_LENGTH</code> so the request is refused before it is read into memory.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No logging or alerting for security events</h3><span class="chip later">Fast-follow</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>Gunicorn access logs only. Failed logins, admin actions and report submissions leave no trace.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Structured auth events (login success/failure, password change, admin action, report filed) and an alert on failure spikes. You need this to answer "what happened" after your first incident.</p></div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ================= ONBOARDING ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>Onboarding and information</h2>
+      <p>Velvt's core mechanic — a 20-second reveal, five minutes of chat, then both people decide — is genuinely unusual and genuinely good. Right now nobody is told about it before it happens to them.</p>
+    </div>
+
+    <div class="findings">
+
+      <article class="finding">
+        <div class="f-top"><h3>Registration drops you into a long profile form</h3><span class="chip soon">Before scale</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p><code>/register</code> redirects straight to <code>/profile/edit</code> — one dense form covering name, age, gender, seeking, location, six physical traits, six preference fields, bio, interests, hobbies, wants, needs and relationship type.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Break it into steps with visible progress: the essentials first (name, DOB, gender, seeking, location, one photo), the rest optional and improvable later. Let people reach the app before asking for the long tail.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>The timed-match mechanic is never explained</h3><span class="chip soon">Before scale</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>A first-time user starts a search with no idea that a match opens with a 20-second reveal, runs for five minutes, and then ends unless both people continue. The countdown appears without context.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>A short "how a match works" screen before the first search, and a one-time explainer on the first reveal. This is your differentiator — the product should say so out loud.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>An empty profile can go live-searching</h3><span class="chip later">Fast-follow</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>Nothing requires a name, a photo, or a bio before searching. The person on the other side of a five-minute conversation may have nothing to look at.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>Require a minimum viable profile — name, age, gender, seeking, one photo — before the first search, with a completeness meter to encourage the rest.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No help, FAQ, or way to contact you</h3><span class="chip later">Fast-follow</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>The nav has Live search, Chats and Profile. There is no footer, no help, no support address, no FAQ.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>A footer with help, safety, terms, privacy, imprint and a monitored support address. The DSA also requires a published point of contact, so this is partly the legal work above.</p></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-top"><h3>No settings screen</h3><span class="chip later">Fast-follow</span></div>
+        <div class="pair">
+          <div class="cell"><span class="k">Was</span><p>There is nowhere to change a password, manage sessions, adjust notification or privacy preferences, export data, or delete the account.</p></div>
+          <div class="cell add"><span class="k">Add</span><p>One settings page that gathers account, privacy, safety and data controls. Most of the blocking items above need somewhere to live, and this is it.</p></div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ================= SEQUENCING ================= -->
+  <section>
+    <div class="sec-head">
+      <h2>What's left</h2>
+      <p>Gates 1 and 2 are done. These are the remaining items, in the order they matter.</p>
+    </div>
+
+    <div class="gates">
+      <div class="gate stop">
+        <h4>Cannot be closed by writing code</h4>
+        <p class="why">Two blockers need a person, not a commit.</p>
+        <ul>
+          <li><strong>The legal copy.</strong> Terms, privacy and imprint exist as routes with versioned acceptance recorded against them, and the text describes what the app genuinely does — but it is placeholder and marked as such in the pages themselves. It needs a lawyer.</li>
+          <li><strong>The imprint's registered details.</strong> DDG §5 and ECG §5 want the operator's real legal name, address, register number and responsible person. None of it can be invented.</li>
+          <li><strong>A monitored support address.</strong> <code>SUPPORT_EMAIL</code> is published in the footer and named as the DSA point of contact, so somebody has to be reading it.</li>
+        </ul>
+      </div>
+      <div class="gate soon">
+        <h4>Before it grows</h4>
+        <p class="why">These break at a few thousand users rather than a few dozen.</p>
+        <ul>
+          <li><strong>Image scanning on upload.</strong> The one item here that should not wait for scale — CSAM detection on a service where strangers exchange photos is a talk-to-a-provider-before-launch problem, not a fast-follow.</li>
+          <li>Message length caps to go with the send rate limit already in place</li>
+          <li>Security headers: CSP, HSTS, frame-ancestors, Referrer-Policy</li>
+          <li>Breach-list password screening, then passkeys</li>
+          <li>A retention schedule and a purge job — the deletion purge endpoint exists and is the obvious place to extend</li>
+          <li>Structured auth logging and alerting on failure spikes</li>
+        </ul>
+      </div>
+      <div class="gate later">
+        <h4>Trust and onboarding</h4>
+        <p class="why">Quality work, none of it blocking.</p>
+        <ul>
+          <li>Selfie photo verification with a visible badge</li>
+          <li>Stepped onboarding, and a "how a match works" explainer before the first search</li>
+          <li>A minimum viable profile before searching, with a completeness meter</li>
+          <li>An FAQ to sit alongside the safety page</li>
+          <li>Wire in the EU age-verification app once it ships — the <code>age_verified_at</code> seam is already there</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="sources">
+    <div class="sec-head">
+      <h2>Sources</h2>
+      <p>Regulatory and standards references current as of August 2026.</p>
+    </div>
+    <ul>
+      <li><a href="https://commission.europa.eu/news-and-media/news/commission-urges-fast-rollout-age-verification-app-2026-04-29_en">European Commission — Commission urges fast rollout of age verification app</a></li>
+      <li><a href="https://www.insideprivacy.com/minors/eu-sets-the-clock-on-age-verification-rollout-urged-by-end%E2%80%912026/">Inside Privacy — EU Sets the Clock on Age Verification: Rollout Urged by End-2026</a></li>
+      <li><a href="https://www.euronews.com/next/2026/04/30/what-to-know-about-the-eus-new-age-verification-app-to-protect-children-online">Euronews — What to know about the EU's new age verification app</a></li>
+      <li><a href="https://www.eu-digital-services-act.com/Digital_Services_Act_Article_16.html">Digital Services Act — Article 16, notice and action mechanisms</a></li>
+      <li><a href="https://digital-strategy.ec.europa.eu/en/policies/dsa-impact-platforms">European Commission — The impact of the Digital Services Act on digital platforms</a></li>
+      <li><a href="https://gdprhub.eu/Article_9_GDPR">GDPRhub — Article 9 GDPR, special categories of personal data</a></li>
+      <li><a href="https://gdpr-text.com/read/article-9/">GDPR-Text — Article 9, processing of special categories of personal data</a></li>
+      <li><a href="https://bellatorcyber.com/blog/password-security-best-practices">Bellator Cyber — Password Security Best Practices 2026: NIST SP 800-63B-4</a></li>
+      <li><a href="https://www.strongdm.com/blog/nist-password-guidelines">StrongDM — NIST Password Guidelines: 2026 Updates &amp; Best Practices</a></li>
+      <li><a href="https://www.consumeraffairs.com/news/dating-apps-are-fighting-fake-profiles-and-scams-with-new-safety-tools-080726.html">ConsumerAffairs — Dating apps are fighting fake profiles and scams with new safety tools</a></li>
+      <li><a href="https://gotvouched.com/journal/safer-dating-profile-verification-methods">Vouched Journal — Safer dating profile verification methods that actually help in 2026</a></li>
+      <li><a href="https://flask-security-too.readthedocs.io/en/stable/patterns.html">Flask-Security — Security patterns</a></li>
+    </ul>
+  </section>
+
+</div>

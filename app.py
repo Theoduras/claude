@@ -21,15 +21,17 @@ during local development and browse as admin automatically.
 """
 
 import hashlib
+import json
 import math
 import os
 import re
 import secrets
 import time
-from datetime import datetime as dt, timezone
+from datetime import date, datetime as dt, timedelta, timezone
 
 import requests
 import psycopg
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -49,8 +51,58 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+# Debug is opt-in. The safe default has to be the production one: a
+# deployment that simply forgets to set anything must not inherit the
+# developer's conveniences -- a throwaway secret key, the auto-login
+# shortcut, tracebacks rendered into the browser.
+FLASK_DEBUG = os.environ.get("FLASK_DEBUG", "0") not in ("0", "false", "no")
+IS_PRODUCTION = not FLASK_DEBUG
+
+# Set when production is missing a secret it must supply itself. The app
+# still starts -- gunicorn binds the port before forking, so a worker that
+# dies on import looks like a successful deploy with every request 503ing
+# and the real reason nowhere in sight (the same trap startup() documents).
+# Instead every request is refused with the cause, and /healthz reports it.
+CONFIG_ERROR = None
+
+
+def _required_secret(name, dev_fallback):
+    """Read a secret that production must set explicitly.
+
+    Falling back is worse than refusing to serve. A generated
+    APP_SECRET_KEY means each gunicorn worker signs cookies with a
+    different key, so users are logged out at random depending on which
+    worker answers -- an outage that looks like a bug in login. A default
+    APP_ADMIN_PASSWORD means a publicly reachable administrator account
+    whose password is published in this repository.
+    """
+    global CONFIG_ERROR
+    value = os.environ.get(name)
+    if value:
+        return value
+    if IS_PRODUCTION:
+        CONFIG_ERROR = (
+            f"{name} is not set. It has a fallback for local development only, "
+            "which is unsafe in production, so the app is refusing to serve. "
+            "Set it, or set FLASK_DEBUG=1 if this really is a dev machine."
+        )
+        return secrets.token_hex(32)  # never actually used to serve a request
+    return dev_fallback
+
+
 app = Flask(__name__)
-app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
+app.secret_key = _required_secret("APP_SECRET_KEY", "dev-only-insecure-key")
+
+
+@app.before_request
+def refuse_when_misconfigured():
+    """Fail closed, loudly, on every route but the health check.
+
+    Registered first so it runs before anything else can act on a request.
+    """
+    if CONFIG_ERROR and request.path != "/healthz":
+        return Response(f"Server misconfigured: {CONFIG_ERROR}\n", status=503,
+                        mimetype="text/plain")
 
 
 def database_url():
@@ -99,8 +151,113 @@ POOL = ConnectionPool(
 )
 
 ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = os.environ.get("APP_ADMIN_PASSWORD", "admin12345")
-AUTO_LOGIN = os.environ.get("AUTO_LOGIN", "0") not in ("0", "false", "no")
+ADMIN_PASSWORD = _required_secret("APP_ADMIN_PASSWORD", "admin12345")
+# Ignored outside debug: on a public deployment this logs every anonymous
+# visitor in as the administrator.
+AUTO_LOGIN = (
+    os.environ.get("AUTO_LOGIN", "0") not in ("0", "false", "no") and not IS_PRODUCTION
+)
+
+# --- sessions -----------------------------------------------------------
+SESSION_LIFETIME_DAYS = 30
+# How stale last_seen_at may get before it is rewritten. Without this the
+# session table takes a write on literally every request.
+SESSION_TOUCH_AFTER = timedelta(minutes=5)
+# Who may hold a session. 'pending_deletion' is deliberately allowed: the
+# grace period is worthless if you cannot log back in to cancel.
+LOGIN_ALLOWED_STATUSES = ("active", "pending_deletion")
+
+# --- accounts -----------------------------------------------------------
+# NIST SP 800-63B-4 keeps 8 as the floor and recommends more; length is what
+# buys security, so there are deliberately no composition rules and no
+# forced rotation to go with it.
+PASSWORD_MIN_LENGTH = 8
+MIN_SIGNUP_AGE = 18
+MAX_PLAUSIBLE_AGE = 120
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+\.[^@\s]+$")
+
+VERIFY_TOKEN_HOURS = 48
+RESET_TOKEN_HOURS = 1
+
+# --- privacy and deletion -----------------------------------------------
+# Long enough to undo a decision made in anger, short enough to still be a
+# deletion. The account is unreachable to everyone else from the moment it
+# is requested either way.
+DELETION_GRACE_DAYS = 14
+
+# The GDPR Article 9 consent. Gender plus who you are seeking makes sexual
+# orientation inferable, which is special category data and needs explicit
+# consent on top of the Article 6 basis.
+CONSENT_SENSITIVE = "sensitive_profile"
+
+# Bumped whenever the documents change: acceptance is recorded per version,
+# because "they agreed at some point" is not an answer once the text moves.
+TERMS_VERSION = "2026-08-15"
+PRIVACY_VERSION = "2026-08-15"
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "support@velvt.example")
+
+# Shared secret for the scheduled-task endpoint. Unset means the endpoint
+# refuses to run at all, which is the right default for something that
+# permanently erases accounts.
+TASK_TOKEN = os.environ.get("TASK_TOKEN", "").strip()
+
+# --- safety -------------------------------------------------------------
+# Offered on the report form. Ordered by how urgently a moderator should
+# look, not alphabetically -- the top of this list is what gets triaged
+# first.
+REPORT_REASONS = [
+    ("underage", "They appear to be under 18"),
+    ("harassment", "Harassment, threats or abuse"),
+    ("sexual", "Unwanted sexual content"),
+    ("scam", "Scam, spam or asking for money"),
+    ("fake", "Fake profile or someone else's photos"),
+    ("other", "Something else"),
+]
+REPORT_REASON_KEYS = {key for key, _ in REPORT_REASONS}
+
+# What a moderator can do with a report, and how it reads back in the log.
+ADMIN_ACTIONS = {
+    "dismiss": "dismissed, no action taken",
+    "warn": "noted, account left active",
+    "suspend": "account suspended",
+    "ban": "account banned",
+}
+
+# --- CSRF ---------------------------------------------------------------
+# Hand-rolled on itsdangerous, which Flask already depends on, rather than
+# pulling in Flask-WTF and WTForms for one hidden field -- the forms in this
+# app are hand-written HTML and there is nothing for WTForms to do.
+CSRF_FIELD = "csrf_token"
+CSRF_HEADER = "X-CSRF-Token"
+CSRF_MAX_AGE_SECONDS = 60 * 60 * 12
+# Neither caller is a browser with a session: the Cloud Run startup probe,
+# and the scheduler that drives the deletion purge (which authenticates with
+# a shared secret of its own instead).
+CSRF_EXEMPT_PATHS = {"/healthz", "/tasks/purge-deletions"}
+CSRF_SERIALIZER = URLSafeTimedSerializer(app.secret_key, salt="velvt-csrf")
+
+# --- outbound mail ------------------------------------------------------
+# Resend over plain HTTPS through the `requests` dependency the app already
+# has, rather than an SDK or an SMTP client -- Cloud Run has no local mail
+# transport, and this keeps the dependency list where CLAUDE.md pins it.
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+MAIL_FROM = os.environ.get("MAIL_FROM", "Velvt <onboarding@resend.dev>")
+# Needed to build absolute links in email; falls back to CANONICAL_HOST.
+APP_BASE_URL = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
+
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(days=SESSION_LIFETIME_DAYS),
+    # Refuse an oversized upload before Werkzeug reads it into memory,
+    # rather than after, where PHOTO_MAX_BYTES catches it.
+    MAX_CONTENT_LENGTH=8 * 1024 * 1024,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    # Keyed to production, not to CANONICAL_HOST: a deployment that has not
+    # mapped its domain yet is still served over https and still needs this.
+    # Left off in development because a Secure cookie is never sent back
+    # over plain http on localhost, which would break login there.
+    SESSION_COOKIE_SECURE=IS_PRODUCTION,
+)
 
 # The one hostname the app answers on, e.g. "velvt.nl". Every other host that
 # reaches us -- www, the *.run.app URL -- is redirected there. Unset means no
@@ -109,16 +266,6 @@ AUTO_LOGIN = os.environ.get("AUTO_LOGIN", "0") not in ("0", "false", "no")
 # velvt.nl is not sent to www.velvt.nl, so a user who logs in on one host and
 # later lands on the other looks logged out.
 CANONICAL_HOST = os.environ.get("CANONICAL_HOST", "").strip().lower()
-
-if CANONICAL_HOST:
-    # Only once there is a real domain in front: over plain http on localhost a
-    # Secure cookie is never sent back, so setting this unconditionally would
-    # break login in local development.
-    app.config.update(
-        SESSION_COOKIE_SECURE=True,
-        SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SAMESITE="Lax",
-    )
 
 GENDERS = ["Woman", "Man", "Non-binary"]
 
@@ -206,6 +353,44 @@ MIN_SEARCH_SECONDS = 7
 # touches created_at either.
 SEARCH_WIDER_SECONDS = 45
 
+# The seeded demo members (seed_demo.py, is_bot=TRUE) auto-reply in chat and
+# auto-continue past the decision phase. That is exactly what a local demo
+# wants and exactly what a real deployment must never do: a real person would
+# spend five minutes talking to a canned script and be told it was a match.
+# So bots are out of the pool unless this is switched on, and it is only ever
+# switched on locally -- dev.ps1 sets it, production never does.
+ALLOW_BOT_MATCHES = os.environ.get("ALLOW_BOT_MATCHES", "0") not in ("0", "false", "no")
+
+# Who is allowed to show up in someone else's search pool. Interpolated into
+# both try_pair() and _search_pool() so the matcher and the "why am I not
+# matching" preview can never disagree -- if these two drifted, the preview
+# would promise a candidate the matcher then refuses to pair you with.
+#
+# The fragment is built from constants only, never from request data, and it
+# assumes the queries it lands in have joined `users` as `u`.
+def _candidate_eligible_sql():
+    clauses = ["u.status = 'active'"]
+    if not ALLOW_BOT_MATCHES:
+        clauses.append("u.is_bot = FALSE")
+    return "".join(f" AND {c}" for c in clauses)
+
+
+CANDIDATE_ELIGIBLE_SQL = _candidate_eligible_sql()
+
+# Excludes anyone either side has blocked. Kept separate from the fragment
+# above because it needs the viewer's id as a parameter, and because the
+# landing page's anonymous count has no viewer to exclude against.
+#
+# Symmetric on purpose: one block hides both people from each other, so
+# being blocked never reveals who did it.
+NOT_BLOCKED_SQL = """
+  AND NOT EXISTS (
+      SELECT 1 FROM blocks b
+      WHERE (b.blocker_id = ? AND b.blocked_id = s.user_id)
+         OR (b.blocker_id = s.user_id AND b.blocked_id = ?)
+  )
+"""
+
 # --- match lifecycle (live-search pairings only; /find stays instant) -----
 REVEAL_SECONDS = 20          # "it's a match" card before the chat opens
 TIMED_CHAT_SECONDS = 300     # 5 minutes to talk before a decision is forced
@@ -231,12 +416,38 @@ def sniff_image_mime(data):
     return None
 
 
+def is_blocked_between(a_id, b_id):
+    """True if either has blocked the other.
+
+    Symmetric by design: a block hides both people from each other, so the
+    blocked party is never handed the information that they were blocked.
+    """
+    if a_id == b_id:
+        return False
+    return get_db().execute(
+        """
+        SELECT 1 AS hit FROM blocks
+        WHERE (blocker_id = ? AND blocked_id = ?)
+           OR (blocker_id = ? AND blocked_id = ?)
+        LIMIT 1
+        """,
+        (a_id, b_id, b_id, a_id),
+    ).fetchone() is not None
+
+
 def can_view_photos(owner_id, viewer_id, viewer_is_admin):
     """Photos unlock only once both sides have pressed Continue — i.e. a
     matches row exists between the two with status='active'. That is
     exactly the same state resolve_match() writes, so this needs no
     bookkeeping of its own."""
-    if viewer_id == owner_id or viewer_is_admin:
+    if viewer_id == owner_id:
+        return True
+    if is_blocked_between(owner_id, viewer_id):
+        # Checked before the admin bypass would be wrong -- an admin
+        # reviewing a report needs to see what was reported.
+        if not viewer_is_admin:
+            return False
+    if viewer_is_admin:
         return True
     a, b = sorted((owner_id, viewer_id))
     row = get_db().execute(
@@ -592,6 +803,15 @@ CREATE TABLE IF NOT EXISTS messages (
 -- Serves the chat poll: "messages in this room newer than <id>".
 CREATE INDEX IF NOT EXISTS messages_match_id_idx ON messages (match_id, id);
 
+-- A deleted account must not take the other person's conversation with it.
+-- sender_id becomes nullable and detaches on delete instead of cascading,
+-- so the surviving participant keeps a readable history rather than a chat
+-- full of holes. Everything identifying the deleted account still goes.
+ALTER TABLE messages ALTER COLUMN sender_id DROP NOT NULL;
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE SET NULL;
+
 -- Photos are stored as bytes so they survive Cloud Run's ephemeral disk
 -- with no bucket, and so visibility can be a plain SQL check on the
 -- serving route (see /photo/<id>) rather than a static URL that bypasses
@@ -612,6 +832,163 @@ CREATE TABLE IF NOT EXISTS photos (
 ALTER TABLE photos ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS photos_user_id_idx ON photos (user_id, is_primary);
+
+-- --- accounts -----------------------------------------------------------
+-- An account used to be a username and a password and nothing else, which
+-- made a forgotten password unrecoverable: there was no address to send a
+-- reset to and no way to prove the account was yours. Everything below is
+-- nullable so existing rows survive the migration; the app requires the new
+-- fields at registration, not at the column level.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+-- Date of birth, not age: an age is wrong within a year of storing it, and
+-- the 18+ gate has to keep holding after the account is created.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS dob DATE;
+-- Reserved for a real age-assurance check (the EU age-verification app, due
+-- for rollout by the end of 2026). Unused for now, so wiring one in later
+-- does not need a migration.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS age_verified_at TIMESTAMPTZ;
+-- 'active' | 'suspended' | 'banned' | 'pending_deletion'. Checked on every
+-- request via current_user(), so a suspension takes effect mid-session
+-- rather than at the suspended user's next login.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ;
+
+-- Case-insensitive, and partial so the pre-existing rows with no address at
+-- all do not collide with each other on NULL.
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx
+    ON users (LOWER(email)) WHERE email IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS users_status_idx ON users (status);
+
+-- --- sessions -----------------------------------------------------------
+-- Login used to live entirely in the signed cookie, which meant a session
+-- could never be revoked: no "sign out my other devices", and no remedy for
+-- a stolen phone short of rotating APP_SECRET_KEY and logging out everyone.
+-- The cookie now carries an opaque token and this table is the authority.
+--
+-- Only the token's SHA-256 lands here. A database leak must not hand over a
+-- set of live sessions.
+CREATE TABLE IF NOT EXISTS sessions (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    user_agent TEXT NOT NULL DEFAULT '',
+    ip TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions (user_id);
+CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions (expires_at);
+
+-- --- email tokens -------------------------------------------------------
+-- Address verification and password reset. Hashed for the same reason as
+-- sessions: a leaked table must not be a set of working reset links.
+-- purpose is 'verify' or 'reset'; used_at makes each token single-use.
+CREATE TABLE IF NOT EXISTS email_tokens (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    purpose TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS email_tokens_user_idx ON email_tokens (user_id, purpose);
+
+-- --- blocks -------------------------------------------------------------
+-- Directional: blocker_id no longer wants anything to do with blocked_id.
+-- Every check is "is there a row either way round", so one block hides both
+-- people from each other -- being blocked should not tell you who did it.
+CREATE TABLE IF NOT EXISTS blocks (
+    blocker_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    blocked_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (blocker_id, blocked_id),
+    CHECK (blocker_id <> blocked_id)
+);
+
+CREATE INDEX IF NOT EXISTS blocks_blocked_idx ON blocks (blocked_id);
+
+-- --- reports ------------------------------------------------------------
+-- DSA Article 16 requires every hosting provider serving the EU to run a
+-- notice-and-action mechanism and to tell the reporter what came of it. The
+-- micro-enterprise exemption covers internal complaint handling and trusted
+-- flaggers; it does not cover this.
+--
+-- match_id and message_id are optional context: a report can be about a
+-- whole profile, or about one specific thing that was said.
+CREATE TABLE IF NOT EXISTS reports (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    reporter_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    reported_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    match_id BIGINT REFERENCES matches(id) ON DELETE SET NULL,
+    message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    resolved_at TIMESTAMPTZ,
+    resolution TEXT NOT NULL DEFAULT '',
+    resolution_note TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS reports_status_idx ON reports (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS reports_reported_idx ON reports (reported_id);
+
+-- --- moderation log -----------------------------------------------------
+-- Who did what to whom and why. Needed to answer "what happened" after an
+-- incident, and to keep an admin accountable for their own actions.
+CREATE TABLE IF NOT EXISTS admin_actions (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    actor_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    target_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    action TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --- consent and terms --------------------------------------------------
+-- Which *version* was accepted, not merely that something once was: "they
+-- agreed at some point" is not an answer when the document has changed.
+CREATE TABLE IF NOT EXISTS legal_acceptances (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    document TEXT NOT NULL,
+    version TEXT NOT NULL,
+    accepted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, document, version)
+);
+
+-- GDPR Article 9. A profile carrying gender and who you are seeking makes
+-- sexual orientation inferable, which is special category data: it needs an
+-- Article 9 exception (explicit consent) on top of an Article 6 basis, and
+-- withdrawal has to be as easy as granting -- hence withdrawn_at rather
+-- than deleting the row.
+CREATE TABLE IF NOT EXISTS consents (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    purpose TEXT NOT NULL,
+    granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    withdrawn_at TIMESTAMPTZ,
+    PRIMARY KEY (user_id, purpose)
+);
+
+-- --- rate limiting ------------------------------------------------------
+-- Backed by Postgres rather than process memory on purpose: Cloud Run runs
+-- many instances against one database, so an in-process counter would let
+-- an attacker have N times the budget by spreading requests across them.
+CREATE TABLE IF NOT EXISTS rate_hits (
+    bucket_key TEXT NOT NULL,
+    window_start TIMESTAMPTZ NOT NULL,
+    hits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (bucket_key, window_start)
+);
+
+CREATE INDEX IF NOT EXISTS rate_hits_window_idx ON rate_hits (window_start);
 """
 
 # Arbitrary but fixed keys for Postgres advisory locks. Any instance taking
@@ -657,13 +1034,341 @@ def init_db():
                 )
 
 
-def current_user():
-    user_id = session.get("user_id")
-    if user_id is None:
+def rate_limit_hit(bucket, limit, window_seconds):
+    """Count one hit against `bucket`. True when it is over the limit.
+
+    A fixed window rounded down to `window_seconds`, counted in Postgres
+    rather than in process memory: Cloud Run runs several instances against
+    one database, so an in-process counter would hand an attacker the whole
+    budget again for every instance they happened to land on.
+
+    Fixed windows let through up to 2x the limit across a boundary. That is
+    a fine trade here -- this exists to stop credential stuffing and mail
+    floods, not to meter an API to the request.
+    """
+    db = get_db()
+    row = db.execute(
+        """
+        INSERT INTO rate_hits (bucket_key, window_start, hits)
+        VALUES (?, to_timestamp(floor(extract(epoch FROM NOW()) / ?) * ?), 1)
+        ON CONFLICT (bucket_key, window_start)
+        DO UPDATE SET hits = rate_hits.hits + 1
+        RETURNING hits
+        """,
+        (bucket, window_seconds, window_seconds),
+    ).fetchone()
+    db.commit()
+    return row["hits"] > limit
+
+
+def rate_limited(name, limit, window_seconds, by="ip", include_safe=False):
+    """Refuse a route once it has been called too often.
+
+    `by` picks what shares a budget: "ip" for anything a logged-out caller
+    can reach, "user" for anything behind a login.
+
+    GET is free unless `include_safe`. These decorators sit on routes that
+    answer both methods, and the thing worth limiting is the *attempt* --
+    counting page views would lock someone out of the login screen for
+    reloading it, which is the opposite of the point. Routes that do their
+    work on GET (the geocoder proxy) opt in.
+    """
+    from functools import wraps
+
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if not include_safe and request.method in ("GET", "HEAD", "OPTIONS"):
+                return view(*args, **kwargs)
+            if by == "user":
+                who = f"u{current_uid()}"
+            else:
+                who = request.remote_addr or "unknown"
+            if rate_limit_hit(f"{name}:{who}", limit, window_seconds):
+                app.logger.warning("rate limit %s hit by %s", name, who)
+                retry = window_seconds
+                if "application/json" in request.headers.get("Accept", ""):
+                    return (
+                        {"error": "Too many requests. Please wait a moment."},
+                        429,
+                        {"Retry-After": str(retry)},
+                    )
+                return (
+                    render_template("rate_limited.html", seconds=retry),
+                    429,
+                    {"Retry-After": str(retry)},
+                )
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
+
+
+def csrf_token():
+    """The caller's CSRF token, minted on first use and stable per session.
+
+    A signed wrapper around a nonce held in the session cookie: the
+    signature proves we issued it, and comparing it back against the
+    session's own nonce proves it belongs to *this* session rather than one
+    the attacker minted for themselves.
+    """
+    nonce = session.get("csrf_nonce")
+    if not nonce:
+        nonce = secrets.token_urlsafe(16)
+        session["csrf_nonce"] = nonce
+    return CSRF_SERIALIZER.dumps(nonce)
+
+
+def csrf_valid(supplied):
+    nonce = session.get("csrf_nonce")
+    if not nonce or not supplied:
+        return False
+    try:
+        unsigned = CSRF_SERIALIZER.loads(supplied, max_age=CSRF_MAX_AGE_SECONDS)
+    except (BadSignature, SignatureExpired):
+        return False
+    return secrets.compare_digest(unsigned, nonce)
+
+
+def valid_email(value):
+    """Loose on purpose: the only real proof an address works is mail sent
+    to it, which is what the verification step is for. This just rejects
+    the obviously-not-an-address."""
+    return bool(EMAIL_RE.match(value)) and len(value) <= 254
+
+
+def parse_dob(raw):
+    """Parse the <input type="date"> value, or None if it isn't a real date."""
+    try:
+        return dt.strptime(raw, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def age_on(dob, today=None):
+    """Whole years old, counting birthdays rather than dividing by 365.25."""
+    today = today or date.today()
+    if dob > today:
+        return None
+    had_birthday = (today.month, today.day) >= (dob.month, dob.day)
+    return today.year - dob.year - (0 if had_birthday else 1)
+
+
+def app_url(path):
+    """An absolute URL for a link in an email.
+
+    APP_BASE_URL wins, then the canonical host. request.host_url is the last
+    resort and only sound in development: in production the Host header is
+    attacker-controlled, and a reset link built from it would point wherever
+    the sender liked.
+    """
+    base = APP_BASE_URL or (f"https://{CANONICAL_HOST}" if CANONICAL_HOST else "")
+    if not base:
+        base = request.host_url.rstrip("/")
+    return f"{base}{path}"
+
+
+def send_email(to, subject, html):
+    """Send one transactional email. Returns True if it was accepted.
+
+    Never raises. A mail provider having a bad afternoon must not turn
+    registration into a 500 -- the account is already created by then, and
+    the user can ask for another link.
+    """
+    if not RESEND_API_KEY:
+        app.logger.warning("RESEND_API_KEY unset — not sending %r to %s", subject, to)
+        if not IS_PRODUCTION:
+            # So the verification and reset links are usable locally.
+            app.logger.warning("would have sent:\n%s", html)
+        return False
+
+    try:
+        resp = requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+            json={"from": MAIL_FROM, "to": [to], "subject": subject, "html": html},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        app.logger.error("could not reach the mail provider: %s", exc)
+        return False
+
+    if resp.status_code >= 400:
+        app.logger.error(
+            "mail provider rejected a send: %s %s", resp.status_code, resp.text[:300]
+        )
+        return False
+    return True
+
+
+def issue_email_token(user_id, purpose, hours):
+    """Mint a single-use token and invalidate any earlier one of its kind."""
+    token = secrets.token_urlsafe(32)
+    db = get_db()
+    db.execute(
+        """
+        UPDATE email_tokens SET used_at = NOW()
+        WHERE user_id = ? AND purpose = ? AND used_at IS NULL
+        """,
+        (user_id, purpose),
+    )
+    db.execute(
+        """
+        INSERT INTO email_tokens (user_id, purpose, token_hash, expires_at)
+        VALUES (?, ?, ?, NOW() + (? * INTERVAL '1 hour'))
+        """,
+        (user_id, purpose, hash_token(token), hours),
+    )
+    db.commit()
+    return token
+
+
+def consume_email_token(token, purpose, peek=False):
+    """Return the token's user id, spending it unless `peek`.
+
+    The reset form needs to check the token twice -- once to decide whether
+    to render the form at all, once when the new password is submitted --
+    and burning it on the GET would break the POST that follows.
+    """
+    if not token:
+        return None
+    db = get_db()
+    row = db.execute(
+        """
+        SELECT id, user_id FROM email_tokens
+        WHERE token_hash = ? AND purpose = ?
+          AND used_at IS NULL AND expires_at > NOW()
+        """,
+        (hash_token(token), purpose),
+    ).fetchone()
+    if row is None:
+        return None
+    if not peek:
+        db.execute("UPDATE email_tokens SET used_at = NOW() WHERE id = ?", (row["id"],))
+        db.commit()
+    return row["user_id"]
+
+
+def send_verification_email(user_id, email):
+    token = issue_email_token(user_id, "verify", VERIFY_TOKEN_HOURS)
+    link = app_url(url_for("verify_email", token=token))
+    return send_email(
+        email,
+        "Confirm your Velvt address",
+        f"""<p>Welcome to Velvt.</p>
+            <p><a href="{link}">Confirm this address</a> to start searching.</p>
+            <p>The link expires in {VERIFY_TOKEN_HOURS} hours.</p>""",
+    )
+
+
+def hash_token(token):
+    """Store only this, never the token itself.
+
+    A leaked `sessions` or `email_tokens` table must not be a set of working
+    logins and reset links.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def start_session(user_id, remember=True):
+    """Log `user_id` in: mint a session row and hand the cookie its token.
+
+    The cookie carries an opaque token; this table is the authority. That is
+    the whole point -- a signed cookie alone can never be revoked, so a
+    stolen phone or a leaked key had no remedy short of rotating
+    APP_SECRET_KEY and logging out every user at once.
+    """
+    token = secrets.token_urlsafe(32)
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO sessions (user_id, token_hash, user_agent, ip, expires_at)
+        VALUES (?, ?, ?, ?, NOW() + (? * INTERVAL '1 day'))
+        """,
+        (
+            user_id,
+            hash_token(token),
+            (request.headers.get("User-Agent") or "")[:300],
+            request.remote_addr or "",
+            SESSION_LIFETIME_DAYS,
+        ),
+    )
+    db.commit()
+
+    session.clear()
+    session["sid"] = token
+    # Unchecked "keep me signed in" leaves a browser-session cookie, which is
+    # what someone on a shared machine is asking for.
+    session.permanent = bool(remember)
+    g.current_user = None  # force a re-resolve on the next current_user()
+    return token
+
+
+def end_session():
+    """Log out just this device."""
+    token = session.get("sid")
+    if token:
+        db = get_db()
+        db.execute("DELETE FROM sessions WHERE token_hash = ?", (hash_token(token),))
+        db.commit()
+    session.clear()
+    g.current_user = None
+
+
+def revoke_user_sessions(user_id, except_token=None):
+    """Log a user out everywhere. Used on password change and reset.
+
+    `except_token` keeps the caller's own session alive, so changing your
+    password does not immediately log you out of the tab you did it in.
+    """
+    db = get_db()
+    if except_token:
+        db.execute(
+            "DELETE FROM sessions WHERE user_id = ? AND token_hash != ?",
+            (user_id, hash_token(except_token)),
+        )
+    else:
+        db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    db.commit()
+
+
+def _resolve_session_user():
+    """Look up the caller from the session cookie. Read-only."""
+    token = session.get("sid")
+    if not token:
         return None
     return get_db().execute(
-        "SELECT * FROM users WHERE id = ?", (user_id,)
+        """
+        SELECT u.*, s.id AS session_id, s.last_seen_at AS session_last_seen
+        FROM sessions s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.token_hash = ? AND s.expires_at > NOW()
+        """,
+        (hash_token(token),),
     ).fetchone()
+
+
+def current_user():
+    """The logged-in user row, or None.
+
+    Resolved once per request by load_current_user() and cached on `g`: the
+    context processor calls this on every rendered page, and it is now a
+    join rather than a primary-key lookup.
+    """
+    if "current_user" in g and g.current_user is not None:
+        return g.current_user
+    user = _resolve_session_user()
+    if user is not None and user["status"] not in LOGIN_ALLOWED_STATUSES:
+        user = None
+    g.current_user = user
+    return user
+
+
+def current_uid():
+    """The logged-in user's id, or None."""
+    user = current_user()
+    return None if user is None else user["id"]
 
 
 def login_required(view):
@@ -671,7 +1376,7 @@ def login_required(view):
 
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if session.get("user_id") is None:
+        if current_user() is None:
             flash("Please sign in first.")
             return redirect(url_for("login"))
         return view(*args, **kwargs)
@@ -695,7 +1400,12 @@ def admin_required(view):
 
 @app.context_processor
 def inject_user():
-    return {"current_user": current_user()}
+    return {
+        "current_user": current_user(),
+        "csrf_token": csrf_token,
+        # The footer on every page needs somewhere to point "Contact".
+        "support_email": SUPPORT_EMAIL,
+    }
 
 
 @app.before_request
@@ -720,94 +1430,250 @@ def force_canonical_host():
 
 
 @app.before_request
+def check_csrf():
+    """Reject any state-changing request that didn't come from our own page.
+
+    Without this every POST is forgeable from another site: a page the user
+    happens to visit while signed in can send a message, change their
+    profile, or resolve a match on their behalf. SameSite=Lax blocks the
+    classic cross-site form post in current browsers, but it is a
+    same-origin heuristic, not a token, and it does nothing for the
+    fetch-based endpoints.
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
+        return
+    if request.path in CSRF_EXEMPT_PATHS:
+        return
+
+    supplied = request.form.get(CSRF_FIELD) or request.headers.get(CSRF_HEADER, "")
+    if csrf_valid(supplied):
+        return
+
+    app.logger.warning("CSRF check failed for %s %s", request.method, request.path)
+    if "application/json" in request.headers.get("Accept", ""):
+        return {"error": "Your session expired. Reload the page and try again."}, 400
+    return (
+        render_template("csrf_error.html"),
+        400,
+    )
+
+
+@app.before_request
+def load_current_user():
+    """Resolve the session once per request and cache it on `g`.
+
+    The last_seen_at refresh lives here rather than in current_user()
+    because it writes: current_user() is called from the template context
+    processor, and committing mid-render would commit whatever else the
+    view had in flight. At before_request time nothing else is pending.
+    """
+    g.current_user = None
+    user = _resolve_session_user()
+    if user is None:
+        return
+    if user["status"] not in LOGIN_ALLOWED_STATUSES:
+        # Suspended or banned mid-session: drop the session rather than
+        # waiting for it to expire on its own.
+        end_session()
+        flash("This account is not available. Please contact support.")
+        return
+    g.current_user = user
+
+    stale = user["session_last_seen"] < dt.now(timezone.utc) - SESSION_TOUCH_AFTER
+    if stale:
+        db = get_db()
+        db.execute(
+            "UPDATE sessions SET last_seen_at = NOW() WHERE id = ?",
+            (user["session_id"],),
+        )
+        db.commit()
+
+
+@app.before_request
 def auto_login_admin():
-    """Optional dev shortcut (AUTO_LOGIN=1): browse as admin without logging in."""
-    if not AUTO_LOGIN or session.get("user_id") is not None:
+    """Optional dev shortcut (AUTO_LOGIN=1): browse as admin without logging in.
+
+    Debug-only: on a public deployment this would log every anonymous
+    visitor in as the administrator. IS_PRODUCTION already refuses to let
+    AUTO_LOGIN be set there, and this is the second lock on the same door.
+    """
+    if not AUTO_LOGIN or IS_PRODUCTION or current_user() is not None:
         return
     admin = get_db().execute(
         "SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (ADMIN_USERNAME,)
     ).fetchone()
     if admin is not None:
-        session["user_id"] = admin["id"]
+        start_session(admin["id"])
 
 
 MOCKUPS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mockups")
 
 
 @app.route("/lab")
+@admin_required
 def design_lab():
-    """Serve the design iteration lab. Static, self-contained, no auth —
-    it renders mock data only and never touches the database."""
+    """Serve the design iteration lab.
+
+    Static, self-contained mock data that never touches the database — but
+    it is an internal tool, and an internal tool on a public dating site is
+    just an unexplained page strangers can find.
+    """
     return send_from_directory(MOCKUPS_DIR, "velvet-lab.html")
 
 
 @app.route("/")
 def index():
-    if session.get("user_id"):
+    if current_uid():
         return redirect(url_for("live_search"))
+    # Counts only searchers who could actually be paired with. The landing
+    # page shows this number to logged-out visitors, so counting demo members
+    # here would be advertising a pool that does not exist.
     searching_now = get_db().execute(
-        "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
+        f"""
+        SELECT COUNT(*) AS n FROM searches s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.status = 'waiting' {CANDIDATE_ELIGIBLE_SQL}
+        """
     ).fetchone()["n"]
     return render_template("landing.html", searching_now=searching_now)
 
 
 @app.route("/register", methods=["GET", "POST"])
+@rate_limited("register", limit=20, window_seconds=3600)
 def register():
-    if session.get("user_id"):
+    if current_uid():
         return redirect(url_for("live_search"))
 
+    form = {"username": "", "email": "", "dob": ""}
+
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
+        form["username"] = request.form.get("username", "").strip()
+        form["email"] = request.form.get("email", "").strip()
+        form["dob"] = request.form.get("dob", "").strip()
         password = request.form.get("password", "")
         confirm = request.form.get("confirm", "")
 
+        dob = parse_dob(form["dob"])
+        age = None if dob is None else age_on(dob)
+
         error = None
-        if not username or len(username) < 3:
+        if not form["username"] or len(form["username"]) < 3:
             error = "Username must be at least 3 characters."
-        elif len(password) < 8:
-            error = "Password must be at least 8 characters."
+        elif not valid_email(form["email"]):
+            error = "Please enter an email address we can reach you at."
+        elif dob is None:
+            error = "Please enter your date of birth."
+        elif age is None or age < MIN_SIGNUP_AGE:
+            # Deliberately terminal: a "you must be 18" message next to an
+            # editable date field is an instruction to try another one.
+            session["age_gate_failed"] = True
+            return render_template("age_gate.html"), 403
+        elif age > MAX_PLAUSIBLE_AGE:
+            error = "Please check your date of birth."
+        elif len(password) < PASSWORD_MIN_LENGTH:
+            error = f"Password must be at least {PASSWORD_MIN_LENGTH} characters."
         elif password != confirm:
             error = "Passwords do not match."
+        elif not request.form.get("accept_terms"):
+            error = "Please accept the terms and privacy policy to continue."
+        elif not request.form.get("accept_sensitive"):
+            # Separate from the terms box on purpose. Article 9 consent has
+            # to be specific and freely given, which a single "I agree to
+            # everything" checkbox is not.
+            error = (
+                "We need your permission to use your gender and who you're "
+                "looking for, or we can't match you."
+            )
+
+        if error is None and session.get("age_gate_failed"):
+            return render_template("age_gate.html"), 403
 
         if error is None:
             db = get_db()
             try:
                 new_id = db.insert_returning_id(
-                    "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                    (username, generate_password_hash(password)),
+                    """
+                    INSERT INTO users (username, email, password_hash, dob,
+                                       password_changed_at)
+                    VALUES (?, ?, ?, ?, NOW())
+                    """,
+                    (
+                        form["username"],
+                        form["email"],
+                        generate_password_hash(password),
+                        dob,
+                    ),
                 )
-                db.execute("INSERT INTO profiles (user_id) VALUES (?)", (new_id,))
+                db.execute(
+                    "INSERT INTO profiles (user_id, age) VALUES (?, ?)", (new_id, age)
+                )
+                for document, version in (
+                    ("terms", TERMS_VERSION),
+                    ("privacy", PRIVACY_VERSION),
+                ):
+                    db.execute(
+                        """
+                        INSERT INTO legal_acceptances (user_id, document, version)
+                        VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+                        """,
+                        (new_id, document, version),
+                    )
+                db.execute(
+                    "INSERT INTO consents (user_id, purpose) VALUES (?, ?) "
+                    "ON CONFLICT DO NOTHING",
+                    (new_id, CONSENT_SENSITIVE),
+                )
                 db.commit()
             except psycopg.errors.UniqueViolation:
                 db.rollback()
-                error = "That username is already taken."
+                # Which one collided decides the message, so "taken" never
+                # doubles as an account-enumeration oracle for addresses.
+                taken = db.execute(
+                    "SELECT 1 AS hit FROM users WHERE LOWER(username) = LOWER(?)",
+                    (form["username"],),
+                ).fetchone()
+                error = (
+                    "That username is already taken."
+                    if taken
+                    else "That email address is already registered. Try signing in."
+                )
             else:
-                session.clear()
-                session["user_id"] = new_id
-                flash("Welcome! Now set up your profile.")
+                send_verification_email(new_id, form["email"])
+                start_session(new_id)
+                flash("Welcome! Check your email to confirm your address.")
                 return redirect(url_for("edit_profile"))
 
         flash(error)
 
-    return render_template("register.html")
+    return render_template("register.html", form=form, age_min=MIN_SIGNUP_AGE)
 
 
 @app.route("/login", methods=["GET", "POST"])
+@rate_limited("login", limit=10, window_seconds=300)
 def login():
-    if session.get("user_id"):
+    if current_uid():
         return redirect(url_for("live_search"))
 
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
+        identifier = request.form.get("username", "").strip()
         password = request.form.get("password", "")
+        remember = bool(request.form.get("remember"))
 
+        # Either the username or the email address signs you in -- people
+        # remember one or the other, rarely which one this site wanted.
         user = get_db().execute(
-            "SELECT * FROM users WHERE LOWER(username) = LOWER(?)", (username,)
+            """
+            SELECT * FROM users
+            WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)
+            """,
+            (identifier, identifier),
         ).fetchone()
 
         if user and check_password_hash(user["password_hash"], password):
-            session.clear()
-            session["user_id"] = user["id"]
+            if user["status"] not in LOGIN_ALLOWED_STATUSES:
+                flash("This account is not available. Please contact support.")
+                return render_template("login.html")
+            start_session(user["id"], remember=remember)
             return redirect(url_for("live_search"))
 
         flash("Invalid username or password.")
@@ -817,8 +1683,104 @@ def login():
 
 @app.route("/logout", methods=["POST"])
 def logout():
-    session.clear()
+    end_session()
     return redirect(url_for("login"))
+
+
+@app.route("/verify/<token>")
+def verify_email(token):
+    user_id = consume_email_token(token, "verify")
+    if user_id is None:
+        flash("That confirmation link has expired. We've sent a new one.")
+        user = current_user()
+        if user is not None and user["email"]:
+            send_verification_email(user["id"], user["email"])
+        return redirect(url_for("live_search") if user else url_for("login"))
+
+    db = get_db()
+    db.execute(
+        "UPDATE users SET email_verified_at = NOW() WHERE id = ?", (user_id,)
+    )
+    db.commit()
+    flash("Email confirmed. You're all set.")
+    return redirect(url_for("live_search") if current_uid() else url_for("login"))
+
+
+@app.route("/verify/resend", methods=["POST"])
+@login_required
+@rate_limited("resend", limit=3, window_seconds=3600, by="user")
+def resend_verification():
+    user = current_user()
+    if user["email"] and user["email_verified_at"] is None:
+        send_verification_email(user["id"], user["email"])
+    flash("Confirmation email sent.")
+    return redirect(request.referrer or url_for("live_search"))
+
+
+@app.route("/forgot", methods=["GET", "POST"])
+@rate_limited("forgot", limit=5, window_seconds=3600)
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        user = get_db().execute(
+            "SELECT id, email FROM users WHERE LOWER(email) = LOWER(?)", (email,)
+        ).fetchone()
+
+        if user is not None:
+            token = issue_email_token(user["id"], "reset", RESET_TOKEN_HOURS)
+            link = app_url(url_for("reset_password", token=token))
+            send_email(
+                user["email"],
+                "Reset your Velvt password",
+                f"""<p>Someone asked to reset the password for your Velvt account.</p>
+                    <p><a href="{link}">Choose a new password</a></p>
+                    <p>The link works once and expires in {RESET_TOKEN_HOURS} hour(s).
+                       If this wasn't you, ignore this email — nothing has changed.</p>""",
+            )
+
+        # Same answer either way. Branching here would turn this form into a
+        # way to ask the site which addresses have accounts.
+        flash("If that address has an account, a reset link is on its way.")
+        return redirect(url_for("login"))
+
+    return render_template("forgot.html")
+
+
+@app.route("/reset/<token>", methods=["GET", "POST"])
+@rate_limited("reset", limit=10, window_seconds=3600)
+def reset_password(token):
+    user_id = consume_email_token(token, "reset", peek=True)
+    if user_id is None:
+        flash("That reset link has expired or already been used.")
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm", "")
+
+        if len(password) < PASSWORD_MIN_LENGTH:
+            flash(f"Password must be at least {PASSWORD_MIN_LENGTH} characters.")
+        elif password != confirm:
+            flash("Passwords do not match.")
+        else:
+            consume_email_token(token, "reset")
+            db = get_db()
+            db.execute(
+                """
+                UPDATE users SET password_hash = ?, password_changed_at = NOW()
+                WHERE id = ?
+                """,
+                (generate_password_hash(password), user_id),
+            )
+            db.commit()
+            # Whoever had the old password is now out, everywhere. That is
+            # the point of a reset.
+            revoke_user_sessions(user_id)
+            start_session(user_id)
+            flash("Password updated. You've been signed out on other devices.")
+            return redirect(url_for("live_search"))
+
+    return render_template("reset.html", token=token)
 
 
 def validate_profile(values):
@@ -1359,7 +2321,7 @@ def apply_photo_edits(db, user_id, removals, uploads, posted_order, posted_prima
 @login_required
 def edit_profile():
     db = get_db()
-    user_id = session["user_id"]
+    user_id = current_uid()
 
     if request.method == "POST":
         values = {f: request.form.get(f, "").strip() for f in PROFILE_FIELDS}
@@ -1548,11 +2510,15 @@ def view_profile(user_id):
         (user_id,),
     ).fetchone()
 
-    if row is None:
+    user = current_user()
+    if row is None or (
+        is_blocked_between(user_id, user["id"]) and not user["is_admin"]
+    ):
+        # Same answer for "no such profile" and "blocked", so the page
+        # cannot be used to work out that someone blocked you.
         flash("That profile does not exist.")
         return redirect(url_for("live_search"))
 
-    user = current_user()
     can_view = can_view_photos(user_id, user["id"], user["is_admin"])
     photos = (
         get_db()
@@ -1569,10 +2535,565 @@ def view_profile(user_id):
     return render_template(
         "profile_view.html",
         profile=row,
-        is_own=(user_id == session["user_id"]),
+        is_own=(user_id == current_uid()),
         can_view_photos=can_view,
         photos=photos,
     )
+
+
+@app.route("/terms")
+def terms():
+    return render_template("legal_terms.html", version=TERMS_VERSION,
+                           support_email=SUPPORT_EMAIL)
+
+
+@app.route("/privacy")
+def privacy():
+    return render_template("legal_privacy.html", version=PRIVACY_VERSION,
+                           support_email=SUPPORT_EMAIL,
+                           retention_days=DELETION_GRACE_DAYS)
+
+
+@app.route("/imprint")
+def imprint():
+    return render_template("legal_imprint.html", support_email=SUPPORT_EMAIL)
+
+
+@app.route("/safety")
+def safety():
+    return render_template("safety.html", support_email=SUPPORT_EMAIL)
+
+
+@app.route("/settings")
+@login_required
+def settings():
+    me = current_user()
+    db = get_db()
+    mine_hash = hash_token(session.get("sid", ""))
+    sessions = [
+        dict(row, is_current=(row["token_hash"] == mine_hash))
+        for row in db.execute(
+            """
+            SELECT id, token_hash, user_agent, ip, created_at, last_seen_at
+            FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC
+            """,
+            (me["id"],),
+        ).fetchall()
+    ]
+    blocked = db.execute(
+        """
+        SELECT u.id, u.username, p.name FROM blocks b
+        JOIN users u ON u.id = b.blocked_id
+        LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE b.blocker_id = ? ORDER BY b.created_at DESC
+        """,
+        (me["id"],),
+    ).fetchall()
+    consent = db.execute(
+        "SELECT * FROM consents WHERE user_id = ? AND purpose = ?",
+        (me["id"], CONSENT_SENSITIVE),
+    ).fetchone()
+
+    return render_template(
+        "settings.html",
+        me=me,
+        sessions=sessions,
+        blocked=blocked,
+        consent=consent,
+        deletion_grace_days=DELETION_GRACE_DAYS,
+    )
+
+
+@app.route("/settings/password", methods=["POST"])
+@login_required
+def change_password():
+    me = current_user()
+    current = request.form.get("current", "")
+    password = request.form.get("password", "")
+    confirm = request.form.get("confirm", "")
+
+    if not check_password_hash(me["password_hash"], current):
+        flash("That isn't your current password.")
+    elif len(password) < PASSWORD_MIN_LENGTH:
+        flash(f"Password must be at least {PASSWORD_MIN_LENGTH} characters.")
+    elif password != confirm:
+        flash("Passwords do not match.")
+    else:
+        db = get_db()
+        db.execute(
+            "UPDATE users SET password_hash = ?, password_changed_at = NOW() WHERE id = ?",
+            (generate_password_hash(password), me["id"]),
+        )
+        db.commit()
+        # Everywhere but here: changing your password should not log you out
+        # of the tab you did it in, but it must log out everyone else.
+        revoke_user_sessions(me["id"], except_token=session.get("sid"))
+        flash("Password changed. You've been signed out on other devices.")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/sessions/<int:session_id>/revoke", methods=["POST"])
+@login_required
+def revoke_session(session_id):
+    db = get_db()
+    db.execute(
+        "DELETE FROM sessions WHERE id = ? AND user_id = ?",
+        (session_id, current_uid()),
+    )
+    db.commit()
+    flash("Signed out on that device.")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/sessions/revoke-others", methods=["POST"])
+@login_required
+def revoke_other_sessions():
+    revoke_user_sessions(current_uid(), except_token=session.get("sid"))
+    flash("Signed out everywhere else.")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/consent", methods=["POST"])
+@login_required
+def update_consent():
+    """Withdraw or re-grant the Article 9 consent.
+
+    Withdrawal has to be as easy as granting, which is why this is one
+    button and not a support request. Withdrawing stops the search working,
+    because the fields it needs are exactly the ones consent covers.
+    """
+    grant = bool(request.form.get("grant"))
+    db = get_db()
+    if grant:
+        db.execute(
+            """
+            INSERT INTO consents (user_id, purpose) VALUES (?, ?)
+            ON CONFLICT (user_id, purpose)
+            DO UPDATE SET granted_at = NOW(), withdrawn_at = NULL
+            """,
+            (current_uid(), CONSENT_SENSITIVE),
+        )
+        flash("Thanks — matching is switched back on.")
+    else:
+        db.execute(
+            "UPDATE consents SET withdrawn_at = NOW() WHERE user_id = ? AND purpose = ?",
+            (current_uid(), CONSENT_SENSITIVE),
+        )
+        db.execute(
+            "UPDATE searches SET status = 'cancelled' WHERE user_id = ? AND status = 'waiting'",
+            (current_uid(),),
+        )
+        flash("Consent withdrawn. We've stopped matching you.")
+    db.commit()
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/export")
+@login_required
+def export_data():
+    """Everything we hold about the caller, as JSON (GDPR Art. 15 and 20).
+
+    Photo bytes are referenced by URL rather than inlined -- a base64 blob
+    per photo would make the file unusable in the machine-readable sense
+    Article 20 is asking for.
+    """
+    me = current_uid()
+    db = get_db()
+
+    def rows(sql, params=(me,)):
+        return [dict(r) for r in db.execute(sql, params).fetchall()]
+
+    account = dict(
+        db.execute(
+            """
+            SELECT id, username, email, dob, status, created_at,
+                   email_verified_at, password_changed_at
+            FROM users WHERE id = ?
+            """,
+            (me,),
+        ).fetchone()
+    )
+
+    payload = {
+        "exported_at": dt.now(timezone.utc).isoformat(),
+        "account": account,
+        "profile": rows("SELECT * FROM profiles WHERE user_id = ?"),
+        "photos": rows(
+            "SELECT id, mime, is_primary, created_at FROM photos WHERE user_id = ?"
+        ),
+        "searches": rows("SELECT * FROM searches WHERE user_id = ?"),
+        "matches": rows(
+            "SELECT * FROM matches WHERE user_a = ? OR user_b = ?", (me, me)
+        ),
+        "messages": rows(
+            "SELECT id, match_id, body, created_at FROM messages WHERE sender_id = ?"
+        ),
+        "blocks": rows("SELECT blocked_id, created_at FROM blocks WHERE blocker_id = ?"),
+        "reports_filed": rows(
+            "SELECT id, reported_id, reason, detail, status, created_at "
+            "FROM reports WHERE reporter_id = ?"
+        ),
+        "consents": rows("SELECT * FROM consents WHERE user_id = ?"),
+        "terms_accepted": rows("SELECT * FROM legal_acceptances WHERE user_id = ?"),
+    }
+
+    body = json.dumps(payload, indent=2, default=str)
+    return Response(
+        body,
+        mimetype="application/json",
+        headers={
+            "Content-Disposition": 'attachment; filename="velvt-export.json"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.route("/settings/delete", methods=["POST"])
+@login_required
+def request_deletion():
+    """Schedule deletion, with a grace period (GDPR Art. 17).
+
+    Not immediate: people delete accounts angry, and an irreversible button
+    at that moment is a worse experience than a reversible one. The account
+    is unreachable to everyone else from this moment either way.
+    """
+    me = current_user()
+    if not check_password_hash(me["password_hash"], request.form.get("password", "")):
+        flash("Please confirm your password to delete your account.")
+        return redirect(url_for("settings"))
+
+    db = get_db()
+    db.execute(
+        """
+        UPDATE users SET status = 'pending_deletion', deletion_requested_at = NOW()
+        WHERE id = ?
+        """,
+        (me["id"],),
+    )
+    db.execute(
+        "UPDATE searches SET status = 'cancelled' WHERE user_id = ? AND status = 'waiting'",
+        (me["id"],),
+    )
+    db.execute(
+        """
+        UPDATE matches SET status = 'ended', ended_at = NOW()
+        WHERE (user_a = ? OR user_b = ?) AND status <> 'ended'
+        """,
+        (me["id"], me["id"]),
+    )
+    db.commit()
+    flash(
+        f"Your account is scheduled for deletion in {DELETION_GRACE_DAYS} days. "
+        "Sign in before then to cancel."
+    )
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/delete/cancel", methods=["POST"])
+@login_required
+def cancel_deletion():
+    db = get_db()
+    db.execute(
+        """
+        UPDATE users SET status = 'active', deletion_requested_at = NULL
+        WHERE id = ? AND status = 'pending_deletion'
+        """,
+        (current_uid(),),
+    )
+    db.commit()
+    flash("Welcome back — your account is active again.")
+    return redirect(url_for("settings"))
+
+
+def purge_due_deletions():
+    """Erase accounts whose grace period has run out.
+
+    Anonymised in place rather than DELETEd. Every foreign key pointing at
+    users cascades, so removing the row would delete the *matches* too, and
+    with them the other participant's entire conversation -- their record of
+    a relationship, erased because the other person left. Article 17 asks us
+    to erase personal data, not to reach into someone else's history.
+
+    So: every field that identifies the person is destroyed, the profile and
+    photos go entirely, and what remains is a numbered tombstone that reads
+    as "Deleted member" wherever it surfaces. Nothing about it is personal
+    data, and nothing can be recovered from it.
+    """
+    db = get_db()
+    due = db.execute(
+        """
+        SELECT id FROM users
+        WHERE status = 'pending_deletion'
+          AND deletion_requested_at < NOW() - (? * INTERVAL '1 day')
+        """,
+        (DELETION_GRACE_DAYS,),
+    ).fetchall()
+
+    for row in due:
+        uid = row["id"]
+        # Everything that is only ever about them.
+        for table in ("photos", "searches", "sessions", "email_tokens", "consents",
+                      "legal_acceptances"):
+            db.execute(f"DELETE FROM {table} WHERE user_id = ?", (uid,))
+        db.execute("DELETE FROM profiles WHERE user_id = ?", (uid,))
+        db.execute(
+            "DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?", (uid, uid)
+        )
+        # Their side of any conversation stays readable to the other person,
+        # but is no longer attributed to a real account.
+        db.execute("UPDATE messages SET sender_id = NULL WHERE sender_id = ?", (uid,))
+        db.execute(
+            """
+            UPDATE matches SET status = 'ended', ended_at = COALESCE(ended_at, NOW())
+            WHERE user_a = ? OR user_b = ?
+            """,
+            (uid, uid),
+        )
+        db.execute(
+            """
+            UPDATE users
+            SET username = ?, email = NULL, dob = NULL, email_verified_at = NULL,
+                age_verified_at = NULL, password_hash = ?, status = 'deleted',
+                deletion_requested_at = NULL
+            WHERE id = ?
+            """,
+            (f"deleted_{uid}", secrets.token_hex(32), uid),
+        )
+    db.commit()
+    return len(due)
+
+
+@app.route("/report/<int:user_id>", methods=["GET", "POST"])
+@login_required
+@rate_limited("report", limit=20, window_seconds=3600, by="user")
+def report_user(user_id):
+    """Notice-and-action, per DSA Article 16.
+
+    Deliberately reachable for any account, not only a current match: the
+    person you most need to report is often the one who has already ended
+    the conversation.
+    """
+    me = current_uid()
+    if user_id == me:
+        flash("You can't report yourself.")
+        return redirect(url_for("live_search"))
+
+    subject = get_db().execute(
+        """
+        SELECT u.id, u.username, p.name FROM users u
+        LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE u.id = ?
+        """,
+        (user_id,),
+    ).fetchone()
+    if subject is None:
+        flash("That profile does not exist.")
+        return redirect(url_for("live_search"))
+
+    match_id = request.values.get("match_id", type=int)
+
+    if request.method == "POST":
+        reason = request.form.get("reason", "").strip()
+        detail = request.form.get("detail", "").strip()[:2000]
+        also_block = bool(request.form.get("block"))
+
+        if reason not in REPORT_REASON_KEYS:
+            flash("Please choose a reason.")
+            return render_template(
+                "report.html", subject=subject, reasons=REPORT_REASONS,
+                match_id=match_id,
+            )
+
+        db = get_db()
+        db.execute(
+            """
+            INSERT INTO reports (reporter_id, reported_id, match_id, reason, detail)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (me, user_id, match_id, reason, detail),
+        )
+        db.commit()
+
+        if also_block:
+            apply_block(me, user_id)
+            flash("Thanks — we've received your report and blocked them.")
+        else:
+            # Article 16 wants the reporter told what happens next, not just
+            # that the form submitted.
+            flash("Thanks — we've received your report and a moderator will review it.")
+        return redirect(url_for("live_search"))
+
+    return render_template(
+        "report.html", subject=subject, reasons=REPORT_REASONS, match_id=match_id
+    )
+
+
+def apply_block(blocker_id, blocked_id):
+    """Block, and end anything currently running between the two."""
+    if blocker_id == blocked_id:
+        return
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)
+        ON CONFLICT DO NOTHING
+        """,
+        (blocker_id, blocked_id),
+    )
+    a, b = sorted((blocker_id, blocked_id))
+    db.execute(
+        """
+        UPDATE matches SET status = 'ended', ended_at = NOW()
+        WHERE user_a = ? AND user_b = ? AND status <> 'ended'
+        """,
+        (a, b),
+    )
+    # A waiting search must not immediately re-pair them.
+    db.execute(
+        "UPDATE searches SET status = 'cancelled' WHERE user_id = ? AND status = 'waiting'",
+        (blocker_id,),
+    )
+    db.commit()
+
+
+@app.route("/block/<int:user_id>", methods=["POST"])
+@login_required
+def block_user(user_id):
+    apply_block(current_uid(), user_id)
+    flash("Blocked. They can't reach you, and you won't be matched again.")
+    return redirect(url_for("chats"))
+
+
+@app.route("/unblock/<int:user_id>", methods=["POST"])
+@login_required
+def unblock_user(user_id):
+    db = get_db()
+    db.execute(
+        "DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?",
+        (current_uid(), user_id),
+    )
+    db.commit()
+    flash("Unblocked.")
+    return redirect(url_for("settings"))
+
+
+def log_admin_action(actor_id, target_id, action, reason=""):
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO admin_actions (actor_id, target_id, action, reason)
+        VALUES (?, ?, ?, ?)
+        """,
+        (actor_id, target_id, action, reason),
+    )
+    db.commit()
+
+
+@app.route("/admin/reports")
+@admin_required
+def admin_reports():
+    show = request.args.get("show", "open")
+    rows = get_db().execute(
+        """
+        SELECT r.*,
+               rep.username AS reporter_username,
+               sub.username AS reported_username,
+               sub.status   AS reported_status,
+               subp.name    AS reported_name
+        FROM reports r
+        LEFT JOIN users rep ON rep.id = r.reporter_id
+        JOIN users sub ON sub.id = r.reported_id
+        LEFT JOIN profiles subp ON subp.user_id = r.reported_id
+        WHERE (? = 'all' OR r.status = ?)
+        ORDER BY r.created_at DESC
+        LIMIT 200
+        """,
+        (show, show),
+    ).fetchall()
+
+    # The reported message, where the report pointed at a conversation.
+    context = {}
+    for row in rows:
+        if row["match_id"]:
+            context[row["id"]] = get_db().execute(
+                """
+                SELECT m.body, m.created_at, u.username
+                FROM messages m JOIN users u ON u.id = m.sender_id
+                WHERE m.match_id = ? AND m.sender_id = ?
+                ORDER BY m.id DESC LIMIT 5
+                """,
+                (row["match_id"], row["reported_id"]),
+            ).fetchall()
+
+    return render_template(
+        "admin_reports.html",
+        reports=rows,
+        context=context,
+        show=show,
+        reasons=dict(REPORT_REASONS),
+    )
+
+
+@app.route("/admin/reports/<int:report_id>/resolve", methods=["POST"])
+@admin_required
+def admin_resolve_report(report_id):
+    action = request.form.get("action", "")
+    note = request.form.get("note", "").strip()[:1000]
+
+    if action not in ADMIN_ACTIONS:
+        flash("Unknown action.")
+        return redirect(url_for("admin_reports"))
+
+    db = get_db()
+    report = db.execute("SELECT * FROM reports WHERE id = ?", (report_id,)).fetchone()
+    if report is None:
+        flash("That report no longer exists.")
+        return redirect(url_for("admin_reports"))
+
+    me = current_uid()
+    target = report["reported_id"]
+
+    if action in ("suspend", "ban"):
+        new_status = "suspended" if action == "suspend" else "banned"
+        db.execute("UPDATE users SET status = ? WHERE id = ?", (new_status, target))
+        # Kick them out now rather than at their next request.
+        db.execute("DELETE FROM sessions WHERE user_id = ?", (target,))
+        db.execute(
+            "UPDATE searches SET status = 'cancelled' WHERE user_id = ? AND status = 'waiting'",
+            (target,),
+        )
+
+    db.execute(
+        """
+        UPDATE reports
+        SET status = ?, resolved_by = ?, resolved_at = NOW(),
+            resolution = ?, resolution_note = ?
+        WHERE id = ?
+        """,
+        (
+            "dismissed" if action == "dismiss" else "actioned",
+            me,
+            action,
+            note,
+            report_id,
+        ),
+    )
+    db.commit()
+    log_admin_action(me, target, action, note)
+
+    flash(f"Report #{report_id}: {ADMIN_ACTIONS[action]}.")
+    return redirect(url_for("admin_reports"))
+
+
+@app.route("/admin/users/<int:user_id>/reinstate", methods=["POST"])
+@admin_required
+def admin_reinstate(user_id):
+    db = get_db()
+    db.execute("UPDATE users SET status = 'active' WHERE id = ?", (user_id,))
+    db.commit()
+    log_admin_action(current_uid(), user_id, "reinstate")
+    flash("Account reinstated.")
+    return redirect(url_for("admin_reports"))
 
 
 @app.route("/admin/profiles/new", methods=["GET", "POST"])
@@ -1963,14 +3484,17 @@ def try_pair(user_id):
             return None
 
         others = db.execute(
-            """
+            f"""
             SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
+            JOIN users u ON u.id = s.user_id
             WHERE s.status = 'waiting' AND s.user_id != ?
               AND s.created_at <= NOW() - (? * INTERVAL '1 second')
+              {CANDIDATE_ELIGIBLE_SQL}
+              {NOT_BLOCKED_SQL}
             ORDER BY s.created_at
             """,
-            (user_id, MIN_SEARCH_SECONDS),
+            (user_id, MIN_SEARCH_SECONDS, user_id, user_id),
         ).fetchall()
 
         best = None
@@ -2018,9 +3542,25 @@ def try_pair(user_id):
 def require_profile():
     """Return the caller's profile, or None if it still needs filling in."""
     me = get_db().execute(
-        "SELECT * FROM profiles WHERE user_id = ?", (session["user_id"],)
+        "SELECT * FROM profiles WHERE user_id = ?", (current_uid(),)
     ).fetchone()
     return me if me is not None and me["name"] else None
+
+
+def unverified_email_block():
+    """Why the caller can't start a search yet, or None.
+
+    Verification gates searching rather than signing in: someone whose
+    address bounced still needs to reach settings to fix it. And it only
+    applies once mail is actually configured, so a deployment with no
+    provider does not lock everyone out of the feature the app exists for.
+    """
+    if not RESEND_API_KEY:
+        return None
+    me = current_user()
+    if me is not None and me["email"] and me["email_verified_at"] is None:
+        return "Confirm your email address before you start searching."
+    return None
 
 
 def save_search(
@@ -2105,6 +3645,11 @@ def live_search():
     own distance filters still apply to you, which is why the place is still
     worth collecting.
     """
+    blocked = unverified_email_block()
+    if blocked:
+        flash(blocked)
+        return redirect(url_for("settings"))
+
     me = require_profile()
     if me is None:
         flash("Fill in your profile first so others can match with you.")
@@ -2163,7 +3708,7 @@ def live_search():
             flash(error)
         else:
             save_search(
-                session["user_id"], seeking=seeking,
+                current_uid(), seeking=seeking,
                 age_min=age_min, age_max=age_max,
                 relationship_type=wanted, interests=interests,
                 location=location, lat=lat, lng=lng,
@@ -2186,7 +3731,7 @@ def live_search():
             return redirect(url_for("search_waiting"))
 
     existing = get_db().execute(
-        "SELECT * FROM searches WHERE user_id = ?", (session["user_id"],)
+        "SELECT * FROM searches WHERE user_id = ?", (current_uid(),)
     ).fetchone()
 
     return render_template(
@@ -2226,7 +3771,12 @@ def search_criteria():
     form and the validation below is unchanged.
     """
     db = get_db()
-    user_id = session["user_id"]
+    user_id = current_uid()
+    blocked = unverified_email_block()
+    if blocked:
+        flash(blocked)
+        return redirect(url_for("settings"))
+
     me = require_profile()
     if me is None:
         flash("Fill in your profile first so others can match with you.")
@@ -2374,6 +3924,7 @@ _PLACES_CACHE_MAX = 500
 
 
 @app.route("/api/places")
+@rate_limited("places", limit=60, window_seconds=60, include_safe=True)
 @login_required
 def api_places():
     """Typeahead suggestions for the location field, backed by Photon
@@ -2439,6 +3990,10 @@ def search_preview():
     the count and suggestions here are guaranteed consistent with what
     /search/waiting will show after you actually start searching.
     """
+    blocked = unverified_email_block()
+    if blocked:
+        return {"error": blocked}, 400
+
     me = require_profile()
     if me is None:
         return {"error": "profile incomplete"}, 400
@@ -2467,7 +4022,7 @@ def search_preview():
     _phys_error, phys = validate_physical(phys_values)
 
     mine = {
-        "user_id": session["user_id"],
+        "user_id": current_uid(),
         "seeking": seeking,
         "age_min": age_min,
         "age_max": age_max,
@@ -2503,12 +4058,15 @@ def search_preview():
     }
 
     others = get_db().execute(
-        """
+        f"""
         SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
+        JOIN users u ON u.id = s.user_id
         WHERE s.status = 'waiting' AND s.user_id != ?
+          {CANDIDATE_ELIGIBLE_SQL}
+          {NOT_BLOCKED_SQL}
         """,
-        (session["user_id"],),
+        (current_uid(), current_uid(), current_uid()),
     ).fetchall()
     others = [dict(o) for o in others]
 
@@ -2652,12 +4210,15 @@ def _search_pool(user_id):
         return None, []
 
     others = db.execute(
-        """
+        f"""
         SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
+        JOIN users u ON u.id = s.user_id
         WHERE s.status = 'waiting' AND s.user_id != ?
+          {CANDIDATE_ELIGIBLE_SQL}
+          {NOT_BLOCKED_SQL}
         """,
-        (user_id,),
+        (user_id, user_id, user_id),
     ).fetchall()
     return dict(mine), [dict(o) for o in others]
 
@@ -2941,7 +4502,7 @@ def chip_state(mine, others):
 @app.route("/search/waiting")
 @login_required
 def search_waiting():
-    user_id = session["user_id"]
+    user_id = current_uid()
     mine, others = _search_pool(user_id)
 
     if mine is None or mine["status"] == "cancelled":
@@ -2958,7 +4519,7 @@ def search_chips_get():
     """Polled alongside /search/status to refresh the waiting screen's
     pills as the pool changes -- same JSON shape POST returns below, so
     the browser redraws from either one identically."""
-    user_id = session["user_id"]
+    user_id = current_uid()
     mine, others = _search_pool(user_id)
     if mine is None:
         return {"error": "not searching"}, 404
@@ -2974,7 +4535,7 @@ def search_chips_apply():
     posted value is re-validated the same way live_search() validates the
     wizard's own POST; nothing here trusts chip_options()' own output.
     """
-    user_id = session["user_id"]
+    user_id = current_uid()
     mine, others = _search_pool(user_id)
     if mine is None:
         return {"error": "not searching"}, 404
@@ -3072,7 +4633,7 @@ def search_status():
     once the app is scaled out, so the waiting page polls on a short tick
     instead (see templates/search_waiting.html).
     """
-    user_id = session["user_id"]
+    user_id = current_uid()
 
     # Retry pairing on each poll so a searcher who arrived since the last
     # tick still gets picked up.
@@ -3097,7 +4658,7 @@ def search_cancel():
     db = get_db()
     db.execute(
         "UPDATE searches SET status = 'cancelled' WHERE user_id = ? AND status = 'waiting'",
-        (session["user_id"],),
+        (current_uid(),),
     )
     db.commit()
     flash("Search stopped.")
@@ -3268,7 +4829,7 @@ def match_state_payload(match, user_id):
 @login_required
 def match_state(match_id):
     match, _ = get_match_participants(match_id)
-    user_id = session["user_id"]
+    user_id = current_uid()
     if match is None:
         return {"error": "not found"}, 404
     if user_id not in (match["user_a"], match["user_b"]):
@@ -3282,7 +4843,7 @@ def match_state(match_id):
 @login_required
 def match_decide(match_id):
     match, _ = get_match_participants(match_id)
-    user_id = session["user_id"]
+    user_id = current_uid()
     if match is None:
         return {"error": "not found"}, 404
     if user_id not in (match["user_a"], match["user_b"]):
@@ -3335,7 +4896,7 @@ def match_skip_reveal(match_id):
     phase is eligible.
     """
     match, _ = get_match_participants(match_id)
-    user_id = session["user_id"]
+    user_id = current_uid()
     if match is None:
         return {"error": "not found"}, 404
     if user_id not in (match["user_a"], match["user_b"]):
@@ -3381,14 +4942,17 @@ def chats():
     user = current_user()
     query = """
         SELECT m.*,
-               pa.name AS name_a, pb.name AS name_b,
+               COALESCE(pa.name, 'Deleted member') AS name_a,
+               COALESCE(pb.name, 'Deleted member') AS name_b,
                (SELECT body FROM messages WHERE match_id = m.id
                 ORDER BY id DESC LIMIT 1) AS last_message,
                (SELECT created_at FROM messages WHERE match_id = m.id
                 ORDER BY id DESC LIMIT 1) AS last_message_at
         FROM matches m
-        JOIN profiles pa ON pa.user_id = m.user_a
-        JOIN profiles pb ON pb.user_id = m.user_b
+        -- LEFT so a match with someone who has deleted their account stays
+        -- in the surviving participant's list instead of silently vanishing.
+        LEFT JOIN profiles pa ON pa.user_id = m.user_a
+        LEFT JOIN profiles pb ON pb.user_id = m.user_b
         {where}
         ORDER BY m.id DESC
     """
@@ -3458,8 +5022,8 @@ def chat(match_id):
 
     messages = get_db().execute(
         """
-        SELECT msg.*, p.name AS sender_name FROM messages msg
-        JOIN profiles p ON p.user_id = msg.sender_id
+        SELECT msg.*, COALESCE(p.name, 'Deleted member') AS sender_name FROM messages msg
+        LEFT JOIN profiles p ON p.user_id = msg.sender_id
         WHERE msg.match_id = ?
         ORDER BY msg.id
         """,
@@ -3560,7 +5124,7 @@ def chat(match_id):
         match=match,
         profiles=profiles,
         messages=messages,
-        me_id=session["user_id"],
+        me_id=current_uid(),
         is_participant=is_participant,
         phase=phase,
         state=state,
@@ -3612,8 +5176,8 @@ def mark_read(match, user_id, up_to_id):
 def fetch_messages_after(match_id, after):
     return get_db().execute(
         """
-        SELECT msg.*, p.name AS sender_name FROM messages msg
-        JOIN profiles p ON p.user_id = msg.sender_id
+        SELECT msg.*, COALESCE(p.name, 'Deleted member') AS sender_name FROM messages msg
+        LEFT JOIN profiles p ON p.user_id = msg.sender_id
         WHERE msg.match_id = ? AND msg.id > ?
         ORDER BY msg.id
         """,
@@ -3789,6 +5353,7 @@ def chat_messages(match_id):
 
 @app.route("/chat/<int:match_id>/send", methods=["POST"])
 @login_required
+@rate_limited("send", limit=30, window_seconds=60, by="user")
 def send_message(match_id):
     match, _ = get_match_participants(match_id)
     wants_json = "application/json" in request.headers.get("Accept", "")
@@ -3807,7 +5372,7 @@ def send_message(match_id):
     body = request.form.get("body", "").strip()
     # Messages are always sent as the logged-in user, who must be one
     # of the two matched participants.
-    sender_id = session["user_id"]
+    sender_id = current_uid()
     if sender_id not in (match["user_a"], match["user_b"]):
         return fail("Only the two matched members can write in this chatroom.", 403)
 
@@ -3834,8 +5399,8 @@ def send_message(match_id):
     if wants_json:
         row = db.execute(
             """
-            SELECT msg.*, p.name AS sender_name FROM messages msg
-            JOIN profiles p ON p.user_id = msg.sender_id
+            SELECT msg.*, COALESCE(p.name, 'Deleted member') AS sender_name FROM messages msg
+            LEFT JOIN profiles p ON p.user_id = msg.sender_id
             WHERE msg.id = ?
             """,
             (new_id,),
@@ -3898,13 +5463,41 @@ def startup():
         app.logger.exception("startup failed: cannot reach the database")
 
 
+@app.post("/tasks/purge-deletions")
+def run_purge_deletions():
+    """Finish deletions whose grace period has run out.
+
+    There is no background worker here -- Cloud Run only runs while it is
+    serving a request -- so this is an endpoint for Cloud Scheduler to hit
+    daily, authenticated with a shared secret rather than a login.
+
+    Without TASK_TOKEN set it refuses outright: an open endpoint that
+    permanently erases accounts is worse than one nobody calls. Exempt from
+    CSRF because the caller is a scheduler, not a browser with a session.
+    """
+    if not TASK_TOKEN:
+        return "task endpoint disabled: TASK_TOKEN is not set", 503
+    presented = request.headers.get("X-Task-Token", "")
+    if not secrets.compare_digest(presented, TASK_TOKEN):
+        return "forbidden", 403
+    purged = purge_due_deletions()
+    return {"purged": purged}, 200
+
+
 @app.get("/healthz")
 def healthz():
     """Readiness for Cloud Run's startup probe.
 
     Retries the schema init, so a database that was merely slow to accept
     connections recovers on its own rather than needing a redeploy.
+
+    A configuration error fails the probe deliberately: a revision missing
+    its secrets should never go live at all. Failing here keeps the
+    previous, working revision serving instead of promoting one that
+    answers every request with a 503.
     """
+    if CONFIG_ERROR:
+        return f"misconfigured: {CONFIG_ERROR}", 503
     if STARTUP_ERROR is not None:
         startup()
     if STARTUP_ERROR is not None:

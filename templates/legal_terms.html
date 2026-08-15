@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Terms — Velvt{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">Version {{ version }}</p>
+  <h1 style="margin-top: 0.5rem;">Terms of service</h1>
+
+  <div style="border: 1px solid var(--ink-hairline); padding: 1rem; margin: 1rem 0;">
+    <p class="hint" style="margin: 0;">
+      <strong>Placeholder.</strong> This text describes how Velvt actually works so the
+      acceptance flow is real, but it has not been written or reviewed by a lawyer
+      and is not yet fit to publish. Replace it before launch.
+    </p>
+  </div>
+
+  <h2 style="font-size: 1.1rem;">Who can use Velvt</h2>
+  <p>You must be 18 or over. One account per person. You're responsible for what
+     you post and send, and for keeping your password to yourself.</p>
+
+  <h2 style="font-size: 1.1rem;">How matching works</h2>
+  <p>When you search, we look for someone whose search is compatible with yours.
+     A match opens with a 20-second reveal, then five minutes of chat. After that
+     both of you decide whether to continue. If either of you doesn't, the match
+     ends and the conversation closes.</p>
+
+  <h2 style="font-size: 1.1rem;">What isn't allowed</h2>
+  <ul>
+    <li>Harassment, threats, hate speech, or abuse of any kind</li>
+    <li>Sexual content sent to someone who didn't ask for it</li>
+    <li>Impersonating anyone, or using photos that aren't of you</li>
+    <li>Asking other members for money, or advertising anything</li>
+    <li>Being under 18, or helping anyone under 18 use Velvt</li>
+  </ul>
+  <p>We suspend or remove accounts that do these things. You can
+     <a href="{{ url_for('safety') }}">report anyone</a> at any time.</p>
+
+  <h2 style="font-size: 1.1rem;">Ending your account</h2>
+  <p>You can delete your account whenever you like from settings. We may suspend
+     or close an account that breaks these terms, and we'll tell you why.</p>
+
+  <h2 style="font-size: 1.1rem;">Contact</h2>
+  <p>Questions about these terms: <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+     See also our <a href="{{ url_for('imprint') }}">imprint</a>.</p>
+</div>
+{% endblock %}
