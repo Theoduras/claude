@@ -3175,6 +3175,55 @@
       transition: color 0.18s ease;
     }
     .tabbar a:hover { color: var(--text-muted); }
+    /* The trigger is a <button>, not an <a> -- everything else about it
+       matches a tab exactly, including sharing its hover. */
+    .tabbar-more {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.32rem;
+      padding: 0.15rem 0;
+      border: none;
+      background: none;
+      font: inherit;
+      color: var(--text-faint);
+      cursor: pointer;
+      transition: color 0.18s ease;
+    }
+    .tabbar-more:hover { color: var(--text-muted); }
+    .more-sheet-links {
+      display: flex;
+      flex-direction: column;
+      padding-bottom: calc(0.6rem + env(safe-area-inset-bottom, 0px));
+    }
+    /* Overrides the site header's bare `nav a` pill styling, which this
+       is also a <nav> for -- without this every row here inherited a
+       rounded pill background and centred padding meant for a row of
+       top-bar links, not a tappable list. */
+    /* nav.more-sheet-links, not .more-sheet-links: the header's
+       `nav a:not(.brand)` rule carries (0,1,2) specificity, and a bare
+       class selector here loses to it regardless of source order. Matching
+       the type selector ties specificity and lets source order (this comes
+       after) decide instead. */
+    nav.more-sheet-links a {
+      display: block;
+      width: auto;
+      margin: 0;
+      padding: 0.85rem 0.1rem;
+      border-radius: 0;
+      border-bottom: 1px solid var(--ink-hairline);
+      background: none;
+      color: var(--text-dim);
+      font-size: 0.95rem;
+      text-decoration: none;
+    }
+    nav.more-sheet-links a:last-child { border-bottom: none; }
+    nav.more-sheet-links a:hover,
+    nav.more-sheet-links a:active {
+      color: var(--velvet-crest, var(--text));
+      background: none;
+    }
     /* the icons are drawn with stroke="currentColor" so one rule tints both
        the glyph and its label as the tab lights up */
     .tabbar svg { display: block; }
@@ -3329,7 +3378,14 @@
     }
     .site-footer a:hover { color: var(--violet-crest); text-decoration: underline; }
     /* The mobile tab bar is fixed over the bottom of the page. */
-    html:not([data-viewport="desktop"]) .site-footer { margin-bottom: 5.5rem; }
+    /* Superseded by the tab bar's "More" sheet on a phone -- competing with
+       .wiz for main's height was the actual bug: main is a flex column and
+       .wiz flex-grows into whatever the footer below it doesn't take, so a
+       taller footer (this list has grown twice since launch) meant a
+       shorter .wiz, and eventually one short enough that a tall step like
+       the landing page spilled onto the tab bar. Removing it from flow
+       here removes the coupling entirely, not just today's overflow. */
+    html:not([data-viewport="desktop"]) .site-footer { display: none; }
   </style>
   {# One place for the fetch-based endpoints to get their CSRF header, so
      each call site does not re-read the meta tag itself. #}
@@ -3353,6 +3409,18 @@
     </script>
 </head>
 <body>
+  {# The footer's links, in one place -- said once, used from the desktop
+     footer and the mobile "More" sheet alike, so the two can never drift. #}
+  {% macro more_links() %}
+    {% if current_user %}<a href="{{ url_for('how_matching_works') }}">How matching works</a>{% endif %}
+    <a href="{{ url_for('faq') }}">Questions</a>
+    <a href="{{ url_for('safety') }}">Safety</a>
+    <a href="{{ url_for('terms') }}">Terms</a>
+    <a href="{{ url_for('privacy') }}">Privacy</a>
+    <a href="{{ url_for('imprint') }}">Imprint</a>
+    {% if current_user %}<a href="{{ url_for('settings') }}">Settings</a>{% endif %}
+    <a href="mailto:{{ support_email }}">Contact</a>
+  {% endmacro %}
   <div class="app-shell">
   <nav>
     <a class="brand" href="{{ url_for('index') }}"><span class="brand-logo"></span><span class="brand-word">Velvt</span></a>
@@ -3381,24 +3449,23 @@
     {#- Legal links and a way to reach a human. The imprint and the point of
         contact are required (DDG §5 / ECG §5, and the DSA); the rest is the
         answer to "how do I get help", which had nowhere to live before. -#}
+    {#- Desktop only past this point -- on a phone these same links live
+        behind the tab bar's "More" sheet below, so they never compete with
+        the wizard column for the screen's height again. -#}
     <footer class="site-footer">
-      {% if current_user %}<a href="{{ url_for('how_matching_works') }}">How matching works</a>{% endif %}
-      <a href="{{ url_for('faq') }}">Questions</a>
-      <a href="{{ url_for('safety') }}">Safety</a>
-      <a href="{{ url_for('terms') }}">Terms</a>
-      <a href="{{ url_for('privacy') }}">Privacy</a>
-      <a href="{{ url_for('imprint') }}">Imprint</a>
-      {% if current_user %}<a href="{{ url_for('settings') }}">Settings</a>{% endif %}
-      <a href="mailto:{{ support_email }}">Contact</a>
+      {{ more_links() }}
     </footer>
   </main>
-  {% if current_user %}
-    {#- which tab lights up: every search-ish route collapses onto Search -#}
-    {% set ep = request.endpoint %}
-    {% set search_eps = ['live_search', 'search_criteria', 'search_waiting'] %}
-    {% set chat_eps = ['chats', 'chat'] %}
-    {% set you_eps = ['view_profile', 'edit_profile'] %}
-    <nav class="tabbar" aria-label="Primary">
+  {#- which tab lights up: every search-ish route collapses onto Search -#}
+  {% set ep = request.endpoint %}
+  {% set search_eps = ['live_search', 'search_criteria', 'search_waiting'] %}
+  {% set chat_eps = ['chats', 'chat'] %}
+  {% set you_eps = ['view_profile', 'edit_profile'] %}
+  {#- Always rendered on a phone now, signed in or not: signed out it is
+      nothing but the "More" trigger, but it is still the one bottom bar
+      rather than a bar that only sometimes exists. -#}
+  <nav class="tabbar" aria-label="Primary">
+    {% if current_user %}
       <a href="{{ url_for('live_search') }}"
          class="{% if ep in search_eps %}is-active{% endif %}"
          {% if ep in search_eps %}aria-current="page"{% endif %}>
@@ -3429,9 +3496,62 @@
         <span class="tab-label">You</span>
         <span class="tab-dot"></span>
       </a>
-    </nav>
-  {% endif %}
+    {% endif %}
+    <button type="button" class="tabbar-more" id="more-trigger"
+            aria-haspopup="dialog" aria-expanded="false" aria-controls="more-sheet">
+      <svg width="21" height="21" viewBox="0 0 21 21" fill="none" aria-hidden="true">
+        <path d="M3 6h15M3 10.5h15M3 15h15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <span class="tab-label">More</span>
+    </button>
+  </nav>
+  {# The same links again, reached from the tab bar instead of the foot of
+     a page that, on a phone, the tab bar sits on top of anyway. #}
+  <div class="sheet" id="more-sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel">
+      <div class="sheet-head">
+        <h2>More</h2>
+        <button type="button" class="sheet-x" data-close aria-label="Close">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <nav class="more-sheet-links" aria-label="More">
+          {{ more_links() }}
+        </nav>
+      </div>
+    </div>
   </div>
+  </div>
+  <script nonce="{{ csp_nonce() }}">
+    (function () {
+      var trigger = document.getElementById("more-trigger");
+      var sheet = document.getElementById("more-sheet");
+      if (!trigger || !sheet) return;
+
+      function open() {
+        sheet.hidden = false;
+        requestAnimationFrame(function () { sheet.classList.add("is-open"); });
+        trigger.setAttribute("aria-expanded", "true");
+      }
+      function close() {
+        sheet.classList.remove("is-open");
+        trigger.setAttribute("aria-expanded", "false");
+        setTimeout(function () { sheet.hidden = true; }, 200);
+      }
+
+      trigger.addEventListener("click", open);
+      sheet.addEventListener("click", function (ev) {
+        if (ev.target.closest("[data-close]")) close();
+      });
+      document.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape" && !sheet.hidden) close();
+      });
+    })();
+  </script>
   {# Previews the mobile layout on a wide monitor (or vice
        versa) without resizing the window. Sits outside <nav>/<main>/the
        tab bar, so it never participates in their layout. #}
