@@ -102,6 +102,24 @@ ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = os.environ.get("APP_ADMIN_PASSWORD", "admin12345")
 AUTO_LOGIN = os.environ.get("AUTO_LOGIN", "0") not in ("0", "false", "no")
 
+# The one hostname the app answers on, e.g. "velvt.nl". Every other host that
+# reaches us -- www, the *.run.app URL -- is redirected there. Unset means no
+# redirect at all, which is what local development and any not-yet-mapped
+# deployment want. Sessions are the reason this matters: a cookie set on
+# velvt.nl is not sent to www.velvt.nl, so a user who logs in on one host and
+# later lands on the other looks logged out.
+CANONICAL_HOST = os.environ.get("CANONICAL_HOST", "").strip().lower()
+
+if CANONICAL_HOST:
+    # Only once there is a real domain in front: over plain http on localhost a
+    # Secure cookie is never sent back, so setting this unconditionally would
+    # break login in local development.
+    app.config.update(
+        SESSION_COOKIE_SECURE=True,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+    )
+
 GENDERS = ["Woman", "Man", "Non-binary"]
 
 # Object pronoun for the reveal's "Ask {pronoun} about X" line, keyed on the
@@ -661,6 +679,27 @@ def admin_required(view):
 @app.context_processor
 def inject_user():
     return {"current_user": current_user()}
+
+
+@app.before_request
+def force_canonical_host():
+    """Send every request to CANONICAL_HOST over https, if one is configured.
+
+    /healthz is exempt: Cloud Run's startup probe reaches the container
+    directly, not through the mapped domain, so redirecting it would fail
+    every deploy.
+
+    308 rather than 301 -- a 301 lets the browser turn a POST into a GET and
+    drop the body, which would quietly break a login or a sent message posted
+    to the wrong host.
+    """
+    if not CANONICAL_HOST or request.path == "/healthz":
+        return
+    host = (request.host or "").lower()
+    if not host or host == CANONICAL_HOST:
+        return
+    target = f"https://{CANONICAL_HOST}{request.full_path if request.query_string else request.path}"
+    return redirect(target, code=308)
 
 
 @app.before_request

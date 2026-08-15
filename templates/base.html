@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Velvet{% endblock %}</title>
+  <title>{% block title %}Velvt{% endblock %}</title>
   <style>
     /* ==================================================================
        VELVET — design tokens
@@ -196,16 +196,35 @@
       color: var(--text);
       margin-right: auto;
       display: flex;
-      align-items: baseline;
+      /* centre, not baseline: the wordmark is a masked box and has no text
+         baseline of its own. */
+      align-items: center;
       gap: 0.45rem;
     }
     .brand:hover { color: var(--text); }
-    .brand .mark, .landing-brand .mark {
-      width: 0.62rem;
-      height: 0.62rem;
-      border-radius: 50%;
-      background: radial-gradient(circle at 32% 28%, var(--violet-crest), var(--violet) 55%, var(--violet-deep));
-      box-shadow: 0 0 18px rgba(168, 85, 247, 0.75);
+    /* The wordmark is painted, not placed: the source art is dark aubergine on
+       transparent, which would all but vanish against this bar. Masking with it
+       and filling with the palette keeps the letterforms exactly as drawn while
+       the colour stays ours. aspect-ratio comes from the file's own 753x391, so
+       setting the height alone can never stretch it.
+
+       .brand-word is the accessible name -- clipped rather than display:none so
+       screen readers, and a browser that somehow drops the mask, still say Velvt. */
+    .brand-logo {
+      display: block;
+      height: 1.6rem;
+      aspect-ratio: 753 / 391;
+      background: linear-gradient(115deg, var(--violet-crest), var(--champagne) 95%);
+      -webkit-mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") left center / contain no-repeat;
+      mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") left center / contain no-repeat;
+    }
+    .brand-word {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
     nav a:not(.brand) {
       color: var(--text-muted);
@@ -2864,16 +2883,6 @@
        The column, the height and the sinking are .wiz/.wiz-fit's now -- a
        min-height of its own would only fight the frame. */
     .landing .wiz-body { justify-content: flex-start; }
-    .landing-brand {
-      display: flex;
-      align-items: baseline;
-      gap: 0.55rem;
-      font-weight: 700;
-      font-size: 0.6875rem;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-    }
     .landing h1 {
       margin: clamp(2.5rem, 13vh, 7.5rem) 0 0;
       font-size: clamp(2.6rem, 11vw, 3.6rem);
@@ -2888,11 +2897,69 @@
       color: var(--text-muted);
       max-width: 22ch;
     }
-    /* .wiz-nav's own margin-top is a fixed 1.5rem; here the gap is whatever
-       the fold has left over, which is the point of the screen. */
+    /* Phone first: the copy, then the wordmark filling the empty middle the
+       layout already had between the lede and the buttons. */
+    .landing-head {
+      display: flex;
+      flex-direction: column;
+    }
+    /* Stacked, the wordmark is doing the work the tall opening gap used to do,
+       so the headline no longer needs to start a seventh of the way down. */
+    .landing-head h1 { margin-top: clamp(1.25rem, 6vh, 3.25rem); }
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .landing-head h1 {
+        margin-top: clamp(2.5rem, 13vh, 7.5rem);
+      }
+    }
+    .landing-logo {
+      width: min(62%, 15rem);
+      aspect-ratio: 753 / 391;
+      /* Short screens are the binding constraint, not narrow ones: cap the
+         height too. `contain` keeps the mask centred and undistorted inside
+         whatever box survives both limits. */
+      max-height: 16vh;
+      margin: clamp(0.75rem, 3vh, 2rem) auto 0;
+      /* Three stops, not two, and a background wider than the box: sliding it
+         sideways sweeps a sheen across the letters. Masking means the gradient
+         is the ink, so the sheen needs no extra element on top. */
+      background: linear-gradient(115deg, var(--violet-crest), var(--champagne) 45%, var(--violet-crest) 90%);
+      background-size: 260% 100%;
+      -webkit-mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") center / contain no-repeat;
+      mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") center / contain no-repeat;
+      filter: drop-shadow(0 8px 34px rgba(138, 43, 226, 0.42));
+      animation: landing-logo-in 900ms cubic-bezier(0.22, 1, 0.36, 1) both,
+                 landing-logo-sheen 7s ease-in-out 900ms infinite;
+    }
+    @keyframes landing-logo-in {
+      from { opacity: 0; transform: translateY(1.1rem) scale(0.94); }
+      to   { opacity: 1; transform: none; }
+    }
+    @keyframes landing-logo-sheen {
+      0%, 100% { background-position: 0% 50%; }
+      50%      { background-position: 100% 50%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      /* Still arrives, just without the travel or the endless sweep. */
+      .landing-logo {
+        animation: landing-logo-in 1ms both;
+        background-position: 25% 50%;
+      }
+    }
     .landing-actions {
       margin-top: auto;
-      padding-top: 2.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+      /* Stacked, the wordmark sits directly above these, so the gap that used
+         to separate buttons from empty space is now separating two things. */
+      padding-top: 1.25rem;
+    }
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .landing-actions { padding-top: 2.5rem; }
+    }
+    /* Short screens: the wordmark is decoration and yields first. */
+    @media (max-height: 700px) {
+      .landing-logo { max-height: 11vh; margin-top: 0.6rem; }
     }
     .landing-live {
       display: flex;
@@ -2904,6 +2971,53 @@
       letter-spacing: 0.16em;
       text-transform: uppercase;
       color: var(--text-faint);
+    }
+    /* Wide screens have room beside the headline, so the wordmark moves there
+       and grows. Gated on :not([data-viewport="mobile"]) like the rest of the
+       shell, or the phone preview would go two-column inside its own frame.
+
+       .wiz itself caps at 27rem past 600px (base.html:~618) -- right for a
+       question-and-a-button step, but a two-column row folded into that
+       width has nowhere to put the second column: .landing-copy collapses
+       to 0 and the wordmark lands on top of the headline instead of beside
+       it. The landing screen is the one wiz screen that spreads, so it gets
+       main's own measure back rather than the step width. */
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .wiz.landing {
+        max-width: var(--measure);
+      }
+      html:not([data-viewport="mobile"]) .landing-head {
+        flex-direction: row;
+        align-items: center;
+        /* .landing-copy is fixed to its own content width, so centering the
+           row centers the leftover space rather than dragging the text off
+           the left edge. */
+        justify-content: center;
+        gap: clamp(1.5rem, 5vw, 4rem);
+      }
+      html:not([data-viewport="mobile"]) .landing-copy {
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+      html:not([data-viewport="mobile"]) .landing-logo {
+        /* Fixed size, not stretched: without this the box fills the whole
+           flex slot and the mark (anchored `center` inside it, but the box
+           itself flush against .landing-copy) reads as pinned to the left. */
+        flex: 0 0 auto;
+        width: min(30vw, 26rem);
+        min-width: 0;
+        max-width: 26rem;
+        max-height: none;
+        margin: 0 auto;
+      }
+      /* The head widened to fit two columns; the footer did not ask to --
+         a button stretched to that same 62rem reads as a banner, not a
+         button. Give it back the step's own width and centre it under the
+         (centred) row above. */
+      html:not([data-viewport="mobile"]) .landing-actions {
+        max-width: 27rem;
+        margin-inline: auto;
+      }
     }
     .landing-fine {
       margin: 0.6rem 0 0;
@@ -3092,7 +3206,7 @@
 <body>
   <div class="app-shell">
   <nav>
-    <a class="brand" href="{{ url_for('index') }}"><span class="mark"></span>Velvet</a>
+    <a class="brand" href="{{ url_for('index') }}"><span class="brand-logo"></span><span class="brand-word">Velvt</span></a>
     {% if current_user %}
       {% if current_user['is_admin'] %}<span class="tag">Admin</span>{% endif %}
       <a class="tab-dup" href="{{ url_for('live_search') }}">Live search</a>

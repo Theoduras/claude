@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Sign in — Velvet{% endblock %}
+{% block title %}Sign in — Velvt{% endblock %}
 {% block content %}
 {# A step, not a panel: the form itself is the column, so the fields sit
    under the question and the submit lands where Next does. #}
 <form method="post" action="{{ url_for('login') }}" class="wiz auth-screen wiz-fit">
   <div class="wiz-body">
-    <p class="wiz-count">Velvet</p>
+    <p class="wiz-count">Velvt</p>
     <h1 class="wiz-q">Something softer<br>than swiping.</h1>
     <p class="wiz-hint">
       Sign in and search — we pair you the moment someone is looking for you too.
@@ -23,7 +23,7 @@
   <div class="wiz-nav wiz-nav-block">
     <button class="btn btn-block" type="submit">Sign in</button>
     <p class="auth-alt">
-      New to Velvet? <a href="{{ url_for('register') }}">Create an account</a>
+      New to Velvt? <a href="{{ url_for('register') }}">Create an account</a>
     </p>
   </div>
 </form>

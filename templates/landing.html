@@ -1,17 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Velvet{% endblock %}
+{% block title %}Velvt{% endblock %}
 {% block content %}
 {# The same column every other screen uses. The hero is the wizard's body,
    the two buttons are its nav -- and .wiz-fit keeps the pair inside the
    fold instead of letting the page scroll past the promise. #}
 <div class="wiz landing wiz-fit">
   <div class="wiz-body">
-    <p class="landing-brand"><span class="mark"></span>Velvet</p>
-
-    <h1>Something<br>softer than<br>swiping.</h1>
-    <p class="landing-lede">
-      Sign in and search — we pair you the moment someone is looking for you too.
-    </p>
+    <div class="landing-head">
+      <div class="landing-copy">
+        <h1>Something<br>softer than<br>swiping.</h1>
+        <p class="landing-lede">
+          Sign in and search — we pair you the moment someone is looking for you too.
+        </p>
+      </div>
+      {# decorative: the nav already carries the name, so this is hidden from
+         screen readers rather than read out a second time #}
+      <div class="landing-logo" aria-hidden="true"></div>
+    </div>
   </div>
 
   <div class="wiz-nav wiz-nav-block landing-actions">

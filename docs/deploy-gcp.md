@@ -43,7 +43,7 @@ gcloud sql instances create "$INSTANCE" \
 gcloud sql databases create velvet --instance="$INSTANCE"
 
 # Generate a URL-safe password. Do NOT use `openssl rand -base64 32`: its
-# alphabet includes "/", and step 6 below pastes this value straight into a
+# alphabet includes "/", and step 7 below pastes this value straight into a
 # DATABASE_URL, where a single "/" silently truncates the credentials.
 DB_PASS="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32), end="")')"
 gcloud sql users create velvet_app --instance="$INSTANCE" --password="$DB_PASS"
@@ -137,7 +137,79 @@ failed deploy.
 Deploy again with the same command to ship changes — Cloud Run keeps the
 URL and rolls traffic to the new revision.
 
-## 6. Seed the demo profiles (optional)
+## 6. Map a custom domain (optional)
+
+Cloud Run serves the app on a generated `*.run.app` URL. Pointing your own
+domain at it is three steps: prove you own the domain, create the mapping,
+then point DNS at Google.
+
+**Verify the domain.** In [Google Search Console](https://search.google.com/search-console),
+add a **Domain** property (not URL-prefix — the domain property covers every
+subdomain, so `www` needs no separate verification) and add the `TXT` record it
+gives you at your registrar. Use the same Google account as GCP and the
+verification is visible to Cloud Run automatically.
+
+**Create the mappings.** Note the `beta` track: `--region` is not on the GA
+`domain-mappings` command, which fails with a confusing `unrecognized
+arguments` error.
+
+```bash
+gcloud beta run domain-mappings create --service=velvet --domain=example.com --region="$REGION"
+gcloud beta run domain-mappings create --service=velvet --domain=www.example.com --region="$REGION"
+```
+
+**Point DNS at Google.** Read the exact records back rather than copying them
+from memory:
+
+```bash
+gcloud beta run domain-mappings describe --domain=example.com --region="$REGION" \
+  --format="table(status.resourceRecords)"
+```
+
+The apex needs four `A` records (`216.239.32.21`, `.34.21`, `.36.21`,
+`.38.21`) and optionally the matching `AAAA` records; `www` needs a single
+`CNAME` to `ghs.googlehosted.com.`. A `CNAME` on the apex is not legal — it
+cannot coexist with the zone's own `NS`/`SOA` records — so the apex must use
+`A` records. Delete any parking or redirect record the registrar put on `@`
+and `www` first, or it will keep resolving to their placeholder page.
+
+`dig +short example.com` may return only two of the four addresses on any
+given call; resolvers hand back rotating subsets. Run it twice before
+concluding a record is missing.
+
+**Wait for the certificate.** Google issues a managed TLS certificate once the
+domain resolves to it — minutes usually, up to 24h at worst. Until then the
+site serves a certificate warning, which is expected rather than a
+misconfiguration:
+
+```bash
+gcloud beta run domain-mappings describe --domain=example.com --region="$REGION" \
+  --format="value(status.conditions[].type, status.conditions[].status)"
+```
+
+`DomainRoutable: True` with `CertificateProvisioned: Unknown` and `Retry:
+True` is the normal in-progress state. An empty
+`status.conditions[].message` means it is queued, not stuck. You want
+`CertificateProvisioned: True` and `Ready: True`.
+
+**Then pick one hostname.** Serving on both the apex and `www` splits sessions:
+a cookie set on `example.com` is not sent to `www.example.com`, so a user who
+logs in on one and later lands on the other appears logged out. Set
+`CANONICAL_HOST` and the app 308-redirects every other host — `www` and the
+`*.run.app` URL alike — to that one, and marks the session cookie `Secure`:
+
+```bash
+gcloud run services update velvet --region="$REGION" \
+  --update-env-vars=CANONICAL_HOST=example.com
+```
+
+Leave it unset for local development and for any deployment without a mapped
+domain; unset means no redirect and no `Secure` flag, since a `Secure` cookie
+is never returned over plain http on localhost. `/healthz` is exempt from the
+redirect — Cloud Run's startup probe reaches the container directly rather
+than through the mapped domain, so redirecting it would fail every deploy.
+
+## 7. Seed the demo profiles (optional)
 
 The seeder needs to reach the database. Easiest is the Cloud SQL Auth Proxy
 from your own machine:
