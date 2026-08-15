@@ -180,8 +180,14 @@ Don't take on that complexity before the latency is an actual complaint.
 
 `.github/workflows/deploy-gcp.yml` redeploys the current code to the
 already-created Cloud Run service + Cloud SQL instance above on every push
-to `claude/local-dev-workflow-plan-p8bfzv` (or via **Run workflow** in the
-Actions tab). It assumes steps 1–4 have already been done once by hand.
+to **`main`**. It assumes steps 1–4 have already been done once by hand.
+
+Work on a feature branch does **not** deploy — pushing there ships nothing,
+and Cloud Run keeps serving whatever `main` last built. To put a branch in
+front of the real service without merging, use **Run workflow** in the
+Actions tab (or `gh workflow run deploy-gcp.yml --ref <branch>`): the job
+checks out the ref it was dispatched on, so the branch deploys to the same
+service and URL, replacing the running revision until the next deploy.
 
 One-time setup, using **Workload Identity Federation** — GitHub Actions
 authenticates without any long-lived key. This is required on projects where
