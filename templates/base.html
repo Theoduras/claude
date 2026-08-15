@@ -3012,30 +3012,35 @@
       color: var(--text-muted);
       max-width: 22ch;
     }
-    /* Phone first: the wordmark leads, then the copy -- the markup order
-       .wiz-head puts them in, so the same source order that gives the
-       stacked column its top-to-bottom reading also gives the desktop row
-       its left-to-right one (see the `order` swap below). */
+    /* Phone first: the wordmark leads, the copy follows. `order` (not DOM
+       order) does the flip so the desktop rule below can put it back to the
+       right of the text without re-parenting anything. */
     .landing-head {
       display: flex;
       flex-direction: column;
     }
-    /* The wordmark carries its own top margin (below); the headline only
-       needs the smaller gap that separates it from what's above. */
-    .landing-head h1 { margin-top: clamp(0.75rem, 3vh, 1.5rem); }
+    /* Stacked, the wordmark is doing the work the tall opening gap used to do,
+       so the headline no longer needs to start a seventh of the way down. */
+    .landing-head h1 { margin-top: clamp(0.5rem, 2.5vh, 1.5rem); }
     @media (min-width: 721px) {
       html:not([data-viewport="mobile"]) .landing-head h1 {
         margin-top: clamp(2.5rem, 13vh, 7.5rem);
       }
     }
     .landing-logo {
-      width: min(62%, 15rem);
+      order: -1;
+      width: min(80%, 22rem);
       aspect-ratio: 753 / 391;
-      /* Short screens are the binding constraint, not narrow ones: cap the
-         height too. `contain` keeps the mask centred and undistorted inside
-         whatever box survives both limits. */
-      max-height: 16vh;
-      margin: clamp(0.75rem, 3vh, 2rem) auto 0;
+      /* At 80% width the height cap is what actually binds on most phones
+         (753:391 is wide), so this needs enough room for 80% to be real
+         rather than an unreachable ceiling. `contain` keeps the mask centred
+         and undistorted inside whatever box survives both limits. */
+      max-height: 22vh;
+      /* Centered, this box's right edge lands under the fixed mobile-/-desktop
+         preview toggle (top: 5.5rem, see .viewport-toggle) once it's this wide.
+         Enough top clearance to fully pass under that pill, rather than fighting
+         it horizontally by uncentering the logo. */
+      margin: 3.6rem auto clamp(0.5rem, 2.5vh, 1.25rem);
       /* Three stops, not two, and a background wider than the box: sliding it
          sideways sweeps a sheen across the letters. Masking means the gradient
          is the ink, so the sheen needs no extra element on top. */
@@ -3076,7 +3081,9 @@
     }
     /* Short screens: the wordmark is decoration and yields first. */
     @media (max-height: 700px) {
-      .landing-logo { max-height: 11vh; margin-top: 0.6rem; }
+      /* Still clearing the fixed toggle pill (see above) -- short screens
+         can't give up that top margin the way they give up logo height. */
+      .landing-logo { max-height: 11vh; margin-top: 3.6rem; margin-bottom: 0.5rem; }
     }
     .landing-live {
       display: flex;
@@ -3121,6 +3128,9 @@
         min-width: 0;
       }
       html:not([data-viewport="mobile"]) .landing-logo {
+        /* Row layout: back to its natural place after the copy, undoing the
+           mobile-only `order: -1` that puts it above the text when stacked. */
+        order: 0;
         /* Fixed size, not stretched: without this the box fills the whole
            flex slot and the mark (anchored `center` inside it, but the box
            itself flush against .landing-copy) reads as pinned to the left. */
@@ -3147,10 +3157,52 @@
       font-size: 0.75rem;
       color: var(--text-faint);
     }
+    /* Homepage-only footer: How matching works / Questions / Safety / etc.
+       Everywhere else the same destination is one tab-bar icon instead --
+       see the 4th .tabbar item -- so this never repeats itself sitewide. */
+    .site-footer {
+      margin-top: 2rem;
+      padding-top: 1.1rem;
+      border-top: 1px solid var(--ink-hairline);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      column-gap: 1.1rem;
+      row-gap: 0.5rem;
+    }
+    .site-footer a {
+      font-size: 0.78rem;
+      color: var(--text-faint);
+      white-space: nowrap;
+    }
+    .site-footer a:hover { color: var(--text-muted); }
+
+    .help-page section {
+      margin-top: 1.6rem;
+      padding-top: 1.4rem;
+      border-top: 1px solid var(--ink-hairline);
+      scroll-margin-top: 5.5rem;
+    }
+    .help-page section:first-of-type {
+      margin-top: 1.2rem;
+      padding-top: 0;
+      border-top: none;
+    }
+    .help-page h2 {
+      font-family: var(--serif);
+      font-size: 1.15rem;
+      margin: 0 0 0.5rem;
+    }
+    .help-page p {
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin: 0;
+    }
+    .help-page a { color: var(--violet-crest); }
 
     /* ---------- bottom tab bar: the phone-width primary navigation ----
-       Mirrors the mockup's three destinations. Above the phone breakpoint
-       it disappears entirely and the top nav carries every link again. */
+       Search / Chats / You / Help. Above the phone breakpoint it disappears
+       entirely and the top nav carries every link again. */
     .tabbar {
       position: fixed;
       left: 0;

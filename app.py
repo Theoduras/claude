@@ -1820,6 +1820,20 @@ def index():
     return render_template("landing.html", searching_now=searching_now)
 
 
+@app.route("/help")
+def help_page():
+    """Kept as a redirect, not a page of its own.
+
+    A concurrent branch built a real /help route with its own placeholder
+    legal text before the launch-readiness audit's actual /terms, /privacy,
+    /imprint, /safety and /faq existed. Serving that stub now would regress
+    real compliance copy (consent, DSA notice-and-action, the real imprint)
+    behind a nicer-sounding URL. Anything that already links to /help still
+    resolves -- just to the real FAQ instead of a page that duplicates it.
+    """
+    return redirect(url_for("faq"))
+
+
 @app.route("/register", methods=["GET", "POST"])
 @rate_limited("register", limit=20, window_seconds=3600)
 def register():
