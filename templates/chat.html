@@ -372,7 +372,7 @@
   function formatBubbleTime(iso) {
     var d = new Date(iso);
     if (isNaN(d.getTime())) return "";
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
   }
   function paintTimes(root) {
     root.querySelectorAll(".bubble-time[data-time]").forEach(function (el) {
