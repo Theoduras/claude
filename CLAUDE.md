@@ -64,9 +64,11 @@ Keep replies concise; prefer the smallest diff that does the job.
 - `templates/` — 27 Jinja templates, all extending `base.html`
 - `docs/style-guide.html` — velvet-textured design system; `docs/deploy-gcp.md` — Cloud Run
 - `docs/launch-readiness.html` — the pre-launch audit these changes came from, with what
-  is still outstanding (image scanning, passkeys, selfie verification, onboarding rework)
+  is still outstanding (image scanning, passkeys, selfie verification, stepped
+  registration, FAQ)
 - `check_auth.py` — behaviour checks for auth, CSRF, safety and deletion
 - `check_retention.py` — behaviour checks for the retention schedule
+- `check_onboarding.py` — behaviour checks for the first-search gate and the explainer
 - `seed_demo.py` — 40 demo members, all live-searching and `is_bot=TRUE` so they reply in
   chat. Idempotent; `--reset` to rebuild
 - `smoke.py`, `dev.ps1`, `docker-compose.yml` — local dev only, not deployed
@@ -193,7 +195,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 
 | Area | Routes |
 |---|---|
-| misc | `/lab` (admin), `/`, `/healthz`, `/tasks/purge-deletions` |
+| misc | `/lab` (admin), `/`, `/healthz`, `/how-matching-works`, `/tasks/purge-deletions` |
 | auth | `/register`, `/login`, `/logout`, `/verify/<token>`, `/verify/resend`, `/forgot`, `/reset/<token>` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
 | legal | `/terms`, `/privacy`, `/imprint`, `/safety` |
@@ -207,6 +209,18 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 Every POST needs a CSRF token: `{{ csrf_token() }}` in a hidden `csrf_token` field, or an
 `X-CSRF-Token` header for `fetch` (`window.velvtCsrf()` in `base.html`). A new form
 without one fails with a 400, not silently.
+
+Before a first search can start, `profile_completeness()` requires name, age, gender,
+seeking and one photo — `PROFILE_REQUIRED` — and `/search` bounces to `/profile/edit`
+naming what is missing. Everything in `PROFILE_OPTIONAL` only feeds the strength meter.
+Both lists live in one place so the meter can never nag about something the gate does
+not enforce, or vice versa.
+
+The first GET of `/search` also redirects once to `/how-matching-works`, which explains
+the 20s reveal / 5min chat / mutual decision before it happens rather than during.
+Acknowledging is a POST — a GET would let a half-loaded page count as read — and it
+sets `users.match_intro_seen_at`, on the account rather than the session so a second
+device does not see it again.
 
 `/tasks/purge-deletions` is for a scheduler, not a browser: it authenticates with
 `X-Task-Token` against `TASK_TOKEN` and refuses outright when that is unset. Cloud Run

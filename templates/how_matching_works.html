@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}How a match works — Velvt{% endblock %}
+{% block content %}
+{# The differentiator, said out loud. Same column as the search steps it
+   precedes, so it reads as the step before them rather than a leaflet. #}
+<form method="post" action="{{ url_for('how_matching_works') }}"
+      class="wiz intro-screen">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="wiz-body">
+    <p class="wiz-count">Before you start</p>
+    <h1 class="wiz-q">How a match<br>works here.</h1>
+    <p class="wiz-hint">
+      Velvt doesn't hand you a stack of profiles to swipe. You search, and
+      you're paired the moment someone is looking for you too.
+    </p>
+
+    <ol class="intro-steps">
+      <li>
+        <span class="intro-step-n">1</span>
+        <div>
+          <h2>You both get {{ reveal_seconds }} seconds</h2>
+          <p>When you're paired, a card tells you who it is and what you have
+             in common. Photos stay hidden for now.</p>
+        </div>
+      </li>
+      <li>
+        <span class="intro-step-n">2</span>
+        <div>
+          <h2>Then {{ chat_minutes }} minutes to talk</h2>
+          <p>A real conversation on a clock. Long enough to find out whether
+             there's anything there, short enough that neither of you is
+             stuck being polite.</p>
+        </div>
+      </li>
+      <li>
+        <span class="intro-step-n">3</span>
+        <div>
+          <h2>You both decide</h2>
+          <p>Continue, and the chat stays open and photos unlock. If either
+             of you doesn't, it ends there — no explanation owed, nothing
+             lingering in a list.</p>
+        </div>
+      </li>
+    </ol>
+
+    <p class="wiz-hint">
+      You can report or block anyone, at any point, from the chat or their
+      profile. <a href="{{ url_for('safety') }}">Staying safe</a> is worth two
+      minutes before you meet anyone.
+    </p>
+  </div>
+
+  <div class="wiz-nav wiz-nav-block">
+    <button class="wiz-go wiz-go-violet btn-block" type="submit">
+      {% if first_time %}Got it — start searching{% else %}Back to search{% endif %}
+    </button>
+  </div>
+</form>
+{% endblock %}

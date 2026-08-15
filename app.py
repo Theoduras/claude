@@ -963,6 +963,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS age_verified_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ;
+-- Set the first time the "how a match works" screen is acknowledged. On the
+-- account rather than in the session, so it does not reappear on a second
+-- device -- and nullable rather than a boolean, because when someone was
+-- told is the useful thing to know later.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS match_intro_seen_at TIMESTAMPTZ;
 
 -- Case-insensitive, and partial so the pre-existing rows with no address at
 -- all do not collide with each other on NULL.
@@ -2762,6 +2767,9 @@ def edit_profile():
         photos=photos,
         strength_pct=strength_pct,
         strength_hint=strength_hint,
+        # What is *blocking* a search, as opposed to what would merely
+        # improve the profile -- the meter's hint covers the latter.
+        blocking=profile_completeness(current_uid(), profile)["missing"],
         bio_max=BIO_MAX_CHARS,
         interest_chips=chips,
         interest_chosen=chosen,
@@ -2846,6 +2854,34 @@ def imprint():
 @app.route("/safety")
 def safety():
     return render_template("safety.html", support_email=SUPPORT_EMAIL)
+
+
+@app.route("/how-matching-works", methods=["GET", "POST"])
+@login_required
+def how_matching_works():
+    """The timed-match mechanic, explained before it happens rather than
+    during. Reachable any time from the footer; shown automatically once,
+    before the first search.
+
+    POST is the acknowledgement. Marking it seen on GET would mean a
+    half-loaded page counts as having been read.
+    """
+    if request.method == "POST":
+        db = get_db()
+        db.execute(
+            "UPDATE users SET match_intro_seen_at = NOW() WHERE id = ? "
+            "AND match_intro_seen_at IS NULL",
+            (current_uid(),),
+        )
+        db.commit()
+        return redirect(url_for("live_search"))
+
+    return render_template(
+        "how_matching_works.html",
+        reveal_seconds=REVEAL_SECONDS,
+        chat_minutes=TIMED_CHAT_SECONDS // 60,
+        first_time=not current_user()["match_intro_seen_at"],
+    )
 
 
 @app.route("/settings")
@@ -3945,6 +3981,65 @@ def require_profile():
     return me if me is not None and me["name"] else None
 
 
+# What a profile must have before it can go live-searching, and what merely
+# makes it better. The gate is deliberately short: five minutes of
+# conversation with someone whose profile is blank is the experience this
+# stops, but a wall of required fields between signing up and the app is a
+# different way to lose the same person.
+PROFILE_REQUIRED = (
+    ("name", "A name to go by"),
+    ("age", "Your age"),
+    ("gender", "Your gender"),
+    ("seeking", "Who you're looking for"),
+    ("__photo__", "One photo"),
+)
+
+PROFILE_OPTIONAL = (
+    ("bio", "A line about you"),
+    ("location", "Where you are"),
+    ("interests", "A few interests"),
+    ("hobbies", "What you do for fun"),
+    ("relationship_type", "What you're looking for"),
+    ("wants", "What you want"),
+    ("needs", "What you need"),
+)
+
+
+def profile_completeness(user_id, profile=None):
+    """What this profile has, what it is missing, and how far along it is.
+
+    One function behind both the gate and the meter, so the list of things
+    the meter nags about can never drift from the list the gate enforces.
+    """
+    db = get_db()
+    if profile is None:
+        profile = db.execute(
+            "SELECT * FROM profiles WHERE user_id = ?", (user_id,)).fetchone()
+    has_photo = db.execute(
+        "SELECT 1 AS hit FROM photos WHERE user_id = ? LIMIT 1", (user_id,)).fetchone()
+
+    def filled(field):
+        if field == "__photo__":
+            return has_photo is not None
+        if profile is None:
+            return False
+        value = profile[field] if field in profile.keys() else None
+        return bool(str(value).strip()) if value is not None else False
+
+    missing = [label for field, label in PROFILE_REQUIRED if not filled(field)]
+    done = [label for field, label in PROFILE_OPTIONAL if filled(field)]
+    todo = [label for field, label in PROFILE_OPTIONAL if not filled(field)]
+
+    total = len(PROFILE_REQUIRED) + len(PROFILE_OPTIONAL)
+    have = (len(PROFILE_REQUIRED) - len(missing)) + len(done)
+    return {
+        "missing": missing,          # blocks searching
+        "suggestions": todo,         # merely encouraged
+        "ready": not missing,
+        "percent": round(have * 100 / total),
+    }
+
+
 def unverified_email_block():
     """Why the caller can't start a search yet, or None.
 
@@ -4052,6 +4147,20 @@ def live_search():
     if me is None:
         flash("Fill in your profile first so others can match with you.")
         return redirect(url_for("edit_profile"))
+
+    # A profile with nothing in it is somebody the person on the other side
+    # of a five-minute conversation has nothing to look at.
+    state = profile_completeness(current_uid(), me)
+    if not state["ready"]:
+        flash("Before your first search, add: " + ", ".join(state["missing"]).lower() + ".")
+        return redirect(url_for("edit_profile"))
+
+    # How a match works is the most unusual thing about this app and, until
+    # now, the one thing nobody was told before it happened to them. Shown
+    # once, remembered on the account rather than in the session so it does
+    # not reappear on a second device.
+    if request.method == "GET" and not current_user()["match_intro_seen_at"]:
+        return redirect(url_for("how_matching_works"))
 
     if request.method == "POST":
         wanted = clean_relationship_types(",".join(request.form.getlist("relationship_type")))

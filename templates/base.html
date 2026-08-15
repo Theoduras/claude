@@ -2267,6 +2267,49 @@
        One part, repeated: the same raised ground, radius and hairline an
        .opt row uses, opened by a faint eyebrow so a section says what it
        is before it says anything else. */
+    /* --- the "how a match works" intro ------------------------------- */
+    .intro-steps {
+      list-style: none;
+      margin: 1.4rem 0 0.4rem;
+      padding: 0;
+      display: grid;
+      gap: 0.9rem;
+    }
+    .intro-steps + .wiz-hint { margin-top: 1.15rem; }
+    .intro-steps li {
+      display: flex;
+      gap: 0.85rem;
+      align-items: flex-start;
+      padding: 0.95rem 1.05rem;
+      border-radius: 1.15rem;
+      border: 1px solid var(--ink-hairline);
+      background: var(--ink-raised);
+    }
+    .intro-step-n {
+      flex: none;
+      width: 1.7rem;
+      height: 1.7rem;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--velvet-glow, rgba(180, 130, 255, 0.18));
+      color: var(--text);
+      font-size: 0.8rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .intro-steps h2 {
+      margin: 0 0 0.25rem;
+      font-size: 0.98rem;
+      line-height: 1.25;
+    }
+    .intro-steps p {
+      margin: 0;
+      font-size: 0.86rem;
+      line-height: 1.45;
+      color: var(--text-dim);
+    }
+
     .pro-card {
       padding: 1rem 1.1rem;
       border-radius: 1.15rem;
@@ -2631,6 +2674,13 @@
       align-items: baseline;
       margin-bottom: 0.55rem;
     }
+    .strength-blocking {
+      margin: 0.6rem 0 0;
+      font-size: 0.84rem;
+      line-height: 1.4;
+      color: var(--text);
+    }
+    .strength-blocking::first-letter { text-transform: none; }
     .strength-value {
       font-family: var(--mono);
       font-variant-numeric: tabular-nums;
@@ -3300,6 +3350,7 @@
         contact are required (DDG §5 / ECG §5, and the DSA); the rest is the
         answer to "how do I get help", which had nowhere to live before. -#}
     <footer class="site-footer">
+      {% if current_user %}<a href="{{ url_for('how_matching_works') }}">How matching works</a>{% endif %}
       <a href="{{ url_for('safety') }}">Safety</a>
       <a href="{{ url_for('terms') }}">Terms</a>
       <a href="{{ url_for('privacy') }}">Privacy</a>

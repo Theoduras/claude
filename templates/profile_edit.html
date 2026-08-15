@@ -27,7 +27,15 @@
           <div class="strength-bar">
             <div class="strength-fill" style="width: {{ strength_pct }}%;"></div>
           </div>
-          {% if strength_hint %}
+          {% if blocking %}
+            {# Stated here rather than only at the moment the search is
+               refused: finding out what was required by being turned away
+               is the version of this that annoys people. #}
+            <p class="strength-blocking">
+              Still needed before you can search:
+              {{ blocking | join(', ') | lower }}.
+            </p>
+          {% elif strength_hint %}
             <p class="hint" style="margin-top: 0.6rem;">{{ strength_hint }}</p>
           {% endif %}
         </div>
