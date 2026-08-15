@@ -169,13 +169,13 @@
   (document.querySelector(".app-shell") || document.body).appendChild(sheet);
 
   var TITLES = {
-    relationship: "What kind of connection?",
     gender: "Who are you looking for?",
     age: "What age range?",
     location: "Location"
   };
   function titleFor(key) {
     if (TITLES[key]) return TITLES[key];
+    if (key.indexOf("relationship:") === 0) return "What kind of connection?";
     if (key.indexOf("interest:") === 0) return "Interest: " + key.slice(9);
     if (key.indexOf("body:") === 0) return "Body type";
     return "Filter";

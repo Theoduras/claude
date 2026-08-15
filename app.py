@@ -288,6 +288,23 @@ RELATIONSHIP_REASON_PHRASES = {
     "Not sure yet": "the same thing, even if neither of you is sure yet",
 }
 
+
+def clean_relationship_types(raw):
+    """Validate and normalise a relationship_type CSV: every part must be a
+    real RELATIONSHIP_TYPES value, order preserved, duplicates dropped.
+    Invalid parts are silently dropped rather than rejecting the whole
+    value, the same posture clean_interests() takes -- one bad entry in a
+    hand-built request shouldn't cost the valid ones next to it. Empty (or
+    entirely invalid) input returns "".
+    """
+    seen = []
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if part in RELATIONSHIP_TYPES and part not in seen:
+            seen.append(part)
+    return ",".join(seen)
+
+
 BODY_TYPES = ["Slim", "Athletic", "Average", "Curvy", "Muscular", "Plus-size"]
 FITNESS_LEVELS = ["Sedentary", "Lightly active", "Active", "Very active", "Athlete"]
 HAIR_COLORS = ["Black", "Brown", "Blonde", "Red", "Grey/White", "Other"]
@@ -1820,8 +1837,9 @@ def searches_compatible(s1, s2):
     is looking for, each person's age must fall inside the other's
     requested range, each person's physical traits must satisfy the
     other's step-3 filters, and the distance between them must sit inside
-    both radii. Relationship type only blocks when both named one and they
-    differ. Interests, when set, requires at least one shared (stemmed)
+    both radii. Relationship type (a CSV -- a searcher can want more than
+    one kind of connection) only blocks when both named at least one and
+    share none. Interests, when set, requires at least one shared (stemmed)
     keyword. Unset fields are treated as "no preference".
 
     Each side can also switch a filter off (searches.use_gender/use_age/
@@ -1874,14 +1892,16 @@ def searches_compatible(s1, s2):
         return False
     if not (physical_ok(s1, s2) and physical_ok(s2, s1)):
         return False
-    if (
-        s1.get("use_relationship", True)
-        and s2.get("use_relationship", True)
-        and s1["relationship_type"]
-        and s2["relationship_type"]
-        and s1["relationship_type"] != s2["relationship_type"]
-    ):
-        return False
+    if s1.get("use_relationship", True) and s2.get("use_relationship", True):
+        # relationship_type is a CSV now -- a searcher can want more than
+        # one kind of connection -- so "differ" becomes "share nothing".
+        # Symmetric, like the flag check above it, so one call covers both
+        # directions rather than the two separate _ok(searcher, candidate)
+        # calls gender/age/interests each need.
+        t1 = {t.strip() for t in (s1["relationship_type"] or "").split(",") if t.strip()}
+        t2 = {t.strip() for t in (s2["relationship_type"] or "").split(",") if t.strip()}
+        if t1 and t2 and not (t1 & t2):
+            return False
 
     # Distance must fit inside both people's radius. An unknown city or a
     # radius at the maximum means "anywhere". A side with use_distance off
@@ -2091,7 +2111,7 @@ def live_search():
         return redirect(url_for("edit_profile"))
 
     if request.method == "POST":
-        wanted = request.form.get("relationship_type", "")
+        wanted = clean_relationship_types(",".join(request.form.getlist("relationship_type")))
         seeking = request.form.get("seeking", "")
         interests = clean_interests(request.form.get("interests", ""))
         location = request.form.get("location", "").strip()
@@ -2134,7 +2154,7 @@ def live_search():
                       if b in BODY_TYPES]
 
         error = None
-        if wanted not in RELATIONSHIP_TYPES:
+        if not wanted:
             error = "Please choose what kind of connection you want."
         elif seeking not in SEEKING_OPTIONS:
             error = "Please choose who you're looking for."
@@ -2173,6 +2193,9 @@ def live_search():
         "search_start.html",
         me=me,
         relationship_types=RELATIONSHIP_TYPES,
+        existing_relationship_types=(
+            (existing["relationship_type"] or "").split(",") if existing else []
+        ),
         seeking_options=SEEKING_OPTIONS,
         age_min_bound=AGE_MIN_YEARS,
         age_max_bound=AGE_MAX_YEARS,
@@ -2209,8 +2232,8 @@ def search_criteria():
         flash("Fill in your profile first so others can match with you.")
         return redirect(url_for("edit_profile"))
 
-    wanted = request.values.get("relationship_type", "")
-    if wanted not in RELATIONSHIP_TYPES:
+    wanted = clean_relationship_types(request.values.get("relationship_type", ""))
+    if not wanted:
         return redirect(url_for("live_search"))
 
     existing = db.execute(
@@ -2420,8 +2443,8 @@ def search_preview():
     if me is None:
         return {"error": "profile incomplete"}, 400
 
-    wanted = request.form.get("relationship_type", "")
-    if wanted not in RELATIONSHIP_TYPES:
+    wanted = clean_relationship_types(request.form.get("relationship_type", ""))
+    if not wanted:
         return {"error": "invalid relationship_type"}, 400
 
     seeking = request.form.get("seeking", "")
@@ -2568,20 +2591,28 @@ def _minimal_distance_suggestion(mine, others):
 
 
 def _relationship_suggestions(mine, others):
-    """Which other relationship types, if switched to, would open up
-    matches — each verified through searches_compatible(), most people
-    admitted first."""
-    results, seen = [], set()
+    """Which other relationship types, if added alongside the ones already
+    picked, would open up matches — each verified through
+    searches_compatible(), most people admitted first.
+
+    relationship_type is a CSV, so "switch to" became "add": the trial
+    keeps every type mine already has and appends the candidate, the same
+    shape chip_options()' relationship: rows try.
+    """
+    mine_types = [t.strip() for t in (mine["relationship_type"] or "").split(",") if t.strip()]
+    results, seen = [], set(mine_types)
     for o in others:
-        rt = o["relationship_type"]
-        if not rt or rt == mine["relationship_type"] or rt in seen:
-            continue
-        seen.add(rt)
-        trial = dict(mine)
-        trial["relationship_type"] = rt
-        count = sum(1 for x in others if searches_compatible(trial, x))
-        if count:
-            results.append({"relationship_type": rt, "count": count})
+        for rt in (o["relationship_type"] or "").split(","):
+            rt = rt.strip()
+            if not rt or rt in seen:
+                continue
+            seen.add(rt)
+            trial = dict(mine)
+            trial["relationship_type"] = ",".join(mine_types + [rt])
+            trial["use_relationship"] = True
+            count = sum(1 for x in others if searches_compatible(trial, x))
+            if count:
+                results.append({"relationship_type": rt, "count": count})
     results.sort(key=lambda r: -r["count"])
     return results
 
@@ -2680,20 +2711,29 @@ def search_chips(search):
     back on, the same way "Any age" already read before this screen had
     controls. Anything with no value at all (no location typed, no
     interests picked) is omitted rather than shown as an empty row.
+
+    relationship_type is a CSV -- a searcher can want more than one kind of
+    connection -- so like interests and body types it gets one chip per
+    selected value rather than the single always-present chip gender and
+    age get. use_relationship still exists, but it now just tracks whether
+    that CSV is empty (see the apply endpoint below), the same relationship
+    use_physical has with pref_body_types.
     """
-    chips = [{
-        "key": "relationship",
-        "label": search["relationship_type"] or "Any connection",
-        "off": not search["use_relationship"],
-    }, {
+    chips = []
+    for part in (search["relationship_type"] or "").split(","):
+        part = part.strip()
+        if part:
+            chips.append({"key": f"relationship:{part}", "label": part, "off": False})
+    chips.append({
         "key": "gender",
         "label": search["seeking"] or "Everyone",
         "off": not search["use_gender"],
-    }, {
+    })
+    chips.append({
         "key": "age",
         "label": f"{search['age_min']}–{search['age_max']}" if search["use_age"] else "Any age",
         "off": not search["use_age"],
-    }]
+    })
     if search["location"]:
         chips.append({"key": "location", "label": search["location"], "off": False})
     for part in (search["interests"] or "").split(","):
@@ -2723,13 +2763,24 @@ def chip_options(mine, others, key):
     POST to /search/chips echoes back to apply the row; `current` marks the
     one already in effect.
     """
-    if key == "relationship":
-        options = [
-            {"value": rt, "label": rt,
-             "current": mine["use_relationship"] and rt == mine["relationship_type"],
-             "count": _chip_trial_count(mine, others, relationship_type=rt, use_relationship=True)}
-            for rt in RELATIONSHIP_TYPES
-        ]
+    if key.startswith("relationship:"):
+        # Same toggle-in-a-CSV shape as body: below: each row previews what
+        # the set would become with this one type flipped, not switching to
+        # it outright -- a searcher can want more than one kind of
+        # connection at once.
+        current = [t.strip() for t in (mine["relationship_type"] or "").split(",") if t.strip()]
+        options = []
+        for rt in RELATIONSHIP_TYPES:
+            on = rt in current
+            trial_list = [t for t in current if t != rt] if on else current + [rt]
+            options.append({
+                "value": ",".join(trial_list), "label": rt,
+                "current": on,
+                "count": _chip_trial_count(
+                    mine, others,
+                    relationship_type=",".join(trial_list),
+                    use_relationship=bool(trial_list)),
+            })
         options.append({
             "value": "", "label": "Any connection",
             "current": not mine["use_relationship"],
@@ -2949,14 +3000,13 @@ def search_chips_apply():
         set_col("lat", None)
         set_col("lng", None)
 
-    elif key == "relationship":
-        if value == "":
-            set_col("use_relationship", False)
-        elif value in RELATIONSHIP_TYPES:
-            set_col("relationship_type", value)
-            set_col("use_relationship", True)
-        else:
-            return {"error": "invalid relationship_type"}, 400
+    elif key.startswith("relationship:"):
+        # Same shape as body: below -- value is the whole CSV the row
+        # already computed (one type toggled in or out), not a single type
+        # to switch to, and "" is the sheet's own "Any connection" row.
+        types = clean_relationship_types(value)
+        set_col("relationship_type", types)
+        set_col("use_relationship", bool(types))
 
     elif key == "gender":
         if value == "":
@@ -3478,7 +3528,15 @@ def chat(match_id):
                 reveal_heading = "You both like" if shared_interests else f"{other_profile['name']}'s interests"
                 reveal_highlight = shared_interests[0] if shared_interests else other_interest_list[0]
             else:
-                reason_type = mine_search["relationship_type"] or other_search["relationship_type"]
+                # relationship_type is a CSV on both sides now; name the type
+                # that actually paired them (the shared one -- try_pair()
+                # would not have matched them otherwise) rather than either
+                # side's whole list. The single-sided fallbacks keep the old
+                # leniency for rows saved before this was CSV-aware.
+                mine_types = [t.strip() for t in (mine_search["relationship_type"] or "").split(",") if t.strip()]
+                other_types = [t.strip() for t in (other_search["relationship_type"] or "").split(",") if t.strip()]
+                shared_rt = [t for t in mine_types if t in other_types]
+                reason_type = shared_rt[0] if shared_rt else (mine_types[0] if mine_types else (other_types[0] if other_types else None))
                 phrase = RELATIONSHIP_REASON_PHRASES.get(reason_type, "the same thing")
                 match_reason = f"You're both here for {phrase}."
 

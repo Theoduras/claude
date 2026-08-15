@@ -13,9 +13,16 @@
   <p class="wiz-count" id="wiz-count">Step 1 of 6</p>
 
   <div class="wiz-body">
-  {# ---- 1. connection type ------------------------------------------- #}
+  {# ---- 1. connection type ---------------------------------------------
+     Checkboxes, not radios: a searcher can want more than one kind of
+     connection, and searches_compatible() treats relationship_type as a
+     CSV now -- two searches pass this filter as soon as they share one
+     type. data-required just needs *a* checked input by that name, which
+     :checked already answers the same way for a group of checkboxes as it
+     does for radios. #}
   <section class="wiz-step" data-step="1" data-required="relationship_type">
     <h1 class="wiz-q">What are you<br>looking for?</h1>
+    <p class="wiz-hint">Pick as many as apply.</p>
     <div class="opt-list">
       {% set rel_icons = {
         'Long-term relationship': 'M12 20.2s-7.8-4.6-10-9.3C.4 7.4 2.6 4 6.2 4c2 0 3.7 1 4.8 2.6C12.1 5 13.8 4 15.8 4c3.6 0 5.8 3.4 4.2 6.9-2.2 4.7-10 9.3-10 9.3Z',
@@ -25,9 +32,9 @@
       } %}
       {% for rt in relationship_types %}
         <label class="opt opt-{{ loop.index }}">
-          <input type="radio" name="relationship_type" value="{{ rt }}"
+          <input type="checkbox" name="relationship_type" value="{{ rt }}"
                  class="visually-hidden"
-                 {% if existing and existing['relationship_type'] == rt %}checked{% endif %}>
+                 {% if rt in existing_relationship_types %}checked{% endif %}>
           <span class="opt-icon">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               {% if rt == 'Friendship' %}
@@ -44,7 +51,7 @@
             </svg>
           </span>
           <span class="opt-label">{{ rt }}</span>
-          <span class="opt-mark"></span>
+          <span class="opt-mark opt-mark-box"></span>
         </label>
       {% endfor %}
     </div>

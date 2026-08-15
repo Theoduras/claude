@@ -62,13 +62,22 @@ Starting a search is **two screens**: `/search` picks the connection type and th
 filters matter as a list of switches. Each switch writes a `searches.use_*` column —
 `use_gender`/`use_age`/`use_distance`/`use_physical`/`use_relationship` — read by
 `searches_compatible()` via `.get(key, True)`; a switch that is off leaves its panel's inputs
-`disabled`, so those fields never reach the server at all. The wizard's own POST always
-saves `use_relationship=TRUE` (it *is* the tile choice there), but `/search/waiting`'s pills
-can switch it off afterward like any other filter. Interests has no `use_*` column of its
-own — the stored text *is* the switch: "off" stores `''`, which `searches_compatible()`
+`disabled`, so those fields never reach the server at all. Interests has no `use_*` column of
+its own — the stored text *is* the switch: "off" stores `''`, which `searches_compatible()`
 reads as "no preference". When it's non-empty it's a real filter (requires the other side to
 share at least one stemmed keyword), and it still breaks ties in `try_pair()`'s ranking among
 whoever's left.
+
+`relationship_type` (step 1, "What are you looking for?") is a checkbox group, not a radio —
+a searcher can want more than one kind of connection — so `searches.relationship_type` is a
+CSV like `interests` and `pref_body_types`, and `searches_compatible()` passes it as soon as
+the two sides share one type rather than requiring an exact match. `use_relationship` still
+exists but is no longer forced TRUE: `save_search()` sets it TRUE at wizard creation because
+the step requires at least one type, but from then on it just tracks whether that CSV is
+empty (`bool(types)`), the same relationship `use_physical` has with `pref_body_types`.
+`/search/waiting`'s recap gives connection type one pill per selected value (`relationship:
+<type>` chips), not the single always-present chip gender and age get, and removing every one
+of them switches `use_relationship` off — same as clearing the last body-type chip.
 
 `/search/waiting` restates those filters as chips you can edit in place — tap one for a
 sheet of alternatives, each priced with a real `searches_compatible()` count

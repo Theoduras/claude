@@ -10,7 +10,8 @@
   </p>
 
   <p class="recap">
-    <span>{{ wanted }}</span>
+    {# wanted is a CSV now -- relationship_type can hold more than one type. #}
+    <span>{{ wanted.replace(',', ', ') }}</span>
     <span aria-hidden="true">·</span>
     <span>{% if place.location %}{{ place.location }}{% else %}anywhere{% endif %}{% if place.location and place.radius_km < radius_max %} · within {{ place.radius_km }} km{% endif %}</span>
     <a href="{{ url_for('live_search') }}">change</a>
