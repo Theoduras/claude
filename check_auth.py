@@ -707,6 +707,70 @@ with app.test_client() as c:
     check("the composer advertises the same limit",
           f'maxlength="{A.MESSAGE_MAX_CHARS}"' in html)
 
+# --- breach screening ------------------------------------------------------
+# Stubbed at the HTTP boundary: the real range API cannot be reached from
+# CI, and a check that silently passes because the network is down would be
+# worse than no check. The stub answers in HIBP's own format.
+_real_get = A.requests.get
+
+
+def stub_hibp(password, count):
+    digest = A.hashlib.sha1(password.encode()).hexdigest().upper()
+
+    class Resp:
+        text = "\r\n".join(
+            ["0000000000000000000000000000000000A:3"]
+            + ([f"{digest[5:]}:{count}"] if count is not None else []))
+
+        def raise_for_status(self):
+            pass
+
+    A.requests.get = lambda url, timeout=None, headers=None: Resp()
+
+
+PW = "trustno1234"
+try:
+    stub_hibp(PW, 50000)
+    check("a breached password is refused", A.password_problem(PW, PW) is not None)
+    stub_hibp(PW, A.HIBP_MAX_APPEARANCES + 1)
+    check("just over the threshold is refused", A.password_problem(PW, PW) is not None)
+    stub_hibp(PW, A.HIBP_MAX_APPEARANCES)
+    check("at the threshold is allowed", A.password_problem(PW, PW) is None)
+    stub_hibp(PW, None)
+    check("a password absent from the corpus is allowed",
+          A.password_problem(PW, PW) is None)
+
+    # Only the first five hex digits of the SHA-1 may leave this process.
+    sent = {}
+
+    class Resp2:
+        text = ""
+
+        def raise_for_status(self):
+            pass
+
+    A.requests.get = lambda url, timeout=None, headers=None: (
+        sent.update(url=url, headers=headers), Resp2())[1]
+    A.breach_count(PW)
+    suffix = sent["url"].split("/range/")[1]
+    check("only a 5-character prefix is sent", len(suffix) == 5, suffix)
+    check("the full hash never leaves the process",
+          A.hashlib.sha1(PW.encode()).hexdigest().upper() not in sent["url"])
+    check("padding is requested so the reply length says nothing",
+          sent["headers"].get("Add-Padding") == "true")
+
+    # An outage must not become an outage here.
+    def boom(*a, **k):
+        raise A.requests.RequestException("unreachable")
+
+    A.requests.get = boom
+    check("breach screening fails open when HIBP is unreachable",
+          A.password_problem(PW, PW) is None)
+    check("length is still enforced during an outage",
+          A.password_problem("short", "short") is not None)
+finally:
+    A.requests.get = _real_get
+
 failed = [n for n, ok, _ in RESULTS if not ok]
 print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
 if failed:

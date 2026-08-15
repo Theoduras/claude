@@ -179,6 +179,67 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+\.[^@\s]+$")
 VERIFY_TOKEN_HOURS = 48
 RESET_TOKEN_HOURS = 1
 
+# SP 800-63B-4 asks for new passwords to be screened against known-breached
+# ones. Have I Been Pwned's range API is queried by the first five hex digits
+# of the password's SHA-1 and answers with every suffix sharing that prefix,
+# so the password -- and even its full hash -- never leaves this process.
+HIBP_RANGE_URL = "https://api.pwnedpasswords.com/range/"
+HIBP_TIMEOUT_SECONDS = 2.5
+# How many appearances in a breach corpus is too many. 1 would reject
+# passwords that leaked once in a decade of dumps; the point is to catch the
+# ones attackers actually guess first.
+HIBP_MAX_APPEARANCES = 10
+
+
+def breach_count(password):
+    """How many times this password appears in HIBP's corpus.
+
+    Returns None when the answer is unknown -- the service is down, slow, or
+    unreachable. Callers treat that as "allow": an outage at Have I Been
+    Pwned must never become an outage here, and refusing to let someone set
+    a password because a third party is unavailable is a worse failure than
+    letting one weak password through.
+    """
+    digest = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
+    prefix, suffix = digest[:5], digest[5:]
+    try:
+        resp = requests.get(
+            HIBP_RANGE_URL + prefix,
+            timeout=HIBP_TIMEOUT_SECONDS,
+            headers={"Add-Padding": "true", "User-Agent": "velvt-password-check"},
+        )
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        app.logger.warning("breach screening unavailable: %s", exc)
+        return None
+    for line in resp.text.splitlines():
+        candidate, _, count = line.partition(":")
+        if candidate.strip() == suffix:
+            try:
+                return int(count)
+            except ValueError:
+                return None
+    return 0
+
+
+def password_problem(password, confirm=None):
+    """The one place a new password is judged, so the rules cannot drift
+    between registration, reset and change. Returns a message, or None if
+    the password is acceptable.
+
+    No composition rules and no rotation, per SP 800-63B-4 -- length and
+    "has this one already leaked" are what actually carry.
+    """
+    if len(password) < PASSWORD_MIN_LENGTH:
+        return f"Password must be at least {PASSWORD_MIN_LENGTH} characters."
+    if confirm is not None and password != confirm:
+        return "Passwords do not match."
+    seen = breach_count(password)
+    if seen is not None and seen > HIBP_MAX_APPEARANCES:
+        return ("That password has appeared in a public data breach, so it is "
+                "one attackers try first. Please choose a different one.")
+    return None
+
 # --- privacy and deletion -----------------------------------------------
 # Long enough to undo a decision made in anger, short enough to still be a
 # deletion. The account is unreachable to everyone else from the moment it
@@ -1635,10 +1696,8 @@ def register():
             return render_template("age_gate.html"), 403
         elif age > MAX_PLAUSIBLE_AGE:
             error = "Please check your date of birth."
-        elif len(password) < PASSWORD_MIN_LENGTH:
-            error = f"Password must be at least {PASSWORD_MIN_LENGTH} characters."
-        elif password != confirm:
-            error = "Passwords do not match."
+        elif password_problem(password, confirm):
+            error = password_problem(password, confirm)
         elif not request.form.get("accept_terms"):
             error = "Please accept the terms and privacy policy to continue."
         elif not request.form.get("accept_sensitive"):
@@ -1823,10 +1882,9 @@ def reset_password(token):
         password = request.form.get("password", "")
         confirm = request.form.get("confirm", "")
 
-        if len(password) < PASSWORD_MIN_LENGTH:
-            flash(f"Password must be at least {PASSWORD_MIN_LENGTH} characters.")
-        elif password != confirm:
-            flash("Passwords do not match.")
+        problem = password_problem(password, confirm)
+        if problem:
+            flash(problem)
         else:
             consume_email_token(token, "reset")
             db = get_db()
@@ -2679,10 +2737,8 @@ def change_password():
 
     if not check_password_hash(me["password_hash"], current):
         flash("That isn't your current password.")
-    elif len(password) < PASSWORD_MIN_LENGTH:
-        flash(f"Password must be at least {PASSWORD_MIN_LENGTH} characters.")
-    elif password != confirm:
-        flash("Passwords do not match.")
+    elif password_problem(password, confirm):
+        flash(password_problem(password, confirm))
     else:
         db = get_db()
         db.execute(
