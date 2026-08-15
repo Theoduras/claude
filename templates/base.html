@@ -1833,20 +1833,10 @@
     .tag-timed { color: var(--champagne); border-color: rgba(232, 211, 169, 0.4);
       background: linear-gradient(150deg, rgba(232, 211, 169, 0.22), rgba(59, 11, 102, 0.4)); }
 
-    /* ---------- photos -------------------------------------------------- */
-    .photo-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
-      gap: 0.6rem;
-      margin: 0.9rem 0;
-    }
-    .photo-grid img {
-      width: 100%;
-      aspect-ratio: 1;
-      object-fit: cover;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--ink-hairline);
-    }
+    /* ---------- photos --------------------------------------------------
+       The thumbnail grid that used to sit under the profile hero is gone:
+       photos are a carousel now (.pro-gallery), and a grid of the same
+       pictures underneath it was the second way to see the same thing. */
     .photo-locked {
       display: flex;
       align-items: center;
@@ -2056,58 +2046,11 @@
         rgba(168, 133, 247, 0.16) 0 6px, transparent 6px 12px);
     }
 
-    /* ---------- profile hero ------------------------------------------
-       Full-bleed portrait with the name sitting on it. The card's own
-       padding is cancelled with a negative margin so the photo reaches
-       the panel edge, and overflow:hidden on .card clips the corners. */
-    .profile-hero {
-      position: relative;
-      height: 18.5rem;
-      margin: calc(-1 * var(--card-pad)) calc(-1 * var(--card-pad)) 1.1rem;
-      overflow: hidden;
-      background-color: #12081F;
-      background-image:
-        radial-gradient(56% 46% at 18% 6%, rgba(168, 85, 247, 0.62), transparent 70%),
-        radial-gradient(52% 44% at 92% 16%, rgba(29, 166, 162, 0.5), transparent 72%);
-    }
-    .profile-hero > img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    .profile-hero > .ph { position: absolute; inset: 0; }
-    /* scrim: the name has to stay legible over a photo of any brightness */
-    .profile-hero::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(to top,
-        var(--ink) 2%, rgba(11, 7, 19, 0.2) 55%, rgba(11, 7, 19, 0.55));
-    }
-    .profile-hero-caption {
-      position: absolute;
-      z-index: 1;
-      left: var(--card-pad);
-      right: var(--card-pad);
-      bottom: 1.1rem;
-    }
-    .profile-hero-caption h1 {
-      margin: 0;
-      font-size: clamp(1.9rem, 7vw, 2.375rem);
-      letter-spacing: -0.02em;
-    }
-    .profile-hero-meta {
-      margin: 0.3rem 0 0;
-      font-size: 0.875rem;
-      color: var(--text-muted);
-    }
-
     /* the bio, set as a pull-quote rather than another labelled field */
     .profile-quote {
-      margin: 0.9rem 0 0;
+      margin: 0;
       font-family: var(--serif);
-      font-size: 1.19rem;
+      font-size: 1.12rem;
       line-height: 1.45;
       text-wrap: pretty;
     }
@@ -2131,42 +2074,249 @@
     }
 
     /* ---------- profile screen ----------------------------------------
-       The same column as the steps and the room, so a profile opened from
-       a chat keeps the app's width and its parts are the ones used
-       everywhere else: a rounded raised block, chips, an eyebrow label,
-       and the action at the foot. This screen may scroll -- it is a
-       document, not a question -- but it starts at the top rather than
-       centring what it happens to contain. */
-    .profile-screen .wiz-body { justify-content: flex-start; }
-    .profile-screen .profile-hero {
-      height: 16rem;
-      margin: 0 0 1rem;
+       A profile is a document, so unlike a step it starts at the top and
+       scrolls -- but it scrolls *inside itself*. The screen is .wiz-fit,
+       which bounds the column to the viewport, so the name can stay
+       pinned at the top the whole way down and the photos never scroll
+       out of reach of the arrows. Everything below the photos is one
+       repeated part, .pro-card, so a profile with two things to say and
+       one with nine read as the same page. */
+    .profile-screen .wiz-body { justify-content: flex-start; gap: 0.75rem; }
+
+    /* the pinned name. Sits above .wiz-body rather than inside it, so it
+       is outside the scroll box by construction rather than by z-index. */
+    .pro-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding-bottom: 0.7rem;
+      border-bottom: 1px solid var(--ink-hairline);
+    }
+    .pro-head h1 {
+      /* min-width: 0 or the flex item refuses to shrink below its text and
+         pushes the button off the edge -- the same fix .chat-head needed. */
+      flex: 1 1 auto;
+      min-width: 0;
+      margin: 0;
+      font-size: clamp(1.35rem, 5vw, 1.6rem);
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pro-head h1 .pro-age { color: var(--text-muted); font-weight: 400; }
+    /* The viewport-preview chip is fixed to this exact corner on phones
+       (top: 5.5rem), and unlike the room's header this one puts its longest
+       text right up against the edge. Reserve the chip's width so a long
+       name ellipsises short of it instead of running underneath. Margin, not
+       padding: the box itself has to end before the chip, or the text just
+       ellipsises into a gap the chip still covers. */
+    html[data-viewport="mobile"] .pro-head h1 { margin-right: 6.5rem; }
+    .pro-close {
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: 2.25rem;
+      height: 2.25rem;
+      padding: 0;
+      border-radius: 50%;
+      border: 1px solid var(--ink-hairline);
+      background: var(--ink-raised);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 0.15s ease, border-color 0.15s ease;
+    }
+    .pro-close:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
+    .pro-close svg { width: 1.05rem; height: 1.05rem; }
+
+    /* ---------- the carousel ------------------------------------------
+       One photo at a time with a bar per photo above it. Six is the cap
+       (PHOTO_MAX_PER_USER), so the bars can each take an equal share of
+       the width without ever getting too thin to see. */
+    .pro-gallery { position: relative; }
+    .pro-bars {
+      display: flex;
+      gap: 0.25rem;
+      margin-bottom: 0.45rem;
+    }
+    .pro-bars > span {
+      flex: 1;
+      height: 3px;
+      border-radius: 2px;
+      background: var(--ink-hairline);
+      transition: background 0.2s ease;
+    }
+    .pro-bars > span.is-seen {
+      background-image: linear-gradient(90deg, var(--violet-crest), var(--violet));
+    }
+    .pro-frame {
+      position: relative;
+      aspect-ratio: 3 / 4;
+      border-radius: 1.15rem;
+      overflow: hidden;
+      border: 1px solid var(--ink-hairline);
+      background-color: #12081F;
+      background-image:
+        radial-gradient(56% 46% at 18% 6%, rgba(168, 85, 247, 0.62), transparent 70%),
+        radial-gradient(52% 44% at 92% 16%, rgba(29, 166, 162, 0.5), transparent 72%);
+    }
+    .pro-frame > .ph { position: absolute; inset: 0; }
+    .pro-slide {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.28s ease;
+    }
+    .pro-slide.is-on { opacity: 1; }
+    /* the whole half of the frame is the target, not just the chevron --
+       that is what makes it feel like the phone app rather than a slider */
+    .pro-tap {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 42%;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .pro-tap.is-prev { left: 0; }
+    .pro-tap.is-next { right: 0; }
+    .pro-arrow {
+      position: absolute;
+      top: 50%;
+      z-index: 2;
+      display: grid;
+      place-items: center;
+      width: 2.1rem;
+      height: 2.1rem;
+      margin-top: -1.05rem;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: #FFF;
+      background: rgba(11, 7, 19, 0.55);
+      backdrop-filter: blur(6px);
+      cursor: pointer;
+      transition: opacity 0.18s ease, background 0.18s ease;
+    }
+    .pro-arrow:hover { background: rgba(11, 7, 19, 0.78); }
+    .pro-arrow.is-prev { left: 0.6rem; }
+    .pro-arrow.is-next { right: 0.6rem; }
+    .pro-arrow svg { width: 1.15rem; height: 1.15rem; }
+    /* at either end the control has nothing to do: hide it, and take its
+       tap zone out of the flow with it so the dead half stops swallowing
+       taps meant for the live one. */
+    .pro-arrow.is-spent, .pro-tap.is-spent { opacity: 0; pointer-events: none; }
+    .pro-count {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+
+    /* ---------- the cards ---------------------------------------------
+       One part, repeated: the same raised ground, radius and hairline an
+       .opt row uses, opened by a faint eyebrow so a section says what it
+       is before it says anything else. */
+    .pro-card {
+      padding: 1rem 1.1rem;
       border-radius: 1.15rem;
       border: 1px solid var(--ink-hairline);
-    }
-    .profile-screen .profile-hero-caption { left: 1.1rem; right: 1.1rem; bottom: 0.9rem; }
-    .profile-screen .profile-hero-caption h1 { font-size: clamp(1.7rem, 6vw, 2.1rem); }
-    .profile-screen .pillset { justify-content: center; margin-bottom: 0; }
-    .profile-screen .profile-quote { text-align: center; font-size: 1.1rem; }
-    /* the fact rows, gathered into one raised block instead of floating
-       hairlines -- the same ground and radius an .opt row uses */
-    .profile-screen .facts {
-      margin-top: 1.1rem;
-      padding: 0.15rem 1rem;
-      border-radius: 1.15rem;
       background: var(--ink-raised);
     }
-    .profile-screen .facts > div:last-child { border-bottom: 0; }
-    .profile-screen .photo-grid { margin: 1.1rem 0 0; }
+    .pro-eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin: 0 0 0.7rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      color: var(--text-faint);
+    }
+    .pro-eyebrow svg { flex: none; width: 0.95rem; height: 0.95rem; }
+
+    /* the answer a card exists for -- the connection type, an interest
+       cloud's heading row -- set large next to its gradient disc */
+    .pro-lead {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+    .pro-lead .opt-icon { width: 2.6rem; height: 2.6rem; }
+    .pro-lead .opt-icon svg { width: 1.3rem; height: 1.3rem; }
+    .pro-lead > span:last-child {
+      font-family: var(--serif);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+    .pro-card .pillset { margin: 0; }
+    .pro-rule {
+      height: 1px;
+      margin: 0.85rem 0;
+      background: var(--ink-hairline);
+    }
+
+    /* facts as sentences, not label/value pairs: an icon and the thing
+       itself, which reads at a glance where "Height  180 cm" does not */
+    .pro-facts { display: flex; flex-direction: column; }
+    .pro-facts > div {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      padding: 0.55rem 0;
+      font-size: 0.95rem;
+      border-bottom: 1px solid var(--ink-hairline);
+    }
+    .pro-facts > div:last-child { border-bottom: 0; }
+    .pro-facts > div:first-child { padding-top: 0; }
+    .pro-facts svg {
+      flex: none;
+      width: 1.15rem;
+      height: 1.15rem;
+      color: var(--text-faint);
+    }
+
+    /* a prompt and its answer: the question stays small enough to read as
+       a caption, so the answer is the only thing with any voice */
+    .pro-prompt {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 1.3rem;
+      line-height: 1.32;
+      text-wrap: pretty;
+    }
+    .pro-note {
+      margin: 0.7rem 0 0;
+      font-size: 0.78rem;
+      color: var(--text-faint);
+    }
+    /* the owner-only preference rows keep the label/value shape: they are
+       settings you typed, not things you would say about yourself */
+    .pro-card .facts { margin-top: 0; }
+    .pro-card .facts > div:last-child { border-bottom: 0; }
+    .pro-card .facts > div:first-child { padding-top: 0; }
+
     .profile-screen .photo-locked {
       max-width: none;
-      aspect-ratio: auto;
+      aspect-ratio: 3 / 4;
       padding: 1.1rem;
-      margin-top: 1.1rem;
       border-radius: 1.15rem;
     }
     .profile-screen .wiz-nav { justify-content: center; }
     .profile-screen .wiz-nav .btn { width: 100%; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pro-slide { transition: none; }
+    }
 
     /* ---------- the rest of the app, in the wizard's shape -------------
        Landing, the two auth screens, the chat list and the two profile

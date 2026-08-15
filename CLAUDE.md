@@ -92,6 +92,12 @@ window lapses). No background job — phases are derived from `paired_at` on eac
 (`is_bot=TRUE`) auto-reply in chat via a canned engine (no LLM) and auto-continue past the
 decision phase — see `maybe_bot_reply()`.
 
+`/profile/<id>` is a pinned name over a scrolling stack: a tap/swipe photo carousel with a
+segment bar per photo, then one `.pro-card` per section (Looking for, About me, In short,
+Interests, Hobbies, and the `wants`/`needs` prompts), plus an owner-only card for the
+`pref_*` columns. All of it is Jinja over columns `profiles` already has —
+`view_profile()` is untouched — so a new field shows up by adding a card, not a route.
+
 ## Route map (`app.py`)
 
 Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on every edit.

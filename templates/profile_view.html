@@ -1,102 +1,372 @@
 {% extends "base.html" %}
 {% block title %}{{ profile['name'] or profile['username'] }} — Velvet{% endblock %}
 {% block content %}
-{# The same column the search steps, the match screens and the room use --
-   the hero, the chips and the fact rows are the app's own parts rather
-   than a page of its own. This screen is a document, so it may scroll. #}
-<div class="wiz profile-screen">
-  <div class="wiz-body">
-  {# The first viewable photo becomes the hero; the rest stay in the grid
-     below. With no photo to show, the hatch stands in and the name still
-     reads against the scrim. #}
-  {% set show_photos = photos if (is_own or can_view_photos) else [] %}
-  <div class="profile-hero">
-    {% if show_photos %}
-      <img src="{{ url_for('photo', photo_id=show_photos[0]['id']) }}"
-           alt="{{ 'Your photo' if is_own else 'Photo of ' ~ profile['name'] }}">
-    {% else %}
-      <span class="ph"></span>
-    {% endif %}
-    <div class="profile-hero-caption">
-      <h1>{{ profile['name'] or profile['username'] }}{% if profile['age'] %}, {{ profile['age'] }}{% endif %}</h1>
-      <p class="profile-hero-meta">
-        @{{ profile['username'] }}
-        {% if profile['gender'] %} &middot; {{ profile['gender'] }}{% endif %}
-        {% if profile['location'] %} &middot; {{ profile['location'] }}{% endif %}
-      </p>
-    </div>
+{# A profile is a document, so it scrolls -- but it scrolls inside itself.
+   .wiz-fit bounds the column to the viewport, which is what lets the name
+   stay pinned at the top and the photos stay reachable by their arrows.
+   Everything under the photos is one repeated part, .pro-card, so a sparse
+   profile and a full one read as the same page. #}
+<div class="wiz profile-screen wiz-fit">
+
+  {% set display_name = profile['name'] or profile['username'] %}
+
+  {# The way out sits on the left, not on the right where the reference app
+     puts it: the debug viewport chip is fixed to the top-right corner on
+     phones and would sit directly on top of it, swallowing the taps. Left
+     is also where the room and the edit form already put theirs. #}
+  <div class="pro-head">
+    <button type="button" class="pro-close" id="pro-close" aria-label="Close profile">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <h1>{{ display_name }}{% if profile['age'] %} <span class="pro-age">{{ profile['age'] }}</span>{% endif %}</h1>
   </div>
 
-  {% if profile['seeking'] or profile['relationship_type'] %}
-    <div class="pillset">
-      {% if profile['relationship_type'] %}
-        <span class="pill is-static">{{ profile['relationship_type'] }}</span>
-      {% endif %}
-      {% if profile['seeking'] %}
-        <span class="pill is-static is-faint">Looking for {{ profile['seeking'] }}</span>
-      {% endif %}
-    </div>
-  {% endif %}
+  <div class="wiz-body wiz-scroll">
 
-  {% if profile['bio'] %}
-    <p class="profile-quote">&ldquo;{{ profile['bio'] }}&rdquo;</p>
-  {% endif %}
+  {% set show_photos = photos if (is_own or can_view_photos) else [] %}
 
   {% if not is_own and not can_view_photos %}
     <div class="photo-locked">Photos unlock once you both continue the match.</div>
-  {% elif show_photos | length > 1 %}
-    <div class="photo-grid">
-      {% for photo in show_photos[1:] %}
-        <img src="{{ url_for('photo', photo_id=photo['id']) }}"
-             alt="{{ 'Your photo' if is_own else 'Photo of ' ~ profile['name'] }}" loading="lazy">
-      {% endfor %}
+  {% else %}
+    {# One photo at a time. Six is the cap (PHOTO_MAX_PER_USER), so a bar
+       per photo is always wide enough to see. #}
+    <div class="pro-gallery" id="pro-gallery" data-count="{{ show_photos | length }}">
+      {% if show_photos | length > 1 %}
+        <div class="pro-bars" id="pro-bars">
+          {% for photo in show_photos %}
+            <span{% if loop.first %} class="is-seen"{% endif %}></span>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <div class="pro-frame">
+        {% if show_photos %}
+          {% for photo in show_photos %}
+            <img class="pro-slide{% if loop.first %} is-on{% endif %}"
+                 src="{{ url_for('photo', photo_id=photo['id']) }}"
+                 alt="{{ 'Your photo' if is_own else 'Photo of ' ~ display_name }}"
+                 {% if not loop.first %}loading="lazy"{% endif %}>
+          {% endfor %}
+        {% else %}
+          <span class="ph"></span>
+        {% endif %}
+        {% if show_photos | length > 1 %}
+          <button type="button" class="pro-tap is-prev is-spent" data-step="-1"
+                  aria-label="Previous photo"></button>
+          <button type="button" class="pro-tap is-next" data-step="1"
+                  aria-label="Next photo"></button>
+          <button type="button" class="pro-arrow is-prev is-spent" data-step="-1"
+                  aria-label="Previous photo">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="pro-arrow is-next" data-step="1"
+                  aria-label="Next photo">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <span class="pro-count" id="pro-count" aria-live="polite">Photo 1 of {{ show_photos | length }}</span>
+        {% endif %}
+      </div>
     </div>
   {% endif %}
 
-  <dl class="facts">
-    {% if profile['interests'] %}<div><dt>Interests</dt><dd>{{ profile['interests'] }}</dd></div>{% endif %}
-    {% if profile['hobbies'] %}<div><dt>Hobbies</dt><dd>{{ profile['hobbies'] }}</dd></div>{% endif %}
-    {% if profile['wants'] %}<div><dt>What I want</dt><dd>{{ profile['wants'] }}</dd></div>{% endif %}
-    {% if profile['needs'] %}<div><dt>What I need</dt><dd>{{ profile['needs'] }}</dd></div>{% endif %}
+  {# ---- looking for --------------------------------------------------- #}
+  {% if profile['relationship_type'] or profile['seeking'] %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
+          <circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.7"/>
+          <circle cx="12" cy="12" r="0.2" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        Looking for
+      </p>
+      {% if profile['relationship_type'] %}
+        <div class="pro-lead">
+          <span class="opt-icon">
+            {# the same four marks the first wizard step draws for these #}
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              {% if profile['relationship_type'] == 'Friendship' %}
+                <circle cx="9.5" cy="12" r="6" stroke="currentColor" stroke-width="1.7"/>
+                <circle cx="14.5" cy="12" r="6" stroke="currentColor" stroke-width="1.7"/>
+              {% elif profile['relationship_type'] == 'Not sure yet' %}
+                <circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M9.6 9.4a2.4 2.4 0 1 1 3.4 2.2c-.8.4-1 1-1 1.9"
+                      stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="12" cy="16.7" r="0.15" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+              {% elif profile['relationship_type'] == 'Short-term relationship' %}
+                <path d="M12 21c4 0 6.5-2.6 6.5-6 0-2.7-1.6-4.3-2.6-5.9.1 1.7-.7 2.7-1.6 2.7-1.2 0-1.3-1.2-1.1-2.3.3-1.8-.4-3.9-2.2-5C10.6 6 10 8 8.6 9.6 7.4 11 6 12.4 6 15c0 3.4 2 6 6 6Z"
+                      stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              {% else %}
+                <path d="M12 20.2s-7.8-4.6-10-9.3C.4 7.4 2.6 4 6.2 4c2 0 3.7 1 4.8 2.6C12.1 5 13.8 4 15.8 4c3.6 0 5.8 3.4 4.2 6.9-2.2 4.7-10 9.3-10 9.3Z"
+                      stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              {% endif %}
+            </svg>
+          </span>
+          <span>{{ profile['relationship_type'] }}</span>
+        </div>
+      {% endif %}
+      {% if profile['seeking'] %}
+        {% if profile['relationship_type'] %}<div class="pro-rule"></div>{% endif %}
+        <div class="pillset">
+          <span class="pill is-static">{{ profile['seeking'] }}</span>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
 
-    {% if profile['height_cm'] %}<div><dt>Height</dt><dd>{{ profile['height_cm'] }} cm</dd></div>{% endif %}
-    {% if profile['body_type'] %}<div><dt>Body type</dt><dd>{{ profile['body_type'] }}</dd></div>{% endif %}
-    {% if profile['fitness_level'] %}<div><dt>Fitness</dt><dd>{{ profile['fitness_level'] }}</dd></div>{% endif %}
-    {% if profile['hair_color'] %}<div><dt>Hair</dt><dd>{{ profile['hair_color'] }}</dd></div>{% endif %}
-    {% if profile['eye_color'] %}<div><dt>Eyes</dt><dd>{{ profile['eye_color'] }}</dd></div>{% endif %}
-    {% if profile['tattoos'] %}<div><dt>Tattoos</dt><dd>{{ profile['tattoos'] }}</dd></div>{% endif %}
-  </dl>
+  {# ---- about me ------------------------------------------------------ #}
+  {% if profile['bio'] %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M9 6c-2.5 1-4 3.2-4 6h3.4V18H4v-6M20 6c-2.5 1-4 3.2-4 6h3.4V18H15v-6"
+                stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        </svg>
+        About me
+      </p>
+      <p class="profile-quote">{{ profile['bio'] }}</p>
+    </div>
+  {% endif %}
 
-  {# Only the owner sees their own stated preferences -- these drive ranking,
-     and showing them to others would invite gaming the score. #}
+  {# ---- in short ------------------------------------------------------
+     Facts as sentences rather than label/value pairs: "180 cm" and "Lives
+     in Maastricht" read at a glance where "Height / 180 cm" does not. #}
+  {% set facts = [] %}
+  {% if profile['height_cm'] %}
+    {% set _ = facts.append(('ruler', profile['height_cm'] ~ ' cm')) %}
+  {% endif %}
+  {% if profile['body_type'] %}
+    {% set _ = facts.append(('body', profile['body_type'] ~ ' build')) %}
+  {% endif %}
+  {% if profile['fitness_level'] %}
+    {% set _ = facts.append(('pulse', profile['fitness_level'])) %}
+  {% endif %}
+  {% if profile['hair_color'] %}
+    {% set _ = facts.append(('hair', profile['hair_color'] ~ ' hair')) %}
+  {% endif %}
+  {% if profile['eye_color'] %}
+    {% set _ = facts.append(('eye', profile['eye_color'] ~ ' eyes')) %}
+  {% endif %}
+  {% if profile['tattoos'] %}
+    {% set _ = facts.append(('ink',
+        'No tattoos' if profile['tattoos'] == 'None' else profile['tattoos'] ~ ' tattoos')) %}
+  {% endif %}
+  {% if profile['gender'] %}
+    {% set _ = facts.append(('gender', profile['gender'])) %}
+  {% endif %}
+  {% if profile['location'] %}
+    {% set _ = facts.append(('pin', 'Lives in ' ~ profile['location'])) %}
+  {% endif %}
+  {% set _ = facts.append(('at', '@' ~ profile['username'])) %}
+
+  <div class="pro-card">
+    <p class="pro-eyebrow">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="3.2" y="5" width="17.6" height="14" rx="3"
+              stroke="currentColor" stroke-width="1.7"/>
+        <circle cx="9" cy="11" r="2" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M6 16.2c.6-1.4 1.7-2 3-2s2.4.6 3 2M14.5 10h4M14.5 13.5h4"
+              stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+      In short
+    </p>
+    <div class="pro-facts">
+      {% for icon, text in facts %}
+        <div>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            {% if icon == 'ruler' %}
+              <rect x="2.6" y="8.2" width="18.8" height="7.6" rx="1.6"
+                    stroke="currentColor" stroke-width="1.7"/>
+              <path d="M7 8.2v3M11 8.2v4.4M15 8.2v3M19 8.2v4.4"
+                    stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            {% elif icon == 'body' %}
+              <circle cx="12" cy="5.4" r="2.6" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M7.4 20v-4.2a4.6 4.6 0 0 1 9.2 0V20M6 12.2 9 9.6M18 12.2 15 9.6"
+                    stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            {% elif icon == 'pulse' %}
+              <path d="M3 12h3.2l2-4.6 3.2 9.4L14 12h7"
+                    stroke="currentColor" stroke-width="1.7"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            {% elif icon == 'hair' %}
+              <path d="M12 3.4c-4 0-6.4 3-6.4 7v7.8M18.4 18.2v-7.8c0-4-2.4-7-6.4-7"
+                    stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M8.6 11.4c2.2 1 4.6 1 6.8 0"
+                    stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            {% elif icon == 'eye' %}
+              <path d="M2.6 12S6 6.6 12 6.6 21.4 12 21.4 12 18 17.4 12 17.4 2.6 12 2.6 12Z"
+                    stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.7"/>
+            {% elif icon == 'ink' %}
+              <path d="m12 2.8 2.3 5.3 5.7.5-4.3 3.8 1.3 5.6L12 15.1l-5 2.9 1.3-5.6L4 8.6l5.7-.5Z"
+                    stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+            {% elif icon == 'gender' %}
+              {# the same three marks step 2 of the wizard draws, so a row
+                 saying "Woman" is not stamped with the Mars glyph #}
+              {% if profile['gender'] == 'Man' %}
+                <circle cx="10.5" cy="13.5" r="5" stroke="currentColor" stroke-width="1.8"/>
+                <path d="M14.5 9.5 20 4m0 0h-5m5 0v5"
+                      stroke="currentColor" stroke-width="1.8"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              {% elif profile['gender'] == 'Non-binary' %}
+                <circle cx="12" cy="13.5" r="4.6" stroke="currentColor" stroke-width="1.8"/>
+                <path d="M12 8.9V2m-2.2 2.2L12 2l2.2 2.2"
+                      stroke="currentColor" stroke-width="1.8"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              {% else %}
+                <circle cx="12" cy="9" r="5" stroke="currentColor" stroke-width="1.8"/>
+                <path d="M12 14v7M9 18.5h6" stroke="currentColor" stroke-width="1.8"
+                      stroke-linecap="round"/>
+              {% endif %}
+            {% elif icon == 'pin' %}
+              <path d="M12 21s6.6-5.6 6.6-10.4A6.6 6.6 0 0 0 5.4 10.6C5.4 15.4 12 21 12 21Z"
+                    stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <circle cx="12" cy="10.4" r="2.4" stroke="currentColor" stroke-width="1.7"/>
+            {% else %}
+              <circle cx="12" cy="12" r="3.4" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M15.4 8.6V13a2.8 2.8 0 0 0 5.2 1 9 9 0 1 0-3.4 6.4"
+                    stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            {% endif %}
+          </svg>
+          <span>{{ text }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ---- interests ------------------------------------------------------
+     clean_interests() stores these as a ", "-joined CSV, so they split
+     cleanly into one pill each. #}
+  {% if profile['interests'] %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4 4h7.2l8.4 8.4a2 2 0 0 1 0 2.8l-4.4 4.4a2 2 0 0 1-2.8 0L4 11.2Z"
+                stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+          <circle cx="8.2" cy="8.2" r="1.3" stroke="currentColor" stroke-width="1.6"/>
+        </svg>
+        Interests
+      </p>
+      <div class="pillset">
+        {% for word in profile['interests'].split(',') %}
+          {% if word.strip() %}<span class="pill is-static">{{ word.strip() }}</span>{% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {# ---- hobbies -------------------------------------------------------
+     Hobbies is a free textarea, not a CSV, so it only earns the pill cloud
+     when it actually looks like a list: two or more comma parts, none of
+     them long enough to be a sentence. Otherwise it stays prose. #}
+  {% if profile['hobbies'] %}
+    {% set hobby_parts = profile['hobbies'].split(',') | map('trim') | select | list %}
+    {% set as_pills = hobby_parts | length > 1
+       and (hobby_parts | map('length') | max) <= 28 %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3.2c-4.9 0-8.8 3.7-8.8 8.4 0 4.4 3.3 7.2 7 7.2 1.4 0 2.2-.8 2.2-1.8 0-.9-.7-1.4-.7-2.2 0-.8.6-1.4 1.5-1.4h1.9c3 0 5.7-2 5.7-5.1 0-3-3.4-5.1-8.8-5.1Z"
+                stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+          <circle cx="8" cy="10" r="1.1" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="12.6" cy="7.6" r="1.1" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+        Hobbies
+      </p>
+      {% if as_pills %}
+        <div class="pillset">
+          {% for part in hobby_parts %}
+            <span class="pill is-static">{{ part }}</span>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="profile-quote">{{ profile['hobbies'] }}</p>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {# ---- the two prompts ------------------------------------------------
+     The question stays small enough to read as a caption, so the answer is
+     the only thing on the card with a voice. #}
+  {% if profile['wants'] %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
+          <path d="m15.6 8.4-2 5.2-5.2 2 2-5.2Z"
+                stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        </svg>
+        What I’m hoping to find…
+      </p>
+      <p class="pro-prompt">{{ profile['wants'] }}</p>
+    </div>
+  {% endif %}
+
+  {% if profile['needs'] %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="5.8" r="2.4" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M12 8.2V21M6.6 12h10.8M4 14.6a8 8 0 0 0 16 0"
+                stroke="currentColor" stroke-width="1.7"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        What matters most to me…
+      </p>
+      <p class="pro-prompt">{{ profile['needs'] }}</p>
+    </div>
+  {% endif %}
+
+  {# ---- stated preferences, owner only ---------------------------------
+     These drive ranking, so showing them to anyone else would invite
+     gaming the score. They keep the label/value shape: they are settings
+     you typed, not things you would say about yourself. #}
   {% if is_own %}
     {% set has_prefs = profile['pref_height_min'] or profile['pref_body_types']
        or profile['pref_fitness_level'] or profile['pref_hair_color']
        or profile['pref_eye_color'] or profile['pref_tattoos'] %}
     {% if has_prefs %}
-      <p class="section-label" style="margin-top: 1.6rem;">Looking for (physical)</p>
-      <p class="section-note">Only you can see this. It counts both ways when ranking matches.</p>
-      <dl class="facts">
-        {% if profile['pref_height_min'] and profile['pref_height_max'] %}
-          <div><dt>Height</dt>
-          <dd>{{ profile['pref_height_min'] }}–{{ profile['pref_height_max'] }} cm</dd></div>
-        {% endif %}
-        {% if profile['pref_body_types'] %}
-          <div><dt>Body types</dt><dd>{{ profile['pref_body_types'].replace(',', ', ') }}</dd></div>
-        {% endif %}
-        {% if profile['pref_fitness_level'] %}
-          <div><dt>Fitness</dt><dd>{{ profile['pref_fitness_level'] }}</dd></div>
-        {% endif %}
-        {% if profile['pref_hair_color'] %}
-          <div><dt>Hair</dt><dd>{{ profile['pref_hair_color'] }}</dd></div>
-        {% endif %}
-        {% if profile['pref_eye_color'] %}
-          <div><dt>Eyes</dt><dd>{{ profile['pref_eye_color'] }}</dd></div>
-        {% endif %}
-        {% if profile['pref_tattoos'] %}
-          <div><dt>Tattoos</dt><dd>{{ profile['pref_tattoos'] }}</dd></div>
-        {% endif %}
-      </dl>
+      <div class="pro-card">
+        <p class="pro-eyebrow">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.7"
+                  stroke-linecap="round"/>
+            <circle cx="9" cy="7" r="1.9" stroke="currentColor" stroke-width="1.7"/>
+            <circle cx="15" cy="12" r="1.9" stroke="currentColor" stroke-width="1.7"/>
+            <circle cx="8" cy="17" r="1.9" stroke="currentColor" stroke-width="1.7"/>
+          </svg>
+          Looking for (physical)
+        </p>
+        <dl class="facts">
+          {% if profile['pref_height_min'] and profile['pref_height_max'] %}
+            <div><dt>Height</dt>
+            <dd>{{ profile['pref_height_min'] }}–{{ profile['pref_height_max'] }} cm</dd></div>
+          {% endif %}
+          {% if profile['pref_body_types'] %}
+            <div><dt>Body types</dt><dd>{{ profile['pref_body_types'].replace(',', ', ') }}</dd></div>
+          {% endif %}
+          {% if profile['pref_fitness_level'] %}
+            <div><dt>Fitness</dt><dd>{{ profile['pref_fitness_level'] }}</dd></div>
+          {% endif %}
+          {% if profile['pref_hair_color'] %}
+            <div><dt>Hair</dt><dd>{{ profile['pref_hair_color'] }}</dd></div>
+          {% endif %}
+          {% if profile['pref_eye_color'] %}
+            <div><dt>Eyes</dt><dd>{{ profile['pref_eye_color'] }}</dd></div>
+          {% endif %}
+          {% if profile['pref_tattoos'] %}
+            <div><dt>Tattoos</dt><dd>{{ profile['pref_tattoos'] }}</dd></div>
+          {% endif %}
+        </dl>
+        <p class="pro-note">Only you can see this. It counts both ways when ranking matches.</p>
+      </div>
     {% endif %}
   {% endif %}
 
@@ -108,4 +378,79 @@
     </div>
   {% endif %}
 </div>
+
+<script>
+(function () {
+  var closeBtn = document.getElementById("pro-close");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", function () {
+      // Back is right when there is somewhere to go back to -- a profile is
+      // almost always opened from a chat or the tab bar. A profile reached
+      // by pasted URL has no history to spend, so it falls through to the
+      // screen the app considers home.
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = {{ url_for('live_search') | tojson }};
+      }
+    });
+  }
+
+  var gallery = document.getElementById("pro-gallery");
+  if (!gallery) return;
+  var slides = gallery.querySelectorAll(".pro-slide");
+  if (slides.length < 2) return;
+
+  var bars = gallery.querySelectorAll(".pro-bars > span");
+  var count = document.getElementById("pro-count");
+  var at = 0;
+
+  function show(next) {
+    // Clamped rather than wrapped: the arrows disappear at the two ends,
+    // so wrapping around would contradict what the screen is showing.
+    next = Math.max(0, Math.min(slides.length - 1, next));
+    if (next === at) return;
+    at = next;
+    for (var i = 0; i < slides.length; i++) {
+      slides[i].classList.toggle("is-on", i === at);
+      if (bars[i]) bars[i].classList.toggle("is-seen", i <= at);
+    }
+    gallery.querySelectorAll("[data-step]").forEach(function (el) {
+      var step = Number(el.getAttribute("data-step"));
+      el.classList.toggle("is-spent", step < 0 ? at === 0 : at === slides.length - 1);
+    });
+    if (count) count.textContent = "Photo " + (at + 1) + " of " + slides.length;
+  }
+
+  gallery.querySelectorAll("[data-step]").forEach(function (el) {
+    el.addEventListener("click", function () {
+      show(at + Number(el.getAttribute("data-step")));
+    });
+  });
+
+  // Swipe, on the frame rather than the page: the gallery sits inside a
+  // vertical scroll box, so only a clearly horizontal drag counts.
+  var frame = gallery.querySelector(".pro-frame");
+  var startX = null, startY = null;
+  frame.addEventListener("pointerdown", function (e) {
+    startX = e.clientX;
+    startY = e.clientY;
+  });
+  frame.addEventListener("pointerup", function (e) {
+    if (startX === null) return;
+    var dx = e.clientX - startX;
+    var dy = e.clientY - startY;
+    startX = startY = null;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+      show(at + (dx < 0 ? 1 : -1));
+    }
+  });
+  frame.addEventListener("pointercancel", function () { startX = startY = null; });
+
+  gallery.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight") { show(at + 1); e.preventDefault(); }
+    if (e.key === "ArrowLeft") { show(at - 1); e.preventDefault(); }
+  });
+})();
+</script>
 {% endblock %}
