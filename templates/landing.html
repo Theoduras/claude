@@ -24,5 +24,17 @@
     <a class="btn btn-secondary btn-block" href="{{ url_for('login') }}">I already have an account</a>
     <p class="landing-fine">Nobody matches you unless you match them back.</p>
   </div>
+
+  {# Homepage-only: everywhere else this collapses to the tab bar's Help
+     icon instead of repeating the same links on every screen. #}
+  <footer class="site-footer">
+    <a href="{{ url_for('help_page') }}#how-matching-works">How matching works</a>
+    <a href="{{ url_for('help_page') }}#questions">Questions</a>
+    <a href="{{ url_for('help_page') }}#safety">Safety</a>
+    <a href="{{ url_for('help_page') }}#terms">Terms</a>
+    <a href="{{ url_for('help_page') }}#privacy">Privacy</a>
+    <a href="{{ url_for('help_page') }}#imprint">Imprint</a>
+    <a href="{{ url_for('help_page') }}#contact">Contact</a>
+  </footer>
 </div>
 {% endblock %}

@@ -721,6 +721,13 @@ def index():
     return render_template("landing.html", searching_now=searching_now)
 
 
+@app.route("/help")
+def help_page():
+    """Static help/legal hub. No auth -- reachable logged out from the
+    landing footer and logged in from the tab bar's 4th icon."""
+    return render_template("help.html")
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if session.get("user_id"):
