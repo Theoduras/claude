@@ -9,14 +9,24 @@
    is nothing to report about a message I received. Painted client-side
    from data-time/data-id so the same markup works for a poll-appended
    bubble as for one Jinja rendered. #}
-{% macro bubble(msg, side, ticks) %}
+{% macro bubble(msg, side, ticks, named=false) %}
   <div class="bubble {{ side }}" data-id="{{ msg['id'] }}">
-    <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
+    {#- Who spoke is only worth saying in the admin's pair-wise view, where
+        neither side is "yours". Between the two of you the side of the
+        column already says it, and a label on every bubble costs a whole
+        line of height per message. -#}
+    {#- .bubble is `white-space: pre-line`, which keeps newlines in the
+        markup as well as in the message. Every gap below is trimmed with
+        `-` for that reason: a newline between the body and the meta is a
+        real line break, and it was pushing the timestamp onto a line of
+        its own under every one-word message. -#}
+    {%- if named %}<span class="sender">{{ msg['sender_name'] }}</span>{% endif -%}
+    {{- msg['body'] -}}
     <span class="bubble-meta">
-      <span class="bubble-time" data-time="{{ msg['created_at'].isoformat() }}"></span>
-      {% if ticks %}<span class="bubble-ticks" data-id="{{ msg['id'] }}"></span>{% endif %}
+      {#- -#}<span class="bubble-time" data-time="{{ msg['created_at'].isoformat() }}"></span>
+      {%- if ticks %}<span class="bubble-ticks" data-id="{{ msg['id'] }}"></span>{% endif -%}
     </span>
-  </div>
+  {#- -#}</div>
 {% endmacro %}
 {# Every phase of a match is a screen in the same column the search steps
    and the waiting screen use: what is happening is stated in the middle,
@@ -93,7 +103,7 @@
       <div class="chat-log" id="chat-log-static" data-their-read-id="{{ their_read_id or 0 }}">
         {% for msg in messages %}
           {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
-          {{ bubble(msg, side, side == 'right') }}
+          {{ bubble(msg, side, side == 'right', not is_participant) }}
         {% endfor %}
       </div>
 
@@ -133,7 +143,7 @@
       <div class="chat-log" id="chat-log-static" data-their-read-id="{{ their_read_id or 0 }}">
         {% for msg in messages %}
           {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
-          {{ bubble(msg, side, side == 'right') }}
+          {{ bubble(msg, side, side == 'right', not is_participant) }}
         {% endfor %}
       </div>
     </div>
@@ -169,9 +179,10 @@
           </p>
         </div>
         {% if phase == 'active' %}
-          <span class="tag">Matched</span>
-          {# A match you both kept is still one either of you can leave.
-             Guarded behind the confirm overlay like every other unmatch. #}
+          {# No "Matched" pill: being here already says so, and on a phone
+             it cost the name the width it needed. A match you both kept is
+             still one either of you can leave -- guarded behind the confirm
+             overlay like every other unmatch. #}
           <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
                 class="room-leave" id="active-leave-form">
             <input type="hidden" name="choice" value="unmatch">
@@ -236,7 +247,7 @@
         {% else %}
           {% set side = 'left' if msg['sender_id'] == left['user_id'] else 'right' %}
         {% endif %}
-        {{ bubble(msg, side, is_participant and side == 'right') }}
+        {{ bubble(msg, side, is_participant and side == 'right', not is_participant) }}
       {% endfor %}
       <p class="muted" id="empty-note" {% if messages %}hidden{% endif %} style="margin: 0;">
         No messages yet — break the ice!
@@ -700,10 +711,14 @@
     var bubble = document.createElement("div");
     bubble.className = "bubble " + side;
     bubble.dataset.id = msg.id;
-    var sender = document.createElement("span");
-    sender.className = "sender";
-    sender.textContent = msg.sender_name;
-    bubble.appendChild(sender);
+    // Same rule the Jinja macro follows: the name is only worth a line in
+    // the admin's pair-wise view, where neither side is "yours".
+    if (!isParticipant) {
+      var sender = document.createElement("span");
+      sender.className = "sender";
+      sender.textContent = msg.sender_name;
+      bubble.appendChild(sender);
+    }
     bubble.appendChild(document.createTextNode(msg.body));
 
     var meta = document.createElement("span");
