@@ -2856,6 +2856,20 @@ def safety():
     return render_template("safety.html", support_email=SUPPORT_EMAIL)
 
 
+@app.route("/faq")
+def faq():
+    """The questions support would otherwise answer one at a time.
+
+    Public, like /safety: someone deciding whether to sign up has most of
+    these questions before they have an account.
+    """
+    return render_template(
+        "faq.html",
+        reveal_seconds=REVEAL_SECONDS,
+        chat_minutes=TIMED_CHAT_SECONDS // 60,
+    )
+
+
 @app.route("/how-matching-works", methods=["GET", "POST"])
 @login_required
 def how_matching_works():

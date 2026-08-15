@@ -65,7 +65,7 @@ Keep replies concise; prefer the smallest diff that does the job.
 - `docs/style-guide.html` — velvet-textured design system; `docs/deploy-gcp.md` — Cloud Run
 - `docs/launch-readiness.html` — the pre-launch audit these changes came from, with what
   is still outstanding (image scanning, passkeys, selfie verification, stepped
-  registration, FAQ)
+  registration)
 - `check_auth.py` — behaviour checks for auth, CSRF, safety and deletion
 - `check_retention.py` — behaviour checks for the retention schedule
 - `check_onboarding.py` — behaviour checks for the first-search gate and the explainer
@@ -198,7 +198,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 | misc | `/lab` (admin), `/`, `/healthz`, `/how-matching-works`, `/tasks/purge-deletions` |
 | auth | `/register`, `/login`, `/logout`, `/verify/<token>`, `/verify/resend`, `/forgot`, `/reset/<token>` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
-| legal | `/terms`, `/privacy`, `/imprint`, `/safety` |
+| legal | `/terms`, `/privacy`, `/imprint`, `/safety`, `/faq` |
 | settings | `/settings`, `…/password`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/export`, `…/delete`, `…/delete/cancel` |
 | safety | `/report/<id>`, `/block/<id>`, `/unblock/<id>` |
 | moderation | `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate` |

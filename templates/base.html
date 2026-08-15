@@ -149,10 +149,11 @@
     }
     h1.page-title--sm + .subtitle { margin-top: 0.35rem; }
 
-    /* h1's clamp(1.9rem, 4.2vw, 2.9rem) leaves a lot of unused
-       line-height above the subtitle; h2's 1.3rem doesn't, so the same
-       pull-up overlaps its text instead of just tightening the gap. */
-    h1 + .subtitle { margin-top: -0.7rem; }
+    /* Tightens the gap without eating into the text. The pull-up can only
+       take back the half-leading the line box is actually carrying -- at
+       these sizes that is 2-3px, so -0.7rem overlapped the subtitle by
+       about nine of them at every width. */
+    h1 + .subtitle { margin-top: 0; }
     h2 + .subtitle { margin-top: 0.35rem; }
     .subtitle {
       margin: 0.5rem 0 0;
@@ -2275,6 +2276,37 @@
       display: grid;
       gap: 0.9rem;
     }
+    .faq-item + h2 { margin-top: 1.7rem; }
+    .faq-item {
+      border-top: 1px solid var(--ink-hairline);
+      padding: 0.85rem 0;
+    }
+    .faq-item summary {
+      cursor: pointer;
+      font-weight: 600;
+      line-height: 1.35;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      gap: 0.8rem;
+      align-items: baseline;
+    }
+    .faq-item summary::-webkit-details-marker { display: none; }
+    .faq-item summary::after {
+      content: "+";
+      flex: none;
+      font-family: var(--mono);
+      color: var(--text-dim);
+      transition: transform 180ms ease;
+    }
+    .faq-item[open] summary::after { content: "−"; }
+    .faq-item summary:hover { color: var(--velvet-bright, var(--velvet)); }
+    .faq-item p {
+      margin: 0.6rem 0 0;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      color: var(--text-dim);
+    }
     .intro-steps + .wiz-hint { margin-top: 1.15rem; }
     .intro-steps li {
       display: flex;
@@ -3351,6 +3383,7 @@
         answer to "how do I get help", which had nowhere to live before. -#}
     <footer class="site-footer">
       {% if current_user %}<a href="{{ url_for('how_matching_works') }}">How matching works</a>{% endif %}
+      <a href="{{ url_for('faq') }}">Questions</a>
       <a href="{{ url_for('safety') }}">Safety</a>
       <a href="{{ url_for('terms') }}">Terms</a>
       <a href="{{ url_for('privacy') }}">Privacy</a>
