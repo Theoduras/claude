@@ -134,8 +134,16 @@
   ];
   var phrase = 0;
   var connected = true;  // paused while reconnecting, so it can say so
+  // A filter change has something specific to say, and the idle cycle would
+  // wipe it within 2.6s. say() holds the line for a moment before the cycle
+  // is allowed to resume.
+  var holdUntil = 0;
+  function say(text, ms) {
+    statusLine.textContent = text;
+    holdUntil = Date.now() + (ms || 4000);
+  }
   var cycle = setInterval(function () {
-    if (!connected) return;
+    if (!connected || Date.now() < holdUntil) return;
     phrase = (phrase + 1) % PHRASES.length;
     statusLine.textContent = PHRASES[phrase];
   }, 2600);
@@ -271,16 +279,46 @@
     var body = new URLSearchParams();
     body.set("key", key);
     body.set("value", value);
+    say("Updating your filters…");
     fetch(chipsUrl, {
       method: "POST",
       headers: { "Accept": "application/json" },
       body: body,
     })
-      .then(function (res) { return res.json(); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.status);
+        return res.json();
+      })
       .then(function (data) {
-        if (data.error) return;
+        if (data.error) throw new Error(data.error);
         closeSheet();
+
+        // The server already re-ran the pairing attempt with the new
+        // filters, so a match is known now -- go, rather than idling here
+        // until the status poll happens to notice.
+        if (data.status === "matched" && data.chat_url) {
+          clearInterval(cycle);
+          clearInterval(elapsedTimer);
+          say("It's a match! Opening your chat…", 60000);
+          window.location.href = data.chat_url;
+          return;
+        }
+
         renderState(data);
+        // Say what the change actually bought, in the same terms the
+        // sheet just quoted -- otherwise a tap that changes no visible
+        // number reads as a tap that did nothing.
+        if (!data.fits) {
+          say("Filters updated — still nobody fitting. Searching…");
+        } else if (!data.ripe) {
+          say("Filters updated — " + data.fits + " fitting. Pairing shortly…");
+        } else {
+          say("Filters updated — " + data.fits + " fitting. Pairing…");
+        }
+      })
+      .catch(function () {
+        say("Couldn't apply that — trying again in a moment.");
+        setTimeout(refreshChips, 1500);
       });
   }
 

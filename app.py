@@ -2730,16 +2730,25 @@ def chip_state(mine, others):
     for chip in chips:
         chip["options"] = chip_options(mine, others, chip["key"])
 
-    return {
+    state = {
         "chips": chips,
         "waiting": len(others),
         "fits": fits,
         "elapsed": int(elapsed),
+        "ripe": elapsed >= MIN_SEARCH_SECONDS,
         "relax_all": {
             "count": blockers.get("if_all_relaxed", 0),
             "offer": fits == 0 and elapsed >= SEARCH_WIDER_SECONDS,
         },
+        "status": mine["status"],
     }
+    # The apply endpoint runs try_pair() before building this, so a change
+    # that opened up a partner has already paired by the time the browser
+    # sees the response -- carry the chat here rather than making it wait
+    # for the next /search/status tick to notice.
+    if mine["status"] == "matched" and mine["match_id"]:
+        state["chat_url"] = url_for("chat", match_id=mine["match_id"])
+    return state
 
 
 @app.route("/search/waiting")
