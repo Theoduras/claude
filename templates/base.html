@@ -2474,6 +2474,25 @@
          short of the bottom. */
       html[data-viewport="mobile"] main { padding-bottom: 1.5rem; }
     }
+    /* --- footer ------------------------------------------------------ */
+    .site-footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 1.1rem;
+      justify-content: center;
+      margin: 3rem auto 1.5rem;
+      padding-top: 1.4rem;
+      border-top: 1px solid var(--ink-hairline);
+      max-width: 44rem;
+    }
+    .site-footer a {
+      color: var(--text-faint);
+      font-size: 0.82rem;
+      text-decoration: none;
+    }
+    .site-footer a:hover { color: var(--violet-crest); text-decoration: underline; }
+    /* The mobile tab bar is fixed over the bottom of the page. */
+    html:not([data-viewport="desktop"]) .site-footer { margin-bottom: 5.5rem; }
   </style>
   {# One place for the fetch-based endpoints to get their CSRF header, so
      each call site does not re-read the meta tag itself. #}
@@ -2521,6 +2540,18 @@
       {% endfor %}
     {% endwith %}
     {% block content %}{% endblock %}
+
+    {#- Legal links and a way to reach a human. The imprint and the point of
+        contact are required (DDG §5 / ECG §5, and the DSA); the rest is the
+        answer to "how do I get help", which had nowhere to live before. -#}
+    <footer class="site-footer">
+      <a href="{{ url_for('safety') }}">Safety</a>
+      <a href="{{ url_for('terms') }}">Terms</a>
+      <a href="{{ url_for('privacy') }}">Privacy</a>
+      <a href="{{ url_for('imprint') }}">Imprint</a>
+      {% if current_user %}<a href="{{ url_for('settings') }}">Settings</a>{% endif %}
+      <a href="mailto:{{ support_email }}">Contact</a>
+    </footer>
   </main>
   {% if current_user %}
     {#- which tab lights up: every search-ish route collapses onto Search -#}

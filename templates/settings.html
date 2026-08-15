@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Settings — Velvt{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">Your account</p>
+  <h1 style="margin-top: 0.5rem;">Settings</h1>
+
+  {% if me.status == 'pending_deletion' %}
+  <div style="border: 1px solid var(--ink-hairline); padding: 1rem; margin: 1.2rem 0;">
+    <h2 style="font-size: 1.05rem; margin: 0 0 0.4rem;">Your account is scheduled for deletion.</h2>
+    <p class="hint" style="margin: 0 0 0.7rem;">
+      It will be permanently deleted {{ deletion_grace_days }} days after you asked.
+      Nobody can find or message you in the meantime.
+    </p>
+    <form method="post" action="{{ url_for('cancel_deletion') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn" type="submit">Keep my account</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- ---------- account ---------- -->
+  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
+    <h2 style="font-size: 1.1rem; margin: 0 0 0.3rem;">Email</h2>
+    <p class="hint" style="margin: 0 0 0.6rem;">
+      {{ me.email or 'No address on file.' }}
+      {% if me.email and not me.email_verified_at %}
+        — <strong>not confirmed yet</strong>
+      {% elif me.email_verified_at %}
+        — confirmed
+      {% endif %}
+    </p>
+    {% if me.email and not me.email_verified_at %}
+    <form method="post" action="{{ url_for('resend_verification') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-secondary" type="submit">Resend confirmation email</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
+    <h2 style="font-size: 1.1rem; margin: 0 0 0.6rem;">Change password</h2>
+    <form method="post" action="{{ url_for('change_password') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="current">Current password</label>
+      <input id="current" name="current" type="password" autocomplete="current-password" required>
+      <label for="password">New password</label>
+      <input id="password" name="password" type="password" autocomplete="new-password"
+             minlength="8" required>
+      <label for="confirm">Confirm new password</label>
+      <input id="confirm" name="confirm" type="password" autocomplete="new-password"
+             minlength="8" required>
+      <button class="btn" type="submit">Change password</button>
+    </form>
+  </section>
+
+  <!-- ---------- devices ---------- -->
+  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
+    <h2 style="font-size: 1.1rem; margin: 0 0 0.6rem;">Where you're signed in</h2>
+    {% for s in sessions %}
+      <p class="hint" style="margin: 0 0 0.5rem;">
+        {{ s.user_agent or 'Unknown device' }}<br>
+        last used {{ s.last_seen_at.strftime('%Y-%m-%d %H:%M') }}
+        {% if s.ip %}· {{ s.ip }}{% endif %}
+        {% if not s.is_current %}
+        <form method="post" action="{{ url_for('revoke_session', session_id=s.id) }}"
+              style="display:inline; margin-left: 0.4rem;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-secondary" type="submit">Sign out</button>
+        </form>
+        {% else %}
+          · <strong>this device</strong>
+        {% endif %}
+      </p>
+    {% endfor %}
+    {% if sessions|length > 1 %}
+    <form method="post" action="{{ url_for('revoke_other_sessions') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-secondary" type="submit">Sign out everywhere else</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <!-- ---------- blocked ---------- -->
+  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
+    <h2 style="font-size: 1.1rem; margin: 0 0 0.6rem;">Blocked members</h2>
+    {% if not blocked %}
+      <p class="hint">You haven't blocked anyone.</p>
+    {% endif %}
+    {% for b in blocked %}
+      <p class="hint" style="margin: 0 0 0.4rem;">
+        {{ b.name or b.username }}
+        <form method="post" action="{{ url_for('unblock_user', user_id=b.id) }}"
+              style="display:inline; margin-left: 0.4rem;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-secondary" type="submit">Unblock</button>
+        </form>
+      </p>
+    {% endfor %}
+  </section>
+
+  <!-- ---------- consent ---------- -->
+  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
+    <h2 style="font-size: 1.1rem; margin: 0 0 0.3rem;">Matching and sensitive details</h2>
+    <p class="hint" style="margin: 0 0 0.7rem;">
+      Your gender and who you're looking for can reveal your sexual orientation,
+      so the law treats them as sensitive. We only use them to find you matches,
+      and only while you say we may.
+    </p>
+    <form method="post" action="{{ url_for('update_consent') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if consent and not consent.withdrawn_at %}
+        <p class="hint" style="margin: 0 0 0.5rem;">
+          Given {{ consent.granted_at.strftime('%Y-%m-%d') }}.
+        </p>
+        <button class="btn btn-secondary" type="submit">Withdraw consent and stop matching</button>
+      {% else %}
+        <p class="hint" style="margin: 0 0 0.5rem;">Withdrawn — you aren't being matched.</p>
+        <button class="btn" name="grant" value="1" type="submit">Give consent and start matching</button>
+      {% endif %}
+    </form>
+  </section>
+
+  <!-- ---------- data ---------- -->
+  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
+    <h2 style="font-size: 1.1rem; margin: 0 0 0.6rem;">Your data</h2>
+    <p class="hint" style="margin: 0 0 0.6rem;">
+      Download everything we hold about you as a JSON file.
+    </p>
+    <a class="btn btn-secondary" href="{{ url_for('export_data') }}">Download my data</a>
+  </section>
+
+  {% if me.status != 'pending_deletion' %}
+  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
+    <h2 style="font-size: 1.1rem; margin: 0 0 0.3rem;">Delete your account</h2>
+    <p class="hint" style="margin: 0 0 0.7rem;">
+      Your profile disappears immediately. After {{ deletion_grace_days }} days
+      everything is permanently deleted. Sign in before then to change your mind.
+    </p>
+    <form method="post" action="{{ url_for('request_deletion') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="del-password">Confirm your password</label>
+      <input id="del-password" name="password" type="password"
+             autocomplete="current-password" required>
+      <button class="btn btn-secondary" type="submit">Delete my account</button>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Privacy — Velvt{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">Version {{ version }}</p>
+  <h1 style="margin-top: 0.5rem;">Privacy policy</h1>
+
+  <div style="border: 1px solid var(--ink-hairline); padding: 1rem; margin: 1rem 0;">
+    <p class="hint" style="margin: 0;">
+      <strong>Placeholder.</strong> This describes what the app genuinely collects and
+      why, so it is accurate — but it has not been reviewed by a lawyer, and it is
+      missing the controller's registered identity and the supervisory authority.
+      Replace it before launch.
+    </p>
+  </div>
+
+  <h2 style="font-size: 1.1rem;">What we collect</h2>
+  <ul>
+    <li><strong>Account:</strong> username, email address, date of birth, password (hashed)</li>
+    <li><strong>Profile:</strong> name, gender, who you're looking for, location, physical
+        details, interests, and anything else you choose to write</li>
+    <li><strong>Photos:</strong> visible only to you, to a member you're matched with once
+        you've both continued, and to moderators reviewing a report</li>
+    <li><strong>Searches:</strong> your filters and the coordinates of the location you pick</li>
+    <li><strong>Messages:</strong> what you send in a chat</li>
+    <li><strong>Technical:</strong> your device description and IP address for each
+        signed-in session, so you can see and end them</li>
+  </ul>
+
+  <h2 style="font-size: 1.1rem;">Sensitive data</h2>
+  <p>Your gender together with who you're looking for can reveal your sexual
+     orientation. European law treats that as a special category of personal data,
+     which we may only use with your explicit consent. We ask for that separately
+     when you sign up, we use it only to find you matches, and you can withdraw it
+     at any time in settings — after which we stop matching you.</p>
+
+  <h2 style="font-size: 1.1rem;">Why we're allowed to hold it</h2>
+  <p>To provide the service you asked for (Article 6(1)(b)), and — for the sensitive
+     parts above — because you gave explicit consent (Article 9(2)(a)).</p>
+
+  <h2 style="font-size: 1.1rem;">Who sees it</h2>
+  <p>Other members see your profile as you've written it. We do not sell your data,
+     and we do not share it with advertisers. Our hosting and email providers process
+     it on our behalf under contract.</p>
+
+  <h2 style="font-size: 1.1rem;">Your rights</h2>
+  <p>You can download everything we hold about you, and delete your account, from
+     <a href="{{ url_for('settings') }}">settings</a>. Deletion takes effect after
+     {{ retention_days }} days, during which you can change your mind. Messages you
+     sent stay in the other person's conversation but are no longer linked to you.
+     You can also ask us to correct anything, or complain to your national data
+     protection authority.</p>
+
+  <h2 style="font-size: 1.1rem;">Contact</h2>
+  <p><a href="mailto:{{ support_email }}">{{ support_email }}</a></p>
+</div>
+{% endblock %}

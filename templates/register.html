@@ -34,6 +34,19 @@
     <input id="confirm" name="confirm" type="password" autocomplete="new-password"
            minlength="8" required>
 
+    <label class="switch-row" for="accept_terms" style="margin-top: 1.2rem;">
+      <input id="accept_terms" name="accept_terms" type="checkbox" value="1" required>
+      <span>I agree to the <a href="{{ url_for('terms') }}" target="_blank">terms</a>
+        and the <a href="{{ url_for('privacy') }}" target="_blank">privacy policy</a>.</span>
+    </label>
+
+    <label class="switch-row" for="accept_sensitive" style="margin-top: 0.7rem;">
+      <input id="accept_sensitive" name="accept_sensitive" type="checkbox" value="1" required>
+      <span>Velvt may use my gender and who I'm looking for to find me matches.</span>
+    </label>
+    <p class="hint">These can reveal your sexual orientation, so we ask separately.
+      You can withdraw this at any time in settings.</p>
+
     <button class="btn btn-block" type="submit">Create account</button>
   </form>
 

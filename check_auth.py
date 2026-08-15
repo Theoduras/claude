@@ -17,6 +17,18 @@ from app import app
 RESULTS = []
 
 
+def clear_rate_limits():
+    """Start from a clean budget: these checks make far more attempts from
+    one address than a person ever would."""
+    with app.test_request_context():
+        db = A.get_db()
+        db.execute("TRUNCATE rate_hits")
+        db.commit()
+
+
+clear_rate_limits()
+
+
 def check(name, ok, detail=""):
     RESULTS.append((name, ok, detail))
     print(f"{'ok  ' if ok else 'FAIL'}  {name}{('  — ' + detail) if detail else ''}")
@@ -37,6 +49,8 @@ def register(client, **over):
         "dob": over.pop("dob", "1995-06-15"),
         "password": over.pop("password", "correct horse battery"),
         "confirm": over.pop("confirm", "correct horse battery"),
+        "accept_terms": "1",
+        "accept_sensitive": "1",
         "csrf_token": token(client, "/register"),
     }
     data.update(over)
@@ -215,6 +229,231 @@ with app.test_client() as c:
             "SELECT email_verified_at FROM users WHERE id = ?", (uid,)
         ).fetchone()["email_verified_at"]
     check("the verify link confirms the address", verified is not None)
+
+# --- 7. blocking --------------------------------------------------------
+def make_searcher(name_hint):
+    """A user with a profile and a ripe, wide-open waiting search."""
+    with app.test_request_context():
+        db = A.get_db()
+        uid = db.insert_returning_id(
+            "INSERT INTO users (username, password_hash, status) VALUES (?, ?, 'active')",
+            (f"{name_hint}_{uuid.uuid4().hex[:8]}", "x"),
+        )
+        db.execute(
+            """INSERT INTO profiles (user_id, name, age, gender, seeking, location)
+               VALUES (?, ?, 30, 'Woman', 'Everyone', 'Berlin')""",
+            (uid, name_hint),
+        )
+        db.execute(
+            """INSERT INTO searches
+                 (user_id, seeking, age_min, age_max, location, lat, lng, radius_km,
+                  status, use_gender, use_age, use_distance, use_physical, created_at)
+               VALUES (?, 'Everyone', 18, 39, 'Berlin', 52.52, 13.405, 500,
+                       'waiting', FALSE, FALSE, FALSE, FALSE,
+                       NOW() - INTERVAL '60 seconds')""",
+            (uid,),
+        )
+        db.commit()
+    return uid
+
+
+def reopen_search(uid):
+    with app.test_request_context():
+        db = A.get_db()
+        db.execute(
+            """UPDATE searches SET status='waiting', match_id=NULL,
+               created_at = NOW() - INTERVAL '60 seconds' WHERE user_id=?""", (uid,)
+        )
+        db.commit()
+
+
+def empty_the_pool():
+    """Leave only the searchers this section creates.
+
+    The demo bots and every earlier check's leftovers are still waiting, and
+    with ALLOW_BOT_MATCHES on locally they are all pairable — so "did a match
+    form" says nothing. Clearing the pool makes the partner's identity the
+    assertion, which is what actually matters here.
+    """
+    with app.test_request_context():
+        db = A.get_db()
+        db.execute("UPDATE searches SET status='cancelled' WHERE status='waiting'")
+        db.commit()
+
+
+def partner_of(user_id, match_id):
+    if match_id is None:
+        return None
+    with app.test_request_context():
+        row = A.get_db().execute(
+            """SELECT CASE WHEN user_a=? THEN user_b ELSE user_a END AS other
+               FROM matches WHERE id=?""",
+            (user_id, match_id),
+        ).fetchone()
+    return None if row is None else row["other"]
+
+
+empty_the_pool()
+ann, ben = make_searcher("ann"), make_searcher("ben")
+with app.test_request_context():
+    paired = A.try_pair(ann)
+check("two real searchers pair with each other", partner_of(ann, paired) == ben)
+
+# Block, then confirm they can never be paired again.
+with app.test_request_context():
+    db = A.get_db()
+    db.execute("UPDATE matches SET status='ended' WHERE user_a=? OR user_b=?", (ann, ann))
+    db.commit()
+    A.apply_block(ann, ben)
+empty_the_pool()
+reopen_search(ann)
+reopen_search(ben)
+with app.test_request_context():
+    again = A.try_pair(ann)
+check("a blocked pair is never matched again", again is None,
+      f"paired with {partner_of(ann, again)}")
+with app.test_request_context():
+    check("blocking is symmetric", A.is_blocked_between(ben, ann))
+    check("a block hides photos both ways",
+          not A.can_view_photos(ann, ben, False) and not A.can_view_photos(ben, ann, False))
+    check("an admin can still see reported content",
+          A.can_view_photos(ann, ben, True))
+
+# A third party is unaffected: ann still pairs, just never with ben.
+cal = make_searcher("cal")
+reopen_search(ann)
+with app.test_request_context():
+    third = A.try_pair(ann)
+check("a block doesn't affect anyone else", partner_of(ann, third) == cal,
+      f"paired with {partner_of(ann, third)}")
+
+# --- 8. reporting -------------------------------------------------------
+with app.test_client() as c:
+    name, _ = register(c)
+    uid = uid_of(name)
+    target = make_searcher("subject")
+    resp = c.post(
+        f"/report/{target}",
+        data={"reason": "harassment", "detail": "test report", "block": "1",
+              "csrf_token": token(c, f"/report/{target}")},
+        follow_redirects=False,
+    )
+    check("a report is accepted", resp.status_code == 302, f"HTTP {resp.status_code}")
+    with app.test_request_context():
+        row = A.get_db().execute(
+            "SELECT * FROM reports WHERE reporter_id = ?", (uid,)
+        ).fetchone()
+    check("the report is stored", row is not None and row["reason"] == "harassment")
+    with app.test_request_context():
+        check("report + block applies the block", A.is_blocked_between(uid, target))
+
+    resp = c.post(f"/report/{target}",
+                  data={"reason": "not-a-real-reason",
+                        "csrf_token": token(c, f"/report/{target}")})
+    check("an invented reason is refused", resp.status_code == 200,
+          f"HTTP {resp.status_code}")
+
+# --- 9. account deletion ------------------------------------------------
+with app.test_client() as c:
+    name, _ = register(c)
+    uid = uid_of(name)
+    resp = c.post("/settings/delete", data={"password": "wrong password",
+                                            "csrf_token": token(c, "/settings")},
+                  follow_redirects=False)
+    with app.test_request_context():
+        st = A.get_db().execute("SELECT status FROM users WHERE id=?", (uid,)).fetchone()
+    check("deletion needs the right password", st["status"] == "active")
+
+    c.post("/settings/delete", data={"password": "correct horse battery",
+                                     "csrf_token": token(c, "/settings")})
+    with app.test_request_context():
+        st = A.get_db().execute("SELECT status FROM users WHERE id=?", (uid,)).fetchone()
+    check("deletion is scheduled, not immediate", st["status"] == "pending_deletion")
+    check("a pending-deletion user can still sign in to cancel",
+          c.get("/settings", follow_redirects=False).status_code == 200)
+
+    c.post("/settings/delete/cancel", data={"csrf_token": token(c, "/settings")})
+    with app.test_request_context():
+        st = A.get_db().execute("SELECT status FROM users WHERE id=?", (uid,)).fetchone()
+    check("deletion can be cancelled", st["status"] == "active")
+
+# The purge, and what it does to the other person's conversation.
+with app.test_client() as c:
+    name, _ = register(c)
+    uid = uid_of(name)
+    partner = make_searcher("partner")
+    with app.test_request_context():
+        db = A.get_db()
+        a, b = sorted((uid, partner))
+        mid = db.insert_returning_id(
+            "INSERT INTO matches (user_a, user_b, status) VALUES (?, ?, 'active')", (a, b)
+        )
+        db.execute("INSERT INTO messages (match_id, sender_id, body) VALUES (?, ?, ?)",
+                   (mid, uid, "a message from the leaving user"))
+        db.execute("INSERT INTO messages (match_id, sender_id, body) VALUES (?, ?, ?)",
+                   (mid, partner, "a reply from the one who stays"))
+        db.execute("""UPDATE users SET status='pending_deletion',
+                      deletion_requested_at = NOW() - INTERVAL '30 days' WHERE id=?""", (uid,))
+        db.commit()
+        purged = A.purge_due_deletions()
+    check("an expired grace period purges the account", purged >= 1, f"{purged} purged")
+    with app.test_request_context():
+        db = A.get_db()
+        gone = db.execute("SELECT username, email, dob, status FROM users WHERE id=?",
+                          (uid,)).fetchone()
+        prof = db.execute("SELECT 1 AS h FROM profiles WHERE user_id=?", (uid,)).fetchone()
+        kept = db.execute("SELECT COUNT(*) AS n FROM messages WHERE match_id=?",
+                          (mid,)).fetchone()["n"]
+        orphan = db.execute(
+            "SELECT sender_id FROM messages WHERE match_id=? AND sender_id IS NULL",
+            (mid,)).fetchone()
+    check("the account is anonymised", gone is not None and gone["username"].startswith("deleted_")
+          and gone["email"] is None and gone["status"] == "deleted")
+    check("the other person's conversation survives intact", kept == 2, f"{kept} messages")
+    check("the deleted sender is detached, not deleted", orphan is not None)
+    check("the profile and its contents are gone", prof is None)
+    check("no personal data survives", gone["email"] is None and gone["dob"] is None)
+
+# --- 10. consent --------------------------------------------------------
+with app.test_client() as c:
+    name, _ = register(c)
+    uid = uid_of(name)
+    with app.test_request_context():
+        row = A.get_db().execute(
+            "SELECT * FROM consents WHERE user_id=? AND purpose=?",
+            (uid, A.CONSENT_SENSITIVE)).fetchone()
+    check("Article 9 consent is recorded at registration", row is not None)
+    with app.test_request_context():
+        terms = A.get_db().execute(
+            "SELECT COUNT(*) AS n FROM legal_acceptances WHERE user_id=?", (uid,)
+        ).fetchone()["n"]
+    check("terms and privacy acceptance is versioned", terms == 2, f"{terms} rows")
+
+    c.post("/settings/consent", data={"csrf_token": token(c, "/settings")})
+    with app.test_request_context():
+        row = A.get_db().execute(
+            "SELECT withdrawn_at FROM consents WHERE user_id=? AND purpose=?",
+            (uid, A.CONSENT_SENSITIVE)).fetchone()
+    check("consent can be withdrawn", row["withdrawn_at"] is not None)
+
+with app.test_client() as c:
+    name, resp = register(c, accept_sensitive="")
+    check("registration without Article 9 consent is refused", uid_of(name) is None)
+
+with app.test_client() as c:
+    name, resp = register(c, accept_terms="")
+    check("registration without accepting terms is refused", uid_of(name) is None)
+
+# --- 11. rate limiting --------------------------------------------------
+clear_rate_limits()
+with app.test_client() as c:
+    codes = []
+    for _ in range(8):
+        r = c.post("/forgot", data={"email": "someone@example.test",
+                                    "csrf_token": token(c, "/forgot")})
+        codes.append(r.status_code)
+    check("a flood of reset requests is throttled", 429 in codes,
+          f"saw {sorted(set(codes))}")
 
 failed = [n for n, ok, _ in RESULTS if not ok]
 print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")

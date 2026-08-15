@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Reports — Velvt admin{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">Admin</p>
+  <h1 style="margin-top: 0.5rem;">Reports</h1>
+
+  <p class="hint" style="margin-bottom: 1.4rem;">
+    <a href="{{ url_for('admin_reports', show='open') }}"
+       {% if show == 'open' %}style="font-weight:700"{% endif %}>Open</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('admin_reports', show='actioned') }}"
+       {% if show == 'actioned' %}style="font-weight:700"{% endif %}>Actioned</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('admin_reports', show='dismissed') }}"
+       {% if show == 'dismissed' %}style="font-weight:700"{% endif %}>Dismissed</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('admin_reports', show='all') }}"
+       {% if show == 'all' %}style="font-weight:700"{% endif %}>All</a>
+  </p>
+
+  {% if not reports %}
+    <p class="subtitle">Nothing here. That's the good outcome.</p>
+  {% endif %}
+
+  {% for r in reports %}
+  <article style="border-top: 1px solid var(--ink-hairline); padding: 1.1rem 0;">
+    <p class="hint" style="margin: 0 0 0.35rem;">
+      #{{ r.id }} · {{ r.created_at.strftime('%Y-%m-%d %H:%M') }} ·
+      reported by {{ r.reporter_username or 'a deleted account' }}
+    </p>
+
+    <h2 style="font-size: 1.05rem; margin: 0 0 0.4rem;">
+      {{ reasons.get(r.reason, r.reason) }}
+      —
+      <a href="{{ url_for('view_profile', user_id=r.reported_id) }}">
+        {{ r.reported_name or r.reported_username }}
+      </a>
+      <span class="hint">({{ r.reported_status }})</span>
+    </h2>
+
+    {% if r.detail %}
+      <p style="margin: 0.4rem 0;">{{ r.detail }}</p>
+    {% endif %}
+
+    {% if context.get(r.id) %}
+      <p class="hint" style="margin: 0.6rem 0 0.2rem;">Their recent messages in that chat:</p>
+      <ul style="margin: 0 0 0.6rem 1rem;">
+        {% for m in context[r.id] %}
+          <li class="hint">{{ m.created_at.strftime('%H:%M') }} — {{ m.body }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% if r.status == 'open' %}
+      <form method="post" action="{{ url_for('admin_resolve_report', report_id=r.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="note-{{ r.id }}">Reason for the decision</label>
+        <input id="note-{{ r.id }}" name="note" type="text" maxlength="1000"
+               placeholder="Recorded in the moderation log.">
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem;">
+          <button class="btn btn-secondary" type="submit" name="action" value="dismiss">Dismiss</button>
+          <button class="btn btn-secondary" type="submit" name="action" value="warn">Note only</button>
+          <button class="btn" type="submit" name="action" value="suspend">Suspend</button>
+          <button class="btn" type="submit" name="action" value="ban">Ban</button>
+        </div>
+      </form>
+    {% else %}
+      <p class="hint" style="margin: 0.4rem 0 0;">
+        {{ r.status }} — {{ r.resolution }}{% if r.resolution_note %}: {{ r.resolution_note }}{% endif %}
+      </p>
+      {% if r.reported_status in ('suspended', 'banned') %}
+        <form method="post" action="{{ url_for('admin_reinstate', user_id=r.reported_id) }}"
+              style="margin-top: 0.5rem;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-secondary" type="submit">Reinstate account</button>
+        </form>
+      {% endif %}
+    {% endif %}
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

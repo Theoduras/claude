@@ -71,6 +71,8 @@ def main():
                 "dob": "1995-06-15",
                 "password": password,
                 "confirm": password,
+                "accept_terms": "1",
+                "accept_sensitive": "1",
                 "csrf_token": csrf_token(client),
             },
             follow_redirects=False,

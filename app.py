@@ -21,6 +21,7 @@ during local development and browse as admin automatically.
 """
 
 import hashlib
+import json
 import math
 import os
 import re
@@ -178,6 +179,45 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+\.[^@\s]+$")
 VERIFY_TOKEN_HOURS = 48
 RESET_TOKEN_HOURS = 1
 
+# --- privacy and deletion -----------------------------------------------
+# Long enough to undo a decision made in anger, short enough to still be a
+# deletion. The account is unreachable to everyone else from the moment it
+# is requested either way.
+DELETION_GRACE_DAYS = 14
+
+# The GDPR Article 9 consent. Gender plus who you are seeking makes sexual
+# orientation inferable, which is special category data and needs explicit
+# consent on top of the Article 6 basis.
+CONSENT_SENSITIVE = "sensitive_profile"
+
+# Bumped whenever the documents change: acceptance is recorded per version,
+# because "they agreed at some point" is not an answer once the text moves.
+TERMS_VERSION = "2026-08-15"
+PRIVACY_VERSION = "2026-08-15"
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "support@velvt.example")
+
+# --- safety -------------------------------------------------------------
+# Offered on the report form. Ordered by how urgently a moderator should
+# look, not alphabetically -- the top of this list is what gets triaged
+# first.
+REPORT_REASONS = [
+    ("underage", "They appear to be under 18"),
+    ("harassment", "Harassment, threats or abuse"),
+    ("sexual", "Unwanted sexual content"),
+    ("scam", "Scam, spam or asking for money"),
+    ("fake", "Fake profile or someone else's photos"),
+    ("other", "Something else"),
+]
+REPORT_REASON_KEYS = {key for key, _ in REPORT_REASONS}
+
+# What a moderator can do with a report, and how it reads back in the log.
+ADMIN_ACTIONS = {
+    "dismiss": "dismissed, no action taken",
+    "warn": "noted, account left active",
+    "suspend": "account suspended",
+    "ban": "account banned",
+}
+
 # --- CSRF ---------------------------------------------------------------
 # Hand-rolled on itsdangerous, which Flask already depends on, rather than
 # pulling in Flask-WTF and WTForms for one hidden field -- the forms in this
@@ -315,13 +355,27 @@ ALLOW_BOT_MATCHES = os.environ.get("ALLOW_BOT_MATCHES", "0") not in ("0", "false
 # The fragment is built from constants only, never from request data, and it
 # assumes the queries it lands in have joined `users` as `u`.
 def _candidate_eligible_sql():
-    clauses = []
+    clauses = ["u.status = 'active'"]
     if not ALLOW_BOT_MATCHES:
         clauses.append("u.is_bot = FALSE")
     return "".join(f" AND {c}" for c in clauses)
 
 
 CANDIDATE_ELIGIBLE_SQL = _candidate_eligible_sql()
+
+# Excludes anyone either side has blocked. Kept separate from the fragment
+# above because it needs the viewer's id as a parameter, and because the
+# landing page's anonymous count has no viewer to exclude against.
+#
+# Symmetric on purpose: one block hides both people from each other, so
+# being blocked never reveals who did it.
+NOT_BLOCKED_SQL = """
+  AND NOT EXISTS (
+      SELECT 1 FROM blocks b
+      WHERE (b.blocker_id = ? AND b.blocked_id = s.user_id)
+         OR (b.blocker_id = s.user_id AND b.blocked_id = ?)
+  )
+"""
 
 # --- match lifecycle (live-search pairings only; /find stays instant) -----
 REVEAL_SECONDS = 20          # "it's a match" card before the chat opens
@@ -348,12 +402,38 @@ def sniff_image_mime(data):
     return None
 
 
+def is_blocked_between(a_id, b_id):
+    """True if either has blocked the other.
+
+    Symmetric by design: a block hides both people from each other, so the
+    blocked party is never handed the information that they were blocked.
+    """
+    if a_id == b_id:
+        return False
+    return get_db().execute(
+        """
+        SELECT 1 AS hit FROM blocks
+        WHERE (blocker_id = ? AND blocked_id = ?)
+           OR (blocker_id = ? AND blocked_id = ?)
+        LIMIT 1
+        """,
+        (a_id, b_id, b_id, a_id),
+    ).fetchone() is not None
+
+
 def can_view_photos(owner_id, viewer_id, viewer_is_admin):
     """Photos unlock only once both sides have pressed Continue — i.e. a
     matches row exists between the two with status='active'. That is
     exactly the same state resolve_match() writes, so this needs no
     bookkeeping of its own."""
-    if viewer_id == owner_id or viewer_is_admin:
+    if viewer_id == owner_id:
+        return True
+    if is_blocked_between(owner_id, viewer_id):
+        # Checked before the admin bypass would be wrong -- an admin
+        # reviewing a report needs to see what was reported.
+        if not viewer_is_admin:
+            return False
+    if viewer_is_admin:
         return True
     a, b = sorted((owner_id, viewer_id))
     row = get_db().execute(
@@ -692,6 +772,15 @@ CREATE TABLE IF NOT EXISTS messages (
 -- Serves the chat poll: "messages in this room newer than <id>".
 CREATE INDEX IF NOT EXISTS messages_match_id_idx ON messages (match_id, id);
 
+-- A deleted account must not take the other person's conversation with it.
+-- sender_id becomes nullable and detaches on delete instead of cascading,
+-- so the surviving participant keeps a readable history rather than a chat
+-- full of holes. Everything identifying the deleted account still goes.
+ALTER TABLE messages ALTER COLUMN sender_id DROP NOT NULL;
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+ALTER TABLE messages ADD CONSTRAINT messages_sender_id_fkey
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE SET NULL;
+
 -- Photos are stored as bytes so they survive Cloud Run's ephemeral disk
 -- with no bucket, and so visibility can be a plain SQL check on the
 -- serving route (see /photo/<id>) rather than a static URL that bypasses
@@ -773,6 +862,96 @@ CREATE TABLE IF NOT EXISTS email_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS email_tokens_user_idx ON email_tokens (user_id, purpose);
+
+-- --- blocks -------------------------------------------------------------
+-- Directional: blocker_id no longer wants anything to do with blocked_id.
+-- Every check is "is there a row either way round", so one block hides both
+-- people from each other -- being blocked should not tell you who did it.
+CREATE TABLE IF NOT EXISTS blocks (
+    blocker_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    blocked_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (blocker_id, blocked_id),
+    CHECK (blocker_id <> blocked_id)
+);
+
+CREATE INDEX IF NOT EXISTS blocks_blocked_idx ON blocks (blocked_id);
+
+-- --- reports ------------------------------------------------------------
+-- DSA Article 16 requires every hosting provider serving the EU to run a
+-- notice-and-action mechanism and to tell the reporter what came of it. The
+-- micro-enterprise exemption covers internal complaint handling and trusted
+-- flaggers; it does not cover this.
+--
+-- match_id and message_id are optional context: a report can be about a
+-- whole profile, or about one specific thing that was said.
+CREATE TABLE IF NOT EXISTS reports (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    reporter_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    reported_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    match_id BIGINT REFERENCES matches(id) ON DELETE SET NULL,
+    message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    resolved_at TIMESTAMPTZ,
+    resolution TEXT NOT NULL DEFAULT '',
+    resolution_note TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS reports_status_idx ON reports (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS reports_reported_idx ON reports (reported_id);
+
+-- --- moderation log -----------------------------------------------------
+-- Who did what to whom and why. Needed to answer "what happened" after an
+-- incident, and to keep an admin accountable for their own actions.
+CREATE TABLE IF NOT EXISTS admin_actions (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    actor_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    target_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    action TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --- consent and terms --------------------------------------------------
+-- Which *version* was accepted, not merely that something once was: "they
+-- agreed at some point" is not an answer when the document has changed.
+CREATE TABLE IF NOT EXISTS legal_acceptances (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    document TEXT NOT NULL,
+    version TEXT NOT NULL,
+    accepted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, document, version)
+);
+
+-- GDPR Article 9. A profile carrying gender and who you are seeking makes
+-- sexual orientation inferable, which is special category data: it needs an
+-- Article 9 exception (explicit consent) on top of an Article 6 basis, and
+-- withdrawal has to be as easy as granting -- hence withdrawn_at rather
+-- than deleting the row.
+CREATE TABLE IF NOT EXISTS consents (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    purpose TEXT NOT NULL,
+    granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    withdrawn_at TIMESTAMPTZ,
+    PRIMARY KEY (user_id, purpose)
+);
+
+-- --- rate limiting ------------------------------------------------------
+-- Backed by Postgres rather than process memory on purpose: Cloud Run runs
+-- many instances against one database, so an in-process counter would let
+-- an attacker have N times the budget by spreading requests across them.
+CREATE TABLE IF NOT EXISTS rate_hits (
+    bucket_key TEXT NOT NULL,
+    window_start TIMESTAMPTZ NOT NULL,
+    hits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (bucket_key, window_start)
+);
+
+CREATE INDEX IF NOT EXISTS rate_hits_window_idx ON rate_hits (window_start);
 """
 
 # Arbitrary but fixed keys for Postgres advisory locks. Any instance taking
@@ -816,6 +995,77 @@ def init_db():
                 cur.execute(
                     "UPDATE users SET is_admin = TRUE WHERE id = %s", (admin["id"],)
                 )
+
+
+def rate_limit_hit(bucket, limit, window_seconds):
+    """Count one hit against `bucket`. True when it is over the limit.
+
+    A fixed window rounded down to `window_seconds`, counted in Postgres
+    rather than in process memory: Cloud Run runs several instances against
+    one database, so an in-process counter would hand an attacker the whole
+    budget again for every instance they happened to land on.
+
+    Fixed windows let through up to 2x the limit across a boundary. That is
+    a fine trade here -- this exists to stop credential stuffing and mail
+    floods, not to meter an API to the request.
+    """
+    db = get_db()
+    row = db.execute(
+        """
+        INSERT INTO rate_hits (bucket_key, window_start, hits)
+        VALUES (?, to_timestamp(floor(extract(epoch FROM NOW()) / ?) * ?), 1)
+        ON CONFLICT (bucket_key, window_start)
+        DO UPDATE SET hits = rate_hits.hits + 1
+        RETURNING hits
+        """,
+        (bucket, window_seconds, window_seconds),
+    ).fetchone()
+    db.commit()
+    return row["hits"] > limit
+
+
+def rate_limited(name, limit, window_seconds, by="ip", include_safe=False):
+    """Refuse a route once it has been called too often.
+
+    `by` picks what shares a budget: "ip" for anything a logged-out caller
+    can reach, "user" for anything behind a login.
+
+    GET is free unless `include_safe`. These decorators sit on routes that
+    answer both methods, and the thing worth limiting is the *attempt* --
+    counting page views would lock someone out of the login screen for
+    reloading it, which is the opposite of the point. Routes that do their
+    work on GET (the geocoder proxy) opt in.
+    """
+    from functools import wraps
+
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if not include_safe and request.method in ("GET", "HEAD", "OPTIONS"):
+                return view(*args, **kwargs)
+            if by == "user":
+                who = f"u{current_uid()}"
+            else:
+                who = request.remote_addr or "unknown"
+            if rate_limit_hit(f"{name}:{who}", limit, window_seconds):
+                app.logger.warning("rate limit %s hit by %s", name, who)
+                retry = window_seconds
+                if "application/json" in request.headers.get("Accept", ""):
+                    return (
+                        {"error": "Too many requests. Please wait a moment."},
+                        429,
+                        {"Retry-After": str(retry)},
+                    )
+                return (
+                    render_template("rate_limited.html", seconds=retry),
+                    429,
+                    {"Retry-After": str(retry)},
+                )
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
 
 
 def csrf_token():
@@ -1113,7 +1363,12 @@ def admin_required(view):
 
 @app.context_processor
 def inject_user():
-    return {"current_user": current_user(), "csrf_token": csrf_token}
+    return {
+        "current_user": current_user(),
+        "csrf_token": csrf_token,
+        # The footer on every page needs somewhere to point "Contact".
+        "support_email": SUPPORT_EMAIL,
+    }
 
 
 @app.before_request
@@ -1247,6 +1502,7 @@ def index():
 
 
 @app.route("/register", methods=["GET", "POST"])
+@rate_limited("register", limit=20, window_seconds=3600)
 def register():
     if current_uid():
         return redirect(url_for("live_search"))
@@ -1281,6 +1537,16 @@ def register():
             error = f"Password must be at least {PASSWORD_MIN_LENGTH} characters."
         elif password != confirm:
             error = "Passwords do not match."
+        elif not request.form.get("accept_terms"):
+            error = "Please accept the terms and privacy policy to continue."
+        elif not request.form.get("accept_sensitive"):
+            # Separate from the terms box on purpose. Article 9 consent has
+            # to be specific and freely given, which a single "I agree to
+            # everything" checkbox is not.
+            error = (
+                "We need your permission to use your gender and who you're "
+                "looking for, or we can't match you."
+            )
 
         if error is None and session.get("age_gate_failed"):
             return render_template("age_gate.html"), 403
@@ -1303,6 +1569,22 @@ def register():
                 )
                 db.execute(
                     "INSERT INTO profiles (user_id, age) VALUES (?, ?)", (new_id, age)
+                )
+                for document, version in (
+                    ("terms", TERMS_VERSION),
+                    ("privacy", PRIVACY_VERSION),
+                ):
+                    db.execute(
+                        """
+                        INSERT INTO legal_acceptances (user_id, document, version)
+                        VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+                        """,
+                        (new_id, document, version),
+                    )
+                db.execute(
+                    "INSERT INTO consents (user_id, purpose) VALUES (?, ?) "
+                    "ON CONFLICT DO NOTHING",
+                    (new_id, CONSENT_SENSITIVE),
                 )
                 db.commit()
             except psycopg.errors.UniqueViolation:
@@ -1330,6 +1612,7 @@ def register():
 
 
 @app.route("/login", methods=["GET", "POST"])
+@rate_limited("login", limit=10, window_seconds=300)
 def login():
     if current_uid():
         return redirect(url_for("live_search"))
@@ -1388,6 +1671,7 @@ def verify_email(token):
 
 @app.route("/verify/resend", methods=["POST"])
 @login_required
+@rate_limited("resend", limit=3, window_seconds=3600, by="user")
 def resend_verification():
     user = current_user()
     if user["email"] and user["email_verified_at"] is None:
@@ -1397,6 +1681,7 @@ def resend_verification():
 
 
 @app.route("/forgot", methods=["GET", "POST"])
+@rate_limited("forgot", limit=5, window_seconds=3600)
 def forgot_password():
     if request.method == "POST":
         email = request.form.get("email", "").strip()
@@ -1425,6 +1710,7 @@ def forgot_password():
 
 
 @app.route("/reset/<token>", methods=["GET", "POST"])
+@rate_limited("reset", limit=10, window_seconds=3600)
 def reset_password(token):
     user_id = consume_email_token(token, "reset", peek=True)
     if user_id is None:
@@ -2097,11 +2383,15 @@ def view_profile(user_id):
         (user_id,),
     ).fetchone()
 
-    if row is None:
+    user = current_user()
+    if row is None or (
+        is_blocked_between(user_id, user["id"]) and not user["is_admin"]
+    ):
+        # Same answer for "no such profile" and "blocked", so the page
+        # cannot be used to work out that someone blocked you.
         flash("That profile does not exist.")
         return redirect(url_for("live_search"))
 
-    user = current_user()
     can_view = can_view_photos(user_id, user["id"], user["is_admin"])
     photos = (
         get_db()
@@ -2121,6 +2411,561 @@ def view_profile(user_id):
         can_view_photos=can_view,
         photos=photos,
     )
+
+
+@app.route("/terms")
+def terms():
+    return render_template("legal_terms.html", version=TERMS_VERSION,
+                           support_email=SUPPORT_EMAIL)
+
+
+@app.route("/privacy")
+def privacy():
+    return render_template("legal_privacy.html", version=PRIVACY_VERSION,
+                           support_email=SUPPORT_EMAIL,
+                           retention_days=DELETION_GRACE_DAYS)
+
+
+@app.route("/imprint")
+def imprint():
+    return render_template("legal_imprint.html", support_email=SUPPORT_EMAIL)
+
+
+@app.route("/safety")
+def safety():
+    return render_template("safety.html", support_email=SUPPORT_EMAIL)
+
+
+@app.route("/settings")
+@login_required
+def settings():
+    me = current_user()
+    db = get_db()
+    mine_hash = hash_token(session.get("sid", ""))
+    sessions = [
+        dict(row, is_current=(row["token_hash"] == mine_hash))
+        for row in db.execute(
+            """
+            SELECT id, token_hash, user_agent, ip, created_at, last_seen_at
+            FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC
+            """,
+            (me["id"],),
+        ).fetchall()
+    ]
+    blocked = db.execute(
+        """
+        SELECT u.id, u.username, p.name FROM blocks b
+        JOIN users u ON u.id = b.blocked_id
+        LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE b.blocker_id = ? ORDER BY b.created_at DESC
+        """,
+        (me["id"],),
+    ).fetchall()
+    consent = db.execute(
+        "SELECT * FROM consents WHERE user_id = ? AND purpose = ?",
+        (me["id"], CONSENT_SENSITIVE),
+    ).fetchone()
+
+    return render_template(
+        "settings.html",
+        me=me,
+        sessions=sessions,
+        blocked=blocked,
+        consent=consent,
+        deletion_grace_days=DELETION_GRACE_DAYS,
+    )
+
+
+@app.route("/settings/password", methods=["POST"])
+@login_required
+def change_password():
+    me = current_user()
+    current = request.form.get("current", "")
+    password = request.form.get("password", "")
+    confirm = request.form.get("confirm", "")
+
+    if not check_password_hash(me["password_hash"], current):
+        flash("That isn't your current password.")
+    elif len(password) < PASSWORD_MIN_LENGTH:
+        flash(f"Password must be at least {PASSWORD_MIN_LENGTH} characters.")
+    elif password != confirm:
+        flash("Passwords do not match.")
+    else:
+        db = get_db()
+        db.execute(
+            "UPDATE users SET password_hash = ?, password_changed_at = NOW() WHERE id = ?",
+            (generate_password_hash(password), me["id"]),
+        )
+        db.commit()
+        # Everywhere but here: changing your password should not log you out
+        # of the tab you did it in, but it must log out everyone else.
+        revoke_user_sessions(me["id"], except_token=session.get("sid"))
+        flash("Password changed. You've been signed out on other devices.")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/sessions/<int:session_id>/revoke", methods=["POST"])
+@login_required
+def revoke_session(session_id):
+    db = get_db()
+    db.execute(
+        "DELETE FROM sessions WHERE id = ? AND user_id = ?",
+        (session_id, current_uid()),
+    )
+    db.commit()
+    flash("Signed out on that device.")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/sessions/revoke-others", methods=["POST"])
+@login_required
+def revoke_other_sessions():
+    revoke_user_sessions(current_uid(), except_token=session.get("sid"))
+    flash("Signed out everywhere else.")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/consent", methods=["POST"])
+@login_required
+def update_consent():
+    """Withdraw or re-grant the Article 9 consent.
+
+    Withdrawal has to be as easy as granting, which is why this is one
+    button and not a support request. Withdrawing stops the search working,
+    because the fields it needs are exactly the ones consent covers.
+    """
+    grant = bool(request.form.get("grant"))
+    db = get_db()
+    if grant:
+        db.execute(
+            """
+            INSERT INTO consents (user_id, purpose) VALUES (?, ?)
+            ON CONFLICT (user_id, purpose)
+            DO UPDATE SET granted_at = NOW(), withdrawn_at = NULL
+            """,
+            (current_uid(), CONSENT_SENSITIVE),
+        )
+        flash("Thanks — matching is switched back on.")
+    else:
+        db.execute(
+            "UPDATE consents SET withdrawn_at = NOW() WHERE user_id = ? AND purpose = ?",
+            (current_uid(), CONSENT_SENSITIVE),
+        )
+        db.execute(
+            "UPDATE searches SET status = 'cancelled' WHERE user_id = ? AND status = 'waiting'",
+            (current_uid(),),
+        )
+        flash("Consent withdrawn. We've stopped matching you.")
+    db.commit()
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/export")
+@login_required
+def export_data():
+    """Everything we hold about the caller, as JSON (GDPR Art. 15 and 20).
+
+    Photo bytes are referenced by URL rather than inlined -- a base64 blob
+    per photo would make the file unusable in the machine-readable sense
+    Article 20 is asking for.
+    """
+    me = current_uid()
+    db = get_db()
+
+    def rows(sql, params=(me,)):
+        return [dict(r) for r in db.execute(sql, params).fetchall()]
+
+    account = dict(
+        db.execute(
+            """
+            SELECT id, username, email, dob, status, created_at,
+                   email_verified_at, password_changed_at
+            FROM users WHERE id = ?
+            """,
+            (me,),
+        ).fetchone()
+    )
+
+    payload = {
+        "exported_at": dt.now(timezone.utc).isoformat(),
+        "account": account,
+        "profile": rows("SELECT * FROM profiles WHERE user_id = ?"),
+        "photos": rows(
+            "SELECT id, mime, is_primary, created_at FROM photos WHERE user_id = ?"
+        ),
+        "searches": rows("SELECT * FROM searches WHERE user_id = ?"),
+        "matches": rows(
+            "SELECT * FROM matches WHERE user_a = ? OR user_b = ?", (me, me)
+        ),
+        "messages": rows(
+            "SELECT id, match_id, body, created_at FROM messages WHERE sender_id = ?"
+        ),
+        "blocks": rows("SELECT blocked_id, created_at FROM blocks WHERE blocker_id = ?"),
+        "reports_filed": rows(
+            "SELECT id, reported_id, reason, detail, status, created_at "
+            "FROM reports WHERE reporter_id = ?"
+        ),
+        "consents": rows("SELECT * FROM consents WHERE user_id = ?"),
+        "terms_accepted": rows("SELECT * FROM legal_acceptances WHERE user_id = ?"),
+    }
+
+    body = json.dumps(payload, indent=2, default=str)
+    return Response(
+        body,
+        mimetype="application/json",
+        headers={
+            "Content-Disposition": 'attachment; filename="velvt-export.json"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.route("/settings/delete", methods=["POST"])
+@login_required
+def request_deletion():
+    """Schedule deletion, with a grace period (GDPR Art. 17).
+
+    Not immediate: people delete accounts angry, and an irreversible button
+    at that moment is a worse experience than a reversible one. The account
+    is unreachable to everyone else from this moment either way.
+    """
+    me = current_user()
+    if not check_password_hash(me["password_hash"], request.form.get("password", "")):
+        flash("Please confirm your password to delete your account.")
+        return redirect(url_for("settings"))
+
+    db = get_db()
+    db.execute(
+        """
+        UPDATE users SET status = 'pending_deletion', deletion_requested_at = NOW()
+        WHERE id = ?
+        """,
+        (me["id"],),
+    )
+    db.execute(
+        "UPDATE searches SET status = 'cancelled' WHERE user_id = ? AND status = 'waiting'",
+        (me["id"],),
+    )
+    db.execute(
+        """
+        UPDATE matches SET status = 'ended', ended_at = NOW()
+        WHERE (user_a = ? OR user_b = ?) AND status <> 'ended'
+        """,
+        (me["id"], me["id"]),
+    )
+    db.commit()
+    flash(
+        f"Your account is scheduled for deletion in {DELETION_GRACE_DAYS} days. "
+        "Sign in before then to cancel."
+    )
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/delete/cancel", methods=["POST"])
+@login_required
+def cancel_deletion():
+    db = get_db()
+    db.execute(
+        """
+        UPDATE users SET status = 'active', deletion_requested_at = NULL
+        WHERE id = ? AND status = 'pending_deletion'
+        """,
+        (current_uid(),),
+    )
+    db.commit()
+    flash("Welcome back — your account is active again.")
+    return redirect(url_for("settings"))
+
+
+def purge_due_deletions():
+    """Erase accounts whose grace period has run out.
+
+    Anonymised in place rather than DELETEd. Every foreign key pointing at
+    users cascades, so removing the row would delete the *matches* too, and
+    with them the other participant's entire conversation -- their record of
+    a relationship, erased because the other person left. Article 17 asks us
+    to erase personal data, not to reach into someone else's history.
+
+    So: every field that identifies the person is destroyed, the profile and
+    photos go entirely, and what remains is a numbered tombstone that reads
+    as "Deleted member" wherever it surfaces. Nothing about it is personal
+    data, and nothing can be recovered from it.
+    """
+    db = get_db()
+    due = db.execute(
+        """
+        SELECT id FROM users
+        WHERE status = 'pending_deletion'
+          AND deletion_requested_at < NOW() - (? * INTERVAL '1 day')
+        """,
+        (DELETION_GRACE_DAYS,),
+    ).fetchall()
+
+    for row in due:
+        uid = row["id"]
+        # Everything that is only ever about them.
+        for table in ("photos", "searches", "sessions", "email_tokens", "consents",
+                      "legal_acceptances"):
+            db.execute(f"DELETE FROM {table} WHERE user_id = ?", (uid,))
+        db.execute("DELETE FROM profiles WHERE user_id = ?", (uid,))
+        db.execute(
+            "DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?", (uid, uid)
+        )
+        # Their side of any conversation stays readable to the other person,
+        # but is no longer attributed to a real account.
+        db.execute("UPDATE messages SET sender_id = NULL WHERE sender_id = ?", (uid,))
+        db.execute(
+            """
+            UPDATE matches SET status = 'ended', ended_at = COALESCE(ended_at, NOW())
+            WHERE user_a = ? OR user_b = ?
+            """,
+            (uid, uid),
+        )
+        db.execute(
+            """
+            UPDATE users
+            SET username = ?, email = NULL, dob = NULL, email_verified_at = NULL,
+                age_verified_at = NULL, password_hash = ?, status = 'deleted',
+                deletion_requested_at = NULL
+            WHERE id = ?
+            """,
+            (f"deleted_{uid}", secrets.token_hex(32), uid),
+        )
+    db.commit()
+    return len(due)
+
+
+@app.route("/report/<int:user_id>", methods=["GET", "POST"])
+@login_required
+@rate_limited("report", limit=20, window_seconds=3600, by="user")
+def report_user(user_id):
+    """Notice-and-action, per DSA Article 16.
+
+    Deliberately reachable for any account, not only a current match: the
+    person you most need to report is often the one who has already ended
+    the conversation.
+    """
+    me = current_uid()
+    if user_id == me:
+        flash("You can't report yourself.")
+        return redirect(url_for("live_search"))
+
+    subject = get_db().execute(
+        """
+        SELECT u.id, u.username, p.name FROM users u
+        LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE u.id = ?
+        """,
+        (user_id,),
+    ).fetchone()
+    if subject is None:
+        flash("That profile does not exist.")
+        return redirect(url_for("live_search"))
+
+    match_id = request.values.get("match_id", type=int)
+
+    if request.method == "POST":
+        reason = request.form.get("reason", "").strip()
+        detail = request.form.get("detail", "").strip()[:2000]
+        also_block = bool(request.form.get("block"))
+
+        if reason not in REPORT_REASON_KEYS:
+            flash("Please choose a reason.")
+            return render_template(
+                "report.html", subject=subject, reasons=REPORT_REASONS,
+                match_id=match_id,
+            )
+
+        db = get_db()
+        db.execute(
+            """
+            INSERT INTO reports (reporter_id, reported_id, match_id, reason, detail)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (me, user_id, match_id, reason, detail),
+        )
+        db.commit()
+
+        if also_block:
+            apply_block(me, user_id)
+            flash("Thanks — we've received your report and blocked them.")
+        else:
+            # Article 16 wants the reporter told what happens next, not just
+            # that the form submitted.
+            flash("Thanks — we've received your report and a moderator will review it.")
+        return redirect(url_for("live_search"))
+
+    return render_template(
+        "report.html", subject=subject, reasons=REPORT_REASONS, match_id=match_id
+    )
+
+
+def apply_block(blocker_id, blocked_id):
+    """Block, and end anything currently running between the two."""
+    if blocker_id == blocked_id:
+        return
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)
+        ON CONFLICT DO NOTHING
+        """,
+        (blocker_id, blocked_id),
+    )
+    a, b = sorted((blocker_id, blocked_id))
+    db.execute(
+        """
+        UPDATE matches SET status = 'ended', ended_at = NOW()
+        WHERE user_a = ? AND user_b = ? AND status <> 'ended'
+        """,
+        (a, b),
+    )
+    # A waiting search must not immediately re-pair them.
+    db.execute(
+        "UPDATE searches SET status = 'cancelled' WHERE user_id = ? AND status = 'waiting'",
+        (blocker_id,),
+    )
+    db.commit()
+
+
+@app.route("/block/<int:user_id>", methods=["POST"])
+@login_required
+def block_user(user_id):
+    apply_block(current_uid(), user_id)
+    flash("Blocked. They can't reach you, and you won't be matched again.")
+    return redirect(url_for("chats"))
+
+
+@app.route("/unblock/<int:user_id>", methods=["POST"])
+@login_required
+def unblock_user(user_id):
+    db = get_db()
+    db.execute(
+        "DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?",
+        (current_uid(), user_id),
+    )
+    db.commit()
+    flash("Unblocked.")
+    return redirect(url_for("settings"))
+
+
+def log_admin_action(actor_id, target_id, action, reason=""):
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO admin_actions (actor_id, target_id, action, reason)
+        VALUES (?, ?, ?, ?)
+        """,
+        (actor_id, target_id, action, reason),
+    )
+    db.commit()
+
+
+@app.route("/admin/reports")
+@admin_required
+def admin_reports():
+    show = request.args.get("show", "open")
+    rows = get_db().execute(
+        """
+        SELECT r.*,
+               rep.username AS reporter_username,
+               sub.username AS reported_username,
+               sub.status   AS reported_status,
+               subp.name    AS reported_name
+        FROM reports r
+        LEFT JOIN users rep ON rep.id = r.reporter_id
+        JOIN users sub ON sub.id = r.reported_id
+        LEFT JOIN profiles subp ON subp.user_id = r.reported_id
+        WHERE (? = 'all' OR r.status = ?)
+        ORDER BY r.created_at DESC
+        LIMIT 200
+        """,
+        (show, show),
+    ).fetchall()
+
+    # The reported message, where the report pointed at a conversation.
+    context = {}
+    for row in rows:
+        if row["match_id"]:
+            context[row["id"]] = get_db().execute(
+                """
+                SELECT m.body, m.created_at, u.username
+                FROM messages m JOIN users u ON u.id = m.sender_id
+                WHERE m.match_id = ? AND m.sender_id = ?
+                ORDER BY m.id DESC LIMIT 5
+                """,
+                (row["match_id"], row["reported_id"]),
+            ).fetchall()
+
+    return render_template(
+        "admin_reports.html",
+        reports=rows,
+        context=context,
+        show=show,
+        reasons=dict(REPORT_REASONS),
+    )
+
+
+@app.route("/admin/reports/<int:report_id>/resolve", methods=["POST"])
+@admin_required
+def admin_resolve_report(report_id):
+    action = request.form.get("action", "")
+    note = request.form.get("note", "").strip()[:1000]
+
+    if action not in ADMIN_ACTIONS:
+        flash("Unknown action.")
+        return redirect(url_for("admin_reports"))
+
+    db = get_db()
+    report = db.execute("SELECT * FROM reports WHERE id = ?", (report_id,)).fetchone()
+    if report is None:
+        flash("That report no longer exists.")
+        return redirect(url_for("admin_reports"))
+
+    me = current_uid()
+    target = report["reported_id"]
+
+    if action in ("suspend", "ban"):
+        new_status = "suspended" if action == "suspend" else "banned"
+        db.execute("UPDATE users SET status = ? WHERE id = ?", (new_status, target))
+        # Kick them out now rather than at their next request.
+        db.execute("DELETE FROM sessions WHERE user_id = ?", (target,))
+        db.execute(
+            "UPDATE searches SET status = 'cancelled' WHERE user_id = ? AND status = 'waiting'",
+            (target,),
+        )
+
+    db.execute(
+        """
+        UPDATE reports
+        SET status = ?, resolved_by = ?, resolved_at = NOW(),
+            resolution = ?, resolution_note = ?
+        WHERE id = ?
+        """,
+        (
+            "dismissed" if action == "dismiss" else "actioned",
+            me,
+            action,
+            note,
+            report_id,
+        ),
+    )
+    db.commit()
+    log_admin_action(me, target, action, note)
+
+    flash(f"Report #{report_id}: {ADMIN_ACTIONS[action]}.")
+    return redirect(url_for("admin_reports"))
+
+
+@app.route("/admin/users/<int:user_id>/reinstate", methods=["POST"])
+@admin_required
+def admin_reinstate(user_id):
+    db = get_db()
+    db.execute("UPDATE users SET status = 'active' WHERE id = ?", (user_id,))
+    db.commit()
+    log_admin_action(current_uid(), user_id, "reinstate")
+    flash("Account reinstated.")
+    return redirect(url_for("admin_reports"))
 
 
 @app.route("/admin/profiles/new", methods=["GET", "POST"])
@@ -2515,9 +3360,10 @@ def try_pair(user_id):
             WHERE s.status = 'waiting' AND s.user_id != ?
               AND s.created_at <= NOW() - (? * INTERVAL '1 second')
               {CANDIDATE_ELIGIBLE_SQL}
+              {NOT_BLOCKED_SQL}
             ORDER BY s.created_at
             """,
-            (user_id, MIN_SEARCH_SECONDS),
+            (user_id, MIN_SEARCH_SECONDS, user_id, user_id),
         ).fetchall()
 
         best = None
@@ -2918,6 +3764,7 @@ _PLACES_CACHE_MAX = 500
 
 
 @app.route("/api/places")
+@rate_limited("places", limit=60, window_seconds=60, include_safe=True)
 @login_required
 def api_places():
     """Typeahead suggestions for the location field, backed by Photon
@@ -3053,8 +3900,9 @@ def search_preview():
         JOIN users u ON u.id = s.user_id
         WHERE s.status = 'waiting' AND s.user_id != ?
           {CANDIDATE_ELIGIBLE_SQL}
+          {NOT_BLOCKED_SQL}
         """,
-        (current_uid(),),
+        (current_uid(), current_uid(), current_uid()),
     ).fetchall()
     others = [dict(o) for o in others]
 
@@ -3196,8 +4044,9 @@ def _search_pool(user_id):
         JOIN users u ON u.id = s.user_id
         WHERE s.status = 'waiting' AND s.user_id != ?
           {CANDIDATE_ELIGIBLE_SQL}
+          {NOT_BLOCKED_SQL}
         """,
-        (user_id,),
+        (user_id, user_id, user_id),
     ).fetchall()
     return dict(mine), [dict(o) for o in others]
 
@@ -3595,14 +4444,17 @@ def chats():
     user = current_user()
     query = """
         SELECT m.*,
-               pa.name AS name_a, pb.name AS name_b,
+               COALESCE(pa.name, 'Deleted member') AS name_a,
+               COALESCE(pb.name, 'Deleted member') AS name_b,
                (SELECT body FROM messages WHERE match_id = m.id
                 ORDER BY id DESC LIMIT 1) AS last_message,
                (SELECT created_at FROM messages WHERE match_id = m.id
                 ORDER BY id DESC LIMIT 1) AS last_message_at
         FROM matches m
-        JOIN profiles pa ON pa.user_id = m.user_a
-        JOIN profiles pb ON pb.user_id = m.user_b
+        -- LEFT so a match with someone who has deleted their account stays
+        -- in the surviving participant's list instead of silently vanishing.
+        LEFT JOIN profiles pa ON pa.user_id = m.user_a
+        LEFT JOIN profiles pb ON pb.user_id = m.user_b
         {where}
         ORDER BY m.id DESC
     """
@@ -3671,8 +4523,8 @@ def chat(match_id):
 
     messages = get_db().execute(
         """
-        SELECT msg.*, p.name AS sender_name FROM messages msg
-        JOIN profiles p ON p.user_id = msg.sender_id
+        SELECT msg.*, COALESCE(p.name, 'Deleted member') AS sender_name FROM messages msg
+        LEFT JOIN profiles p ON p.user_id = msg.sender_id
         WHERE msg.match_id = ?
         ORDER BY msg.id
         """,
@@ -3816,8 +4668,8 @@ def mark_read(match, user_id, up_to_id):
 def fetch_messages_after(match_id, after):
     return get_db().execute(
         """
-        SELECT msg.*, p.name AS sender_name FROM messages msg
-        JOIN profiles p ON p.user_id = msg.sender_id
+        SELECT msg.*, COALESCE(p.name, 'Deleted member') AS sender_name FROM messages msg
+        LEFT JOIN profiles p ON p.user_id = msg.sender_id
         WHERE msg.match_id = ? AND msg.id > ?
         ORDER BY msg.id
         """,
@@ -3993,6 +4845,7 @@ def chat_messages(match_id):
 
 @app.route("/chat/<int:match_id>/send", methods=["POST"])
 @login_required
+@rate_limited("send", limit=30, window_seconds=60, by="user")
 def send_message(match_id):
     match, _ = get_match_participants(match_id)
     wants_json = "application/json" in request.headers.get("Accept", "")
@@ -4038,8 +4891,8 @@ def send_message(match_id):
     if wants_json:
         row = db.execute(
             """
-            SELECT msg.*, p.name AS sender_name FROM messages msg
-            JOIN profiles p ON p.user_id = msg.sender_id
+            SELECT msg.*, COALESCE(p.name, 'Deleted member') AS sender_name FROM messages msg
+            LEFT JOIN profiles p ON p.user_id = msg.sender_id
             WHERE msg.id = ?
             """,
             (new_id,),
