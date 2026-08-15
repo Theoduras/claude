@@ -2,10 +2,17 @@
 {% block title %}Velvt{% endblock %}
 {% block content %}
 <div class="landing">
-  <h1>Something<br>softer than<br>swiping.</h1>
-  <p class="landing-lede">
-    Sign in and search — we pair you the moment someone is looking for you too.
-  </p>
+  <div class="landing-head">
+    <div class="landing-copy">
+      <h1>Something<br>softer than<br>swiping.</h1>
+      <p class="landing-lede">
+        Sign in and search — we pair you the moment someone is looking for you too.
+      </p>
+    </div>
+    {# decorative: the nav already carries the name, so this is hidden from
+       screen readers rather than read out a second time #}
+    <div class="landing-logo" aria-hidden="true"></div>
+  </div>
 
   <div class="landing-actions">
     {# the count is the whole promise of the product: people are waiting now #}

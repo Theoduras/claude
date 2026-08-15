@@ -2205,12 +2205,69 @@
       color: var(--text-muted);
       max-width: 22ch;
     }
+    /* Phone first: the copy, then the wordmark filling the empty middle the
+       layout already had between the lede and the buttons. */
+    .landing-head {
+      display: flex;
+      flex-direction: column;
+    }
+    /* Stacked, the wordmark is doing the work the tall opening gap used to do,
+       so the headline no longer needs to start a seventh of the way down. */
+    .landing-head h1 { margin-top: clamp(1.25rem, 6vh, 3.25rem); }
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .landing-head h1 {
+        margin-top: clamp(2.5rem, 13vh, 7.5rem);
+      }
+    }
+    .landing-logo {
+      width: min(62%, 15rem);
+      aspect-ratio: 753 / 391;
+      /* Short screens are the binding constraint, not narrow ones: cap the
+         height too. `contain` keeps the mask centred and undistorted inside
+         whatever box survives both limits. */
+      max-height: 16vh;
+      margin: clamp(0.75rem, 3vh, 2rem) auto 0;
+      /* Three stops, not two, and a background wider than the box: sliding it
+         sideways sweeps a sheen across the letters. Masking means the gradient
+         is the ink, so the sheen needs no extra element on top. */
+      background: linear-gradient(115deg, var(--violet-crest), var(--champagne) 45%, var(--violet-crest) 90%);
+      background-size: 260% 100%;
+      -webkit-mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") center / contain no-repeat;
+      mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") center / contain no-repeat;
+      filter: drop-shadow(0 8px 34px rgba(138, 43, 226, 0.42));
+      animation: landing-logo-in 900ms cubic-bezier(0.22, 1, 0.36, 1) both,
+                 landing-logo-sheen 7s ease-in-out 900ms infinite;
+    }
+    @keyframes landing-logo-in {
+      from { opacity: 0; transform: translateY(1.1rem) scale(0.94); }
+      to   { opacity: 1; transform: none; }
+    }
+    @keyframes landing-logo-sheen {
+      0%, 100% { background-position: 0% 50%; }
+      50%      { background-position: 100% 50%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      /* Still arrives, just without the travel or the endless sweep. */
+      .landing-logo {
+        animation: landing-logo-in 1ms both;
+        background-position: 25% 50%;
+      }
+    }
     .landing-actions {
       margin-top: auto;
       display: flex;
       flex-direction: column;
       gap: 0.7rem;
-      padding-top: 2.5rem;
+      /* Stacked, the wordmark sits directly above these, so the gap that used
+         to separate buttons from empty space is now separating two things. */
+      padding-top: 1.25rem;
+    }
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .landing-actions { padding-top: 2.5rem; }
+    }
+    /* Short screens: the wordmark is decoration and yields first. */
+    @media (max-height: 700px) {
+      .landing-logo { max-height: 11vh; margin-top: 0.6rem; }
     }
     .landing-live {
       display: flex;
@@ -2222,6 +2279,28 @@
       letter-spacing: 0.16em;
       text-transform: uppercase;
       color: var(--text-faint);
+    }
+    /* Wide screens have room beside the headline, so the wordmark moves there
+       and grows. Gated on :not([data-viewport="mobile"]) like the rest of the
+       shell, or the phone preview would go two-column inside its own frame. */
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .landing-head {
+        flex-direction: row;
+        align-items: center;
+        gap: clamp(1.5rem, 5vw, 4rem);
+      }
+      html:not([data-viewport="mobile"]) .landing-copy {
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+      html:not([data-viewport="mobile"]) .landing-logo {
+        flex: 1 1 0;
+        width: auto;
+        min-width: 0;
+        max-width: 26rem;
+        max-height: none;
+        margin: 0;
+      }
     }
     .landing-fine {
       margin: 0.6rem 0 0;
