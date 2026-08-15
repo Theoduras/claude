@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Velvet{% endblock %}</title>
+  <title>{% block title %}Velvt{% endblock %}</title>
   <style>
     /* ==================================================================
        VELVET — design tokens
@@ -200,13 +200,6 @@
       gap: 0.45rem;
     }
     .brand:hover { color: var(--text); }
-    .brand .mark, .landing-brand .mark {
-      width: 0.62rem;
-      height: 0.62rem;
-      border-radius: 50%;
-      background: radial-gradient(circle at 32% 28%, var(--violet-crest), var(--violet) 55%, var(--violet-deep));
-      box-shadow: 0 0 18px rgba(168, 85, 247, 0.75);
-    }
     nav a:not(.brand) {
       color: var(--text-muted);
       font-size: 0.9rem;
@@ -2401,7 +2394,7 @@
 <body>
   <div class="app-shell">
   <nav>
-    <a class="brand" href="{{ url_for('index') }}"><span class="mark"></span>Velvet</a>
+    <a class="brand" href="{{ url_for('index') }}">Velvt</a>
     {% if current_user %}
       {% if current_user['is_admin'] %}<span class="tag">Admin</span>{% endif %}
       <a class="tab-dup" href="{{ url_for('live_search') }}">Live search</a>
