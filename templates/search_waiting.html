@@ -1,105 +1,57 @@
 {% extends "base.html" %}
 {% block title %}Searching… — Velvet{% endblock %}
 {% block content %}
-<div class="card narrow" style="text-align: center;">
-  <div class="search-anim" id="search-anim">
-    <dotlottie-wc id="search-lottie"
-                  src="{{ url_for('static', filename='velvet-searching.lottie') }}"
-                  autoplay loop></dotlottie-wc>
-    <div class="pulse-heart"></div>
-  </div>
-  <p class="eyebrow" style="margin-bottom: 0.6rem;">Searching</p>
-  <h1>Feeling for a match</h1>
-  <p class="subtitle" style="margin-inline: auto;" id="status-line">
-    Looking for someone who fits — and who's looking for you.
-  </p>
+{# Same column shape as the wizard this screen follows on from: a fixed
+   header, the content centred in the space between, and the action pinned
+   to the foot. No controls -- the filters were chosen a screen ago, so what
+   is useful here is confirmation of what is running, not another form. #}
+<div class="wiz waiting">
 
-  <p class="recap" style="justify-content: center;">
-    <span>Looking for: {{ summary }}</span>
-    <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Change</a>
-  </p>
-
-  <p class="elapsed" id="elapsed">Searching for 0:00</p>
-
-  <p class="live-count">
-    {{ waiting }} searching{% if blockers.current_count is defined %}
-      &middot; {{ blockers.current_count }} fit everything below{% endif %}
-  </p>
-
-  {% if blockers.current_count == 0 %}
-    <div class="filter-list">
-      {% for row in filter_rows %}
-        <div class="filter-row-wrap {{ 'filter-off' if row.enabled == false else '' }}">
-          <div class="filter-row">
-            <div class="filter-row-main">
-              <div class="filter-row-label">{{ row.label }}</div>
-              <div class="filter-row-value">{{ row.value_text }}</div>
-              {% if row.note %}<div class="filter-note">{{ row.note }}</div>{% endif %}
-            </div>
-            {% if row.enabled is not none %}
-              <form method="post" action="{{ url_for('search_filters_toggle') }}">
-                <input type="hidden" name="filter" value="{{ row.key }}">
-                <label class="switch" aria-label="Toggle {{ row.label }}">
-                  <input type="checkbox" onchange="this.form.submit()" {% if row.enabled %}checked{% endif %}>
-                  <span class="switch-track"></span>
-                </label>
-              </form>
-            {% endif %}
-          </div>
-          {% if row.enabled != false and row.constrains and row.suggestion %}
-            <div class="filter-row" style="padding-top: 0;">
-              <div class="filter-fix" style="width: 100%;">
-                {% if row.key == 'age' %}
-                  <span class="tag tag-teal">
-                    Widen to {{ row.suggestion.age_min }}–{{ row.suggestion.age_max }}
-                    &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                  </span>
-                {% elif row.key == 'distance' %}
-                  <span class="tag tag-teal">
-                    Widen to {{ row.suggestion.radius_km }} km
-                    &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                  </span>
-                {% elif row.key == 'relationship' %}
-                  <span class="tag tag-teal">
-                    Switch to {{ row.suggestion.relationship_type }}
-                    &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                  </span>
-                {% elif row.key == 'gender' %}
-                  <span class="tag tag-teal">
-                    Switch to {{ row.suggestion.seeking }}
-                    &middot; {{ row.suggestion.count }} {{ 'person' if row.suggestion.count == 1 else 'people' }}
-                  </span>
-                {% endif %}
-                <form method="post" action="{{ url_for('search_filters_apply') }}">
-                  <input type="hidden" name="filter" value="{{ row.key }}">
-                  <button class="btn btn-secondary btn-small" type="submit">Fix</button>
-                </form>
-              </div>
-            </div>
-          {% endif %}
-        </div>
-      {% endfor %}
+  <div class="wiz-body">
+    <div class="search-anim" id="search-anim">
+      <dotlottie-wc id="search-lottie"
+                    src="{{ url_for('static', filename='velvet-searching.lottie') }}"
+                    autoplay loop></dotlottie-wc>
+      <div class="pulse-heart"></div>
     </div>
 
-    <p class="filter-note" style="text-align: left; margin: 0.7rem 0 0;">
-      Turning one off only relaxes your side — their filters still apply.
+    <p class="wiz-count">Searching</p>
+    <h1 class="wiz-q">Feeling for<br>a match</h1>
+    <p class="wiz-hint" id="status-line">
+      Looking for someone who fits — and who's looking for you.
     </p>
 
-    {% if blockers.pool and blockers.if_all_relaxed == 0 %}
-      <div class="flash" style="text-align: left;">
-        Nobody in the pool fits even with every filter above turned off. Try a
-        different connection type, or check back once more people are searching.
+    <p class="waiting-meta">
+      <span id="elapsed">0:00</span>
+      <span aria-hidden="true">·</span>
+      <span>{{ waiting }} searching</span>
+      {% if fits %}
+        <span aria-hidden="true">·</span>
+        <span class="waiting-fits">{{ fits }} fit</span>
+      {% endif %}
+    </p>
+
+    <div class="waiting-recap">
+      <p class="waiting-recap-label">Looking for</p>
+      <div class="pillset">
+        {% for chip in chips %}<span class="pill is-static">{{ chip }}</span>{% endfor %}
       </div>
+    </div>
+
+    {% if not fits %}
+      <p class="waiting-none">
+        Nobody searching right now fits all of this. You'll be paired the
+        moment someone does — or change what you're after.
+      </p>
     {% endif %}
+  </div>
 
-    <p style="margin-top: 1.1rem;">
-      <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Change values in the full form instead</a>
-    </p>
-  {% endif %}
-
-  <form method="post" action="{{ url_for('search_cancel') }}">
-    <button class="btn btn-secondary btn-block" type="submit">Stop searching</button>
-  </form>
+  <div class="wiz-nav">
+    <a class="wiz-skip" href="{{ url_for('live_search') }}">Change</a>
+    <form method="post" action="{{ url_for('search_cancel') }}" class="wiz-nav-end">
+      <button class="btn btn-secondary wiz-stop" type="submit">Stop searching</button>
+    </form>
+  </div>
 </div>
 
 <script>
@@ -107,20 +59,11 @@
   var statusLine = document.getElementById("status-line");
   var statusUrl = "{{ url_for('search_status') }}";
 
-  // ---- searching animation ----
-  // The dotLottie player is the app's only external dependency: an ES
-  // module from unpkg that in turn pulls a ~1.3 MB WASM renderer. It is
-  // injected here rather than sitting in the markup so that (a) the other
-  // pages never pay for it and (b) reduced-motion users never fetch it at
-  // all -- they keep the CSS pulse-heart, which the reduced-motion block
-  // in base.html already renders without its breathe animation.
-  //
-  // The heart stays visible until the animation can actually paint, so a
-  // slow or unreachable CDN degrades to today's screen instead of a blank
-  // box. If unpkg never answers, whenDefined() simply never resolves.
+  // ---- searching animation (see the note in the wizard: the dotLottie
+  // player is the app's only external dependency, injected rather than
+  // sitting in the markup so reduced-motion never fetches it) ----
   (function () {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
     var wrap = document.getElementById("search-anim");
     var player = document.createElement("script");
     player.type = "module";
@@ -133,12 +76,7 @@
       revealed = true;
       wrap.classList.add("anim-ready");
     }
-
     customElements.whenDefined("dotlottie-wc").then(function () {
-      // Defined only means the element upgraded -- the WASM and the 722 KB
-      // asset may still be in flight, so wait for the instance's own load
-      // event when it is exposed, and keep a timer as the backstop so the
-      // fallback can never get stuck behind an event that never fires.
       var el = document.getElementById("search-lottie");
       if (el && el.dotLottie && el.dotLottie.addEventListener) {
         el.dotLottie.addEventListener("load", reveal);
@@ -149,13 +87,12 @@
 
   // One honest number, so a screen that is otherwise motionless reads as
   // running rather than stuck. Counts from page load, which is when this
-  // search actually started (the criteria POST redirects straight here).
+  // search actually started (the wizard POST redirects straight here).
   var elapsedEl = document.getElementById("elapsed");
   var startedAt = Date.now();
   var elapsedTimer = setInterval(function () {
     var s = Math.floor((Date.now() - startedAt) / 1000);
-    elapsedEl.textContent = "Searching for " + Math.floor(s / 60) + ":"
-      + String(s % 60).padStart(2, "0");
+    elapsedEl.textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
   }, 1000);
 
   // The pairing attempt below only starts returning a match once the search

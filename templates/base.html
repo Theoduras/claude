@@ -421,129 +421,6 @@
       cursor: pointer;
     }
 
-    /* ---------- filter list: live-search's "what's blocking me" panel -- */
-
-    /* A toggle switch, not a checkbox: this is a persistent setting you flip
-       (a filter is on/off), not a one-off selection in a group. Violet when
-       on, because it's the searcher's own control over their own criteria —
-       the same "violet acts" role a checked .checkgroup box plays. */
-    .switch {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      flex-shrink: 0;
-      width: 2.6rem;
-      height: 1.5rem;
-      cursor: pointer;
-    }
-    .switch input {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      opacity: 0;
-      cursor: pointer;
-      /* .switch-track is also inset:0 and comes later in the source, so
-         without this it paints over the input and takes the clicks. The
-         label association hides that from a human, but the input should be
-         the hit target it looks like. */
-      z-index: 1;
-    }
-    .switch-track {
-      position: absolute;
-      inset: 0;
-      border-radius: 999px;
-      background: rgba(8, 5, 14, 0.7);
-      border: 1px solid var(--ink-hairline);
-      transition: background 0.18s ease, border-color 0.18s ease;
-    }
-    .switch-track::before {
-      content: "";
-      position: absolute;
-      /* Track is 1.5rem tall, thumb 1.1rem, so (1.5 - 1.1) / 2 centres it —
-         and the checked state's translateX(1.1rem) is exactly the travel
-         left over. rem rather than px or em so the whole switch scales as
-         one piece; em would resolve against whatever font-size it inherits,
-         which is not the scale the track is drawn on. */
-      top: 0.2rem;
-      left: 0.2rem;
-      width: 1.1rem;
-      height: 1.1rem;
-      border-radius: 50%;
-      background: var(--text-faint);
-      transition: transform 0.18s ease, background 0.18s ease;
-    }
-    .switch input:checked ~ .switch-track {
-      background: linear-gradient(150deg, rgba(138, 43, 226, 0.55), rgba(59, 11, 102, 0.7));
-      border-color: var(--violet-crest);
-    }
-    .switch input:checked ~ .switch-track::before {
-      transform: translateX(1.1rem);
-      background: #F0E2FF;
-    }
-    .switch input:focus-visible ~ .switch-track {
-      outline: 2px solid var(--champagne);
-      outline-offset: 2px;
-    }
-
-    .filter-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-      margin: 1rem 0;
-      border: 1px solid var(--ink-hairline);
-      border-radius: var(--radius-sm);
-      overflow: hidden;
-    }
-    .filter-row {
-      display: flex;
-      align-items: center;
-      gap: 0.9rem;
-      padding: 0.85rem 1rem;
-    }
-    .filter-row + .filter-row {
-      border-top: 1px solid var(--ink-hairline);
-    }
-    .filter-row-main {
-      flex: 1;
-      min-width: 0;
-    }
-    .filter-row-label {
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-      color: var(--text-faint);
-    }
-    .filter-row-value {
-      font-size: 0.95rem;
-      margin-top: 0.15rem;
-    }
-    /* An off filter is still legible, just visibly inert. */
-    .filter-off .filter-row-value { color: var(--text-muted); text-decoration: line-through; }
-    .filter-off .filter-row-label { color: var(--text-faint); opacity: 0.6; }
-
-    .filter-note {
-      font-size: 0.78rem;
-      color: var(--text-faint);
-      margin-top: 0.3rem;
-      font-style: italic;
-    }
-
-    /* Fix action: teal not violet (the existing .btn-secondary), because
-       fixing a filter is about the pool of other people fitting, the same
-       "teal responds" role live-state chips already play. */
-    .filter-fix {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      margin-top: 0.5rem;
-      padding-top: 0.5rem;
-      border-top: 1px dashed var(--ink-hairline);
-    }
-    .filter-fix form { margin: 0; }
-
     /* ---------- buttons: sheen sweeps as the pile is brushed ---------- */
     .btn {
       position: relative;
@@ -974,6 +851,70 @@
       font-weight: 600;
       letter-spacing: 0.01em;
     }
+    /* ---------- waiting screen ---------------------------------------
+       Borrows the wizard's column so the two screens read as one flow: the
+       step chrome (.wiz-count/.wiz-q/.wiz-hint) is reused verbatim and only
+       the parts unique to waiting are defined here. Everything is stated
+       rather than editable -- the filters were set on the previous screen. */
+    .waiting .wiz-body { justify-content: flex-start; padding-top: 0.5rem; }
+    .waiting .wiz-q { margin-bottom: 0.7rem; }
+    .waiting .search-anim { margin-bottom: 0.2rem; }
+    /* smaller than the wizard's, so the summary below it clears the fold */
+    .waiting .search-anim dotlottie-wc { width: min(210px, 58%); }
+    .waiting .pulse-heart { width: 3.4rem; height: 3.4rem; }
+
+    .waiting-meta {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin: 0 0 1.1rem;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .waiting-fits { color: var(--teal-crest); }
+
+    .waiting-recap-label {
+      margin: 0 0 0.55rem;
+      text-align: center;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .waiting-recap .pillset { justify-content: center; margin-bottom: 0; }
+    /* the chips here report, they do not toggle -- no hover, no pointer */
+    .pill.is-static {
+      cursor: default;
+      color: var(--text);
+      border-color: rgba(168, 85, 247, 0.4);
+      background: rgba(138, 43, 226, 0.14);
+    }
+    .waiting-none {
+      margin: 1.1rem 0 0;
+      text-align: center;
+      font-size: 0.84rem;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    .wiz-stop { width: auto; padding-inline: 1.4rem; }
+
+    /* the waiting screen carries an animation the wizard steps do not, so
+       it needs its own trim to clear a short screen without scrolling */
+    @media (max-height: 740px) {
+      .waiting .search-anim dotlottie-wc { width: min(150px, 44%); }
+      .waiting .pulse-heart { width: 2.6rem; height: 2.6rem; }
+      .waiting .wiz-q { margin-bottom: 0.5rem; }
+      .waiting-meta { margin-bottom: 0.7rem; }
+      .waiting-recap-label { margin-bottom: 0.4rem; }
+      .waiting-none { margin-top: 0.7rem; font-size: 0.78rem; }
+      .waiting .pillset { gap: 0.35rem; }
+      .waiting .pill { padding: 0.35rem 0.7rem; font-size: 0.78rem; }
+    }
+
     /* ---------- bottom sheet (the wizard's "More" overlay) ------------
        Anchored to the bottom of the screen and scrollable inside, so the
        long list lives here instead of making the step behind it scroll. */
@@ -1967,23 +1908,7 @@
 
     /* live telemetry: counts that tick while you watch. Monospace and
        tabular so a changing digit never reflows the line. */
-    .live-count {
-      margin: 0.9rem 0 0.25rem;
-      font-family: var(--mono);
-      font-variant-numeric: tabular-nums;
-      font-size: 0.75rem;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--champagne);
-    }
     /* tabular-nums so the ticking seconds don't shift the line's width */
-    .elapsed {
-      margin: 0.8rem 0 0;
-      font-family: var(--mono);
-      font-variant-numeric: tabular-nums;
-      font-size: 0.8rem;
-      color: var(--text-muted);
-    }
 
     /* ---------- landing: the logged-out hero -------------------------
        The hero sits high and the actions sink to the bottom of the fold,

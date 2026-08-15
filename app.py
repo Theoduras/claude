@@ -2522,115 +2522,34 @@ def search_blockers(mine, others):
     }
 
 
-def search_summary_text(search):
-    """One-line human summary of who/age/distance for a live search row.
+def search_summary_chips(search):
+    """Short labels describing what a live search is actually looking for.
 
-    Shown on the waiting screen so a search that skipped screen 2 (or one
-    whose filters someone forgot they'd set) still states plainly what is
-    actually running, rather than leaving it to the expandable filter list.
+    The waiting screen states this back rather than offering controls: the
+    filters were just chosen a screen ago, so the useful thing here is
+    confirmation, not another form. Anything left at "no preference" is
+    omitted instead of shown as an empty row -- a filter that is not
+    narrowing anything is not worth the space.
     """
-    seeking = search["seeking"] or "Anyone"
-    age = f"{search['age_min']}–{search['age_max']}"
-    if not search["location"]:
-        distance = "anywhere"
-    elif search["radius_km"] >= RADIUS_MAX_KM:
-        distance = "any distance"
+    chips = []
+    if search["relationship_type"]:
+        chips.append(search["relationship_type"])
+    chips.append(search["seeking"] or "Anyone")
+    if search["use_age"]:
+        chips.append(f"{search['age_min']}–{search['age_max']}")
     else:
-        distance = f"within {search['radius_km']} km"
-    return f"{seeking}, {age}, {distance}"
-
-
-def search_filter_rows(mine, others, blockers):
-    """One dict per filter parameter, for a uniform template loop.
-
-    Each row: key, label, value_text, enabled (None when not toggleable),
-    constrains (does this filter currently reject someone?), note (an
-    honest caveat, if any), and suggestion (the concrete fix, if any).
-    Interests filters like the rest now (searches_compatible() requires a
-    shared keyword when it's set) and also still breaks ties in try_pair()
-    among whoever's left.
-    """
-    rows = []
-
-    rows.append({
-        "key": "gender",
-        "label": "Who I'm looking for",
-        "value_text": mine["seeking"] or "Anyone",
-        "enabled": mine.get("use_gender", True),
-        "constrains": blockers["if_any_gender"] > blockers["current_count"],
-        "note": None,
-        "suggestion": blockers["gender_suggestions"][0]
-            if blockers["gender_suggestions"] else None,
-    })
-
-    rows.append({
-        "key": "age",
-        "label": "Age range",
-        "value_text": f"{mine['age_min']}–{mine['age_max']}",
-        "enabled": mine.get("use_age", True),
-        "constrains": blockers["if_any_age"] > blockers["current_count"],
-        "note": None,
-        "suggestion": blockers["age_suggestion"],
-    })
-
-    rows.append({
-        "key": "relationship",
-        "label": "Connection",
-        "value_text": mine["relationship_type"] or "Anything",
-        "enabled": mine.get("use_relationship", True),
-        "constrains": blockers["if_any_connection"] > blockers["current_count"],
-        "note": None,
-        "suggestion": blockers["relationship_suggestions"][0]
-            if blockers["relationship_suggestions"] else None,
-    })
-
-    if not mine["location"]:
-        distance_value = "Anywhere"
-        distance_note = None
-    elif mine["radius_km"] >= RADIUS_MAX_KM:
-        distance_value = f"{mine['location']} · any distance"
-        distance_note = None
-    else:
-        distance_value = f"{mine['location']} · within {mine['radius_km']} km"
-        distance_note = None
-    if mine["location"] and search_coords(mine) is None:
-        distance_note = "We don't recognise this city, so distance isn't being applied."
-    rows.append({
-        "key": "distance",
-        "label": "Distance",
-        "value_text": distance_value,
-        "enabled": mine.get("use_distance", True),
-        "constrains": blockers["if_any_distance"] > blockers["current_count"],
-        "note": distance_note,
-        "suggestion": blockers["distance_suggestion"],
-    })
-
-    rows.append({
-        "key": "physical",
-        "label": "Physical traits",
-        "value_text": physical_summary(mine) or "No preferences set",
-        "enabled": mine.get("use_physical", True),
-        "constrains": blockers["if_any_physical"] > blockers["current_count"],
-        "note": None,
-        "suggestion": None,
-    })
-
-    rows.append({
-        "key": "interests",
-        "label": "Interests",
-        "value_text": mine["interests"] or "None listed",
-        # No use_interests column to flip here (there's nothing to toggle
-        # back to -- the filter *is* whatever text is stored), so this
-        # stays read-only; change it from the full form instead.
-        "enabled": None,
-        "constrains": blockers["if_any_interests"] > blockers["current_count"],
-        "note": "Requires sharing at least one interest, and also decides who "
-            "you're paired with first among the people who do."
-            if mine["interests"] else None,
-        "suggestion": None,
-    })
-
-    return rows
+        chips.append("Any age")
+    if search["location"]:
+        chips.append(search["location"])
+    for part in (search["interests"] or "").split(","):
+        part = part.strip()
+        if part:
+            chips.append(part)
+    for part in (search[PREF_BODY_TYPES_FIELD] or "").split(","):
+        part = part.strip()
+        if part:
+            chips.append(part)
+    return chips
 
 
 @app.route("/search/waiting")
@@ -2649,11 +2568,9 @@ def search_waiting():
     return render_template(
         "search_waiting.html",
         search=mine,
-        summary=search_summary_text(mine),
+        chips=search_summary_chips(mine),
         waiting=len(others),
-        radius_max=RADIUS_MAX_KM,
-        blockers=blockers,
-        filter_rows=search_filter_rows(mine, others, blockers),
+        fits=blockers.get("current_count", 0),
     )
 
 
@@ -2697,94 +2614,6 @@ def search_cancel():
     db.commit()
     flash("Search stopped.")
     return redirect(url_for("live_search"))
-
-
-# Whitelisted so the toggle route can build SQL identifiers from a request
-# value without ever interpolating the value itself — only the mapped
-# column name (one of these four fixed strings) reaches the query.
-FILTER_TOGGLE_COLUMNS = {
-    "gender": "use_gender",
-    "age": "use_age",
-    "relationship": "use_relationship",
-    "distance": "use_distance",
-    "physical": "use_physical",
-}
-
-
-@app.route("/search/filters/toggle", methods=["POST"])
-@login_required
-def search_filters_toggle():
-    """Flip one filter on/off without touching the value behind it."""
-    user_id = session["user_id"]
-    column = FILTER_TOGGLE_COLUMNS.get(request.form.get("filter", ""))
-    if column is None:
-        flash("Unknown filter.")
-        return redirect(url_for("search_waiting"))
-
-    db = get_db()
-    db.execute(
-        f"UPDATE searches SET {column} = NOT {column} "
-        "WHERE user_id = ? AND status = 'waiting'",
-        (user_id,),
-    )
-    db.commit()
-    # Disabling a filter can immediately make an existing waiting searcher
-    # compatible, so retry pairing now rather than waiting for the next poll.
-    try_pair(user_id)
-    return redirect(url_for("search_waiting"))
-
-
-@app.route("/search/filters/apply", methods=["POST"])
-@login_required
-def search_filters_apply():
-    """Apply the current suggested fix for one filter.
-
-    The suggestion is recomputed here from the live pool rather than
-    trusted from the submitted form, so a stale page can't write a value
-    that no longer helps (or never did).
-    """
-    user_id = session["user_id"]
-    key = request.form.get("filter", "")
-
-    mine, others = _search_pool(user_id)
-    if mine is None or mine["status"] != "waiting":
-        return redirect(url_for("search_waiting"))
-    blockers = search_blockers(mine, others)
-
-    db = get_db()
-    if key == "age" and blockers["age_suggestion"]:
-        sug = blockers["age_suggestion"]
-        db.execute(
-            "UPDATE searches SET age_min = ?, age_max = ? "
-            "WHERE user_id = ? AND status = 'waiting'",
-            (sug["age_min"], sug["age_max"], user_id),
-        )
-    elif key == "distance" and blockers["distance_suggestion"]:
-        sug = blockers["distance_suggestion"]
-        db.execute(
-            "UPDATE searches SET radius_km = ? WHERE user_id = ? AND status = 'waiting'",
-            (sug["radius_km"], user_id),
-        )
-    elif key == "relationship" and blockers["relationship_suggestions"]:
-        sug = blockers["relationship_suggestions"][0]
-        db.execute(
-            "UPDATE searches SET relationship_type = ? "
-            "WHERE user_id = ? AND status = 'waiting'",
-            (sug["relationship_type"], user_id),
-        )
-    elif key == "gender" and blockers["gender_suggestions"]:
-        sug = blockers["gender_suggestions"][0]
-        db.execute(
-            "UPDATE searches SET seeking = ? WHERE user_id = ? AND status = 'waiting'",
-            (sug["seeking"], user_id),
-        )
-    else:
-        flash("That suggestion is no longer available — refresh and try again.")
-        return redirect(url_for("search_waiting"))
-
-    db.commit()
-    try_pair(user_id)
-    return redirect(url_for("search_waiting"))
 
 
 def get_match_participants(match_id):

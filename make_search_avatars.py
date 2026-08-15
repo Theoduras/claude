@@ -25,6 +25,10 @@ from math import sqrt
 
 LOTTIE_PATH = "static/velvet-searching.lottie"
 
+# In the artwork's own units, where a card is 402 wide -- about 12%, which
+# lands close to the app's .opt rows once the animation is scaled down.
+CARD_CORNER_RADIUS = 48
+
 # The image layers anchor at [509, 664] -- the exact centre of a 1018x1328
 # asset -- and the asset entries declare those dimensions. Both must stay as
 # they are: the layer scale (~39.46%) is calibrated to them, so shipping
@@ -131,6 +135,85 @@ def make_avatar(tint, glyph_rgb=None):
     return encode_png(IMG_W, IMG_H, rows)
 
 
+def round_card_corners(layers, radius):
+    """Give the avatar cards rounded corners, matching the app's own radii.
+
+    The stock artwork frames each avatar in a hard-cornered rectangle, drawn
+    twice per card: once as the alpha matte that crops the image ("(Mask)")
+    and once as the visible stroke around it ("(Border)"). Both are animated
+    across 14 keyframes, so rather than rewriting every path this inserts
+    Lottie's rounded-corners modifier ("rd") into each shape list, which the
+    renderer applies to whatever the path happens to be on a given frame.
+
+    Idempotent: a second run finds the modifier already there and leaves it.
+    """
+    added = 0
+    for layer in layers:
+        name = layer.get("nm") or ""
+        if "(Mask)" not in name and "(Border)" not in name:
+            continue
+        _drop_closing_duplicate(layer.get("shapes", []))
+        for shapes in _shape_lists(layer.get("shapes", [])):
+            if any(item.get("ty") == "rd" for item in shapes):
+                continue
+            last_path = max(
+                (i for i, item in enumerate(shapes) if item.get("ty") == "sh"),
+                default=None,
+            )
+            if last_path is None:
+                continue
+            shapes.insert(last_path + 1, {
+                "ty": "rd", "nm": "", "hd": False,
+                "r": {"a": 0, "k": radius},
+            })
+            added += 1
+    return added
+
+
+def _drop_closing_duplicate(node):
+    """Remove a path's repeated closing vertex.
+
+    The stock rectangles list five points for four corners, repeating the
+    first to close the loop -- harmless on its own, since the paths are
+    already flagged closed. But it leaves a zero-length segment at that
+    corner, and the rounded-corners modifier has no direction to work with
+    there, so one corner per card would stay square while the other three
+    rounded.
+    """
+    if isinstance(node, dict):
+        verts = node.get("v")
+        if (
+            isinstance(verts, list) and len(verts) > 2
+            and isinstance(node.get("i"), list) and isinstance(node.get("o"), list)
+            and verts[0] == verts[-1]
+        ):
+            # length captured up front: `verts` is node["v"] itself, so
+            # popping it first would shrink what i/o are compared against
+            # and leave them one tangent longer than the vertex list.
+            count = len(verts)
+            for key in ("v", "i", "o"):
+                if isinstance(node.get(key), list) and len(node[key]) == count:
+                    node[key].pop()
+        for value in node.values():
+            _drop_closing_duplicate(value)
+    elif isinstance(node, list):
+        for value in node:
+            _drop_closing_duplicate(value)
+
+
+def _shape_lists(shapes):
+    """Every list of shape items in a layer: the top level, plus any groups.
+
+    The border draws its path straight in the layer's own shape list while
+    the mask wraps its path in a group, so the modifier has to be placed in
+    whichever list actually holds the path.
+    """
+    yield shapes
+    for item in shapes:
+        if item.get("ty") == "gr" and isinstance(item.get("it"), list):
+            yield from _shape_lists(item["it"])
+
+
 def recolour(node, swaps):
     """Walk the animation JSON, retargeting literal colour arrays.
 
@@ -195,6 +278,10 @@ def main():
     }
     hits = recolour(anim.get("layers", []), swaps)
     print(f"  recoloured {hits} colour node(s)")
+
+    # --- 2b. rounded cards, to match the app's own corner radii ----------
+    rounded = round_card_corners(anim.get("layers", []), CARD_CORNER_RADIUS)
+    print(f"  rounded {rounded} card outline(s)")
 
     # --- 3. repack, preserving entry names and order ----------------------
     import io
