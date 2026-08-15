@@ -196,10 +196,36 @@
       color: var(--text);
       margin-right: auto;
       display: flex;
-      align-items: baseline;
+      /* centre, not baseline: the wordmark is a masked box and has no text
+         baseline of its own. */
+      align-items: center;
       gap: 0.45rem;
     }
     .brand:hover { color: var(--text); }
+    /* The wordmark is painted, not placed: the source art is dark aubergine on
+       transparent, which would all but vanish against this bar. Masking with it
+       and filling with the palette keeps the letterforms exactly as drawn while
+       the colour stays ours. aspect-ratio comes from the file's own 753x391, so
+       setting the height alone can never stretch it.
+
+       .brand-word is the accessible name -- clipped rather than display:none so
+       screen readers, and a browser that somehow drops the mask, still say Velvt. */
+    .brand-logo {
+      display: block;
+      height: 1.6rem;
+      aspect-ratio: 753 / 391;
+      background: linear-gradient(115deg, var(--violet-crest), var(--champagne) 95%);
+      -webkit-mask: url("{{ url_for('static', filename='velvet-logo-small.png') }}") left center / contain no-repeat;
+      mask: url("{{ url_for('static', filename='velvet-logo-small.png') }}") left center / contain no-repeat;
+    }
+    .brand-word {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
     nav a:not(.brand) {
       color: var(--text-muted);
       font-size: 0.9rem;
@@ -2394,7 +2420,7 @@
 <body>
   <div class="app-shell">
   <nav>
-    <a class="brand" href="{{ url_for('index') }}">Velvt</a>
+    <a class="brand" href="{{ url_for('index') }}"><span class="brand-logo"></span><span class="brand-word">Velvt</span></a>
     {% if current_user %}
       {% if current_user['is_admin'] %}<span class="tag">Admin</span>{% endif %}
       <a class="tab-dup" href="{{ url_for('live_search') }}">Live search</a>
