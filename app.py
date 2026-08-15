@@ -196,6 +196,11 @@ TERMS_VERSION = "2026-08-15"
 PRIVACY_VERSION = "2026-08-15"
 SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "support@velvt.example")
 
+# Shared secret for the scheduled-task endpoint. Unset means the endpoint
+# refuses to run at all, which is the right default for something that
+# permanently erases accounts.
+TASK_TOKEN = os.environ.get("TASK_TOKEN", "").strip()
+
 # --- safety -------------------------------------------------------------
 # Offered on the report form. Ordered by how urgently a moderator should
 # look, not alphabetically -- the top of this list is what gets triaged
@@ -225,8 +230,10 @@ ADMIN_ACTIONS = {
 CSRF_FIELD = "csrf_token"
 CSRF_HEADER = "X-CSRF-Token"
 CSRF_MAX_AGE_SECONDS = 60 * 60 * 12
-# The Cloud Run startup probe posts nothing and carries no cookie.
-CSRF_EXEMPT_PATHS = {"/healthz"}
+# Neither caller is a browser with a session: the Cloud Run startup probe,
+# and the scheduler that drives the deletion purge (which authenticates with
+# a shared secret of its own instead).
+CSRF_EXEMPT_PATHS = {"/healthz", "/tasks/purge-deletions"}
 CSRF_SERIALIZER = URLSafeTimedSerializer(app.secret_key, salt="velvt-csrf")
 
 # --- outbound mail ------------------------------------------------------
@@ -3416,6 +3423,22 @@ def require_profile():
     return me if me is not None and me["name"] else None
 
 
+def unverified_email_block():
+    """Why the caller can't start a search yet, or None.
+
+    Verification gates searching rather than signing in: someone whose
+    address bounced still needs to reach settings to fix it. And it only
+    applies once mail is actually configured, so a deployment with no
+    provider does not lock everyone out of the feature the app exists for.
+    """
+    if not RESEND_API_KEY:
+        return None
+    me = current_user()
+    if me is not None and me["email"] and me["email_verified_at"] is None:
+        return "Confirm your email address before you start searching."
+    return None
+
+
 def save_search(
     user_id, *, seeking, age_min, age_max, relationship_type, interests,
     location, lat, lng, radius_km,
@@ -3498,6 +3521,11 @@ def live_search():
     own distance filters still apply to you, which is why the place is still
     worth collecting.
     """
+    blocked = unverified_email_block()
+    if blocked:
+        flash(blocked)
+        return redirect(url_for("settings"))
+
     me = require_profile()
     if me is None:
         flash("Fill in your profile first so others can match with you.")
@@ -3617,6 +3645,11 @@ def search_criteria():
     """
     db = get_db()
     user_id = current_uid()
+    blocked = unverified_email_block()
+    if blocked:
+        flash(blocked)
+        return redirect(url_for("settings"))
+
     me = require_profile()
     if me is None:
         flash("Fill in your profile first so others can match with you.")
@@ -3830,6 +3863,10 @@ def search_preview():
     the count and suggestions here are guaranteed consistent with what
     /search/waiting will show after you actually start searching.
     """
+    blocked = unverified_email_block()
+    if blocked:
+        return {"error": blocked}, 400
+
     me = require_profile()
     if me is None:
         return {"error": "profile incomplete"}, 400
@@ -4953,6 +4990,27 @@ def startup():
     except Exception as exc:  # surfaced via /healthz, logged for Cloud Run
         STARTUP_ERROR = exc
         app.logger.exception("startup failed: cannot reach the database")
+
+
+@app.post("/tasks/purge-deletions")
+def run_purge_deletions():
+    """Finish deletions whose grace period has run out.
+
+    There is no background worker here -- Cloud Run only runs while it is
+    serving a request -- so this is an endpoint for Cloud Scheduler to hit
+    daily, authenticated with a shared secret rather than a login.
+
+    Without TASK_TOKEN set it refuses outright: an open endpoint that
+    permanently erases accounts is worse than one nobody calls. Exempt from
+    CSRF because the caller is a scheduler, not a browser with a session.
+    """
+    if not TASK_TOKEN:
+        return "task endpoint disabled: TASK_TOKEN is not set", 503
+    presented = request.headers.get("X-Task-Token", "")
+    if not secrets.compare_digest(presented, TASK_TOKEN):
+        return "forbidden", 403
+    purged = purge_due_deletions()
+    return {"purged": purged}, 200
 
 
 @app.get("/healthz")

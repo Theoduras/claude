@@ -3,6 +3,14 @@
 Flask 3 + **PostgreSQL** dating app, server-rendered Jinja. Deps: `flask`, `requests`,
 `gunicorn`, `psycopg[binary]`, `psycopg-pool` — no ORM, no LLM SDK.
 
+The dependency list is deliberately short, so things that usually arrive as a library are
+hand-rolled instead: CSRF on `itsdangerous` (a hard Flask dependency, so already
+installed — do **not** add it to `requirements.txt`), rate limiting on a Postgres table,
+and transactional email as an HTTPS call to Resend through `requests`. Postgres-backed
+rate limiting is also the *correct* choice here, not just the dependency-free one: Cloud
+Run runs many instances against one database, and an in-process counter would hand an
+attacker the whole budget again on every instance they reached.
+
 ## Local development
 
 ```powershell
@@ -10,14 +18,35 @@ docker compose up -d      # Postgres, once per boot
 .\dev.ps1                 # venv + seed + Flask with the reloader
 # edit -> save -> refresh the browser. No restart, no git.
 python smoke.py           # hit every GET route, report 5xxs
+python check_auth.py      # 51 behaviour checks: auth, CSRF, safety, deletion
+python check_bots.py      # demo members never reach a real person's search pool
 ```
+
+`smoke.py` proves routes render; `check_auth.py` proves the security-relevant ones
+*behave* — session revocation, the age gate, CSRF rejection, blocking, and what account
+deletion does to the other person's chat. `check_bots.py` re-runs itself with
+`ALLOW_BOT_MATCHES` both ways, since the flag is read at import.
+
+Run all three after touching auth, search eligibility, or anything under `/settings`.
+Both check suites cancel waiting searches to control the pool, so re-seed with
+`python seed_demo.py` before clicking around afterwards.
 
 **Local iteration does not commit.** Work on disk until the feature is actually
 done, then `git add -p` and commit once. Do not push work-in-progress.
 
 `.env` (from `.env.example`) carries `DATABASE_URL`, `APP_SECRET_KEY`, `FLASK_DEBUG`,
-`AUTO_LOGIN`, and pool sizing. Pinning `APP_SECRET_KEY` matters: `app.py:46` falls back
-to a random key, which logs you out on every reloader restart.
+`AUTO_LOGIN`, `ALLOW_BOT_MATCHES`, the Resend settings, and pool sizing.
+
+**`FLASK_DEBUG` selects the whole personality.** It defaults to *off*, so anything that
+forgets to set it gets production behaviour. With it off: `APP_SECRET_KEY` and
+`APP_ADMIN_PASSWORD` must be set or the app refuses to serve and fails `/healthz`
+(a misconfigured revision must never replace a working one), `AUTO_LOGIN` is ignored, and
+session cookies are `Secure`. Pin `APP_SECRET_KEY` locally too — the dev fallback is
+fixed, but changing it logs you out.
+
+**`ALLOW_BOT_MATCHES=1` is local-only.** Without it the seeded demo members are excluded
+from every search pool, which is what production needs and what makes local testing
+impossible — so `.env.example` turns it on.
 
 `setup.ps1` is first-time bootstrap only (clone + install). Use `dev.ps1` day to day.
 
@@ -31,9 +60,13 @@ Keep replies concise; prefer the smallest diff that does the job.
 
 ## Layout
 
-- `app.py` — **~3,000 lines**, single module: all routes, DB access, and helpers
-- `templates/` — 16 Jinja templates, all extending `base.html`
+- `app.py` — **~5,000 lines**, single module: all routes, DB access, and helpers
+- `templates/` — 27 Jinja templates, all extending `base.html`
 - `docs/style-guide.html` — velvet-textured design system; `docs/deploy-gcp.md` — Cloud Run
+- `docs/launch-readiness.html` — the pre-launch audit these changes came from, with what
+  is still outstanding (image scanning, security headers, retention purge, passkeys,
+  selfie verification, onboarding rework)
+- `check_auth.py` — behaviour checks for auth, CSRF, safety and deletion
 - `seed_demo.py` — 40 demo members, all live-searching and `is_bot=TRUE` so they reply in
   chat. Idempotent; `--reset` to rebuild
 - `smoke.py`, `dev.ps1`, `docker-compose.yml` — local dev only, not deployed
@@ -54,8 +87,33 @@ admin account. It runs at import time, so importing `app` bootstraps a fresh dat
 A shim gives psycopg connections the old sqlite3 shape (`app.py:195`) — `?` placeholders
 in query strings are rewritten, so **write `?`, not `%s`**, in `db.execute(...)` calls.
 
-Tables: `users` (+`is_bot`), `profiles`, `matches` (+`status`/`paired_at`/`decision_a`/
-`decision_b`/`ended_at`), `searches` (+`lat`/`lng`/`use_*`), `messages`, `photos`.
+Tables: `users` (+`is_bot`/`email`/`dob`/`status`), `profiles`, `matches`
+(+`status`/`paired_at`/`decision_a`/`decision_b`/`ended_at`), `searches`
+(+`lat`/`lng`/`use_*`), `messages`, `photos`, `sessions`, `email_tokens`, `blocks`,
+`reports`, `admin_actions`, `legal_acceptances`, `consents`, `rate_hits`.
+
+**Login is not the cookie.** The cookie carries an opaque token; `sessions` is the
+authority, so logout, password reset and suspension all take effect immediately and on
+every device. `current_user()` resolves it once per request into `g` (via the
+`load_current_user` before-request hook, which also does the throttled `last_seen_at`
+write — it commits, which is why it can't live inside `current_user()` itself). There is
+no `session["user_id"]` any more; use `current_uid()`.
+
+`users.status` is `active` / `suspended` / `banned` / `pending_deletion` / `deleted`.
+Only `LOGIN_ALLOWED_STATUSES` may hold a session — `pending_deletion` is in that list on
+purpose, since a grace period you can't sign in to cancel is not a grace period.
+
+**Deleting an account anonymises the row rather than removing it.** Every foreign key into
+`users` cascades, so a `DELETE` would take the `matches` with it and erase the *other*
+participant's conversation. `purge_due_deletions()` destroys the profile, photos,
+searches, sessions, tokens and consents, nulls `messages.sender_id`, and leaves a
+numbered tombstone that renders as "Deleted member". Anything joining `profiles` from a
+message or a match must therefore be a `LEFT JOIN`.
+
+Three queries select the waiting search pool — `try_pair()`, `_search_pool()` and
+`search_preview()` — plus the landing page's count. They all interpolate
+`CANDIDATE_ELIGIBLE_SQL` and `NOT_BLOCKED_SQL`. **Keep them in step:** if the preview and
+the matcher disagree, the preview promises candidates the matcher then refuses.
 
 Starting a search is **two screens**: `/search` picks the connection type and the location
 + radius (carried to screen 2 in `session["search_draft"]`), `/search/criteria` asks which
@@ -87,12 +145,25 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 
 | Area | Routes |
 |---|---|
-| misc | `/lab`, `/` |
-| auth | `/register`, `/login`, `/logout` |
+| misc | `/lab` (admin), `/`, `/healthz`, `/tasks/purge-deletions` |
+| auth | `/register`, `/login`, `/logout`, `/verify/<token>`, `/verify/resend`, `/forgot`, `/reset/<token>` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
-| search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/status`, `/search/cancel`, `/search/filters/toggle`, `/search/filters/apply` |
-| match lifecycle | `/match/<id>/state`, `/match/<id>/decide` |
+| legal | `/terms`, `/privacy`, `/imprint`, `/safety` |
+| settings | `/settings`, `…/password`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/export`, `…/delete`, `…/delete/cancel` |
+| safety | `/report/<id>`, `/block/<id>`, `/unblock/<id>` |
+| moderation | `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate` |
+| search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/status`, `/search/cancel` |
+| match lifecycle | `/match/<id>/state`, `/match/<id>/decide`, `/match/<id>/skip-reveal` |
 | chat | `/chats`, `/chat/<id>`, `…/messages`, `…/send` |
+
+Every POST needs a CSRF token: `{{ csrf_token() }}` in a hidden `csrf_token` field, or an
+`X-CSRF-Token` header for `fetch` (`window.velvtCsrf()` in `base.html`). A new form
+without one fails with a 400, not silently.
+
+`/tasks/purge-deletions` is for a scheduler, not a browser: it authenticates with
+`X-Task-Token` against `TASK_TOKEN` and refuses outright when that is unset. Cloud Run
+has no background worker, so without something calling this daily, deletions never
+actually complete.
 
 `/find`, `/find/results`, `/matches` and `/browse` were removed — pairing happens only
 through live search now. `create_match()`, `match_score()` and `genders_compatible()`

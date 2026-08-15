@@ -172,6 +172,11 @@
           </p>
         </div>
         {% if phase == 'active' %}<span class="tag">Matched</span>{% endif %}
+        {# Always within reach while a conversation is live — needing it is
+           exactly the moment you should not have to go looking. #}
+        <a class="chat-head-report"
+           href="{{ url_for('report_user', user_id=other['user_id'], match_id=match['id']) }}"
+           title="Report or block {{ other['name'] }}">Report</a>
       </div>
 
       {% if phase == 'timed' %}

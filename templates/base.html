@@ -2092,6 +2092,16 @@
     /* min-width:0 so a long name ellipsises instead of shoving the pill
        off the end of the row */
     .chat-head-main { flex: 1; min-width: 0; }
+    /* Quiet until wanted: present on every live conversation, but never
+       competing with the person's name for attention. */
+    .chat-head-report {
+      flex: 0 0 auto;
+      color: var(--text-faint);
+      font-size: 0.78rem;
+      text-decoration: none;
+      padding: 0.2rem 0.45rem;
+    }
+    .chat-head-report:hover { color: var(--violet-crest); text-decoration: underline; }
     .chat-head-name {
       display: block;
       color: var(--text);

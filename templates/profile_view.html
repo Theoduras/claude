@@ -106,6 +106,14 @@
     <div class="wiz-nav">
       <a class="btn btn-secondary" href="{{ url_for('edit_profile') }}">Edit profile</a>
     </div>
+  {% else %}
+    {# Reachable from any profile, not only a current match: the person you
+       most need to report is often the one who already walked away. #}
+    <p class="hint" style="margin-top: 1.6rem; text-align: center;">
+      <a href="{{ url_for('report_user', user_id=profile['user_id']) }}">
+        Report or block {{ profile['name'] or profile['username'] }}
+      </a>
+    </p>
   {% endif %}
 </div>
 {% endblock %}
