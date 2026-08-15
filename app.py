@@ -110,12 +110,15 @@ GENDERS = ["Woman", "Man", "Non-binary"]
 # themselves put on their own profile.
 PRONOUNS = {"Woman": "her", "Man": "him"}
 
-SEEKING_OPTIONS = ["Women", "Men", "Everyone"]
+SEEKING_OPTIONS = ["Women", "Men", "Non-binary people", "Everyone"]
 
-# Which profile genders each "looking for" choice accepts.
+# Which profile genders each "looking for" choice accepts. Every gender in
+# GENDERS is nameable here, so a non-binary searcher is findable by someone
+# looking specifically for them rather than only via "Everyone".
 SEEKING_MATCHES = {
     "Women": {"Woman"},
     "Men": {"Man"},
+    "Non-binary people": {"Non-binary"},
     "Everyone": set(GENDERS),
 }
 
@@ -172,6 +175,28 @@ CITY_CHOICES = [
 RADIUS_MAX_KM = 500  # slider maximum; at the top it means "anywhere"
 
 AGE_MIN_YEARS, AGE_MAX_YEARS = 18, 39
+
+# The wizard asks for an age band rather than two slider handles, so the step
+# stays one tap like every other step. "Any" is not in here on purpose: it is
+# the absence of a band, and switches searches.use_age off rather than picking
+# the widest one -- a profile can be older than AGE_MAX_YEARS, and only the
+# flag lets those through. The criteria screen still sets exact bounds.
+AGE_BANDS = {
+    "18-25": (18, 25),
+    "26-32": (26, 32),
+    "33-39": (33, 39),
+}
+
+
+def age_band_key(search):
+    """Which band a saved search matches, for re-selecting it in the wizard."""
+    if search is None or not search["use_age"]:
+        return "any"
+    for key, (lo, hi) in AGE_BANDS.items():
+        if search["age_min"] == lo and search["age_max"] == hi:
+            return key
+    return "any"
+
 
 # How long a search must run before it can be paired. The demo pool is
 # always populated, so without this every search resolves on its first
@@ -1888,13 +1913,17 @@ def save_search(
 @app.route("/search", methods=["GET", "POST"])
 @login_required
 def live_search():
-    """Screen 1: what kind of connection, and where.
+    """The live-search wizard: six questions, one per step, then search.
 
-    Location and radius live here rather than on the criteria screen so that
-    everything you decide up front — what you want and where you want it —
-    sits on one page. They travel to screen 2 in the session rather than the
-    query string: coordinates and a radius are per-user draft state, not
-    something worth putting in a URL.
+    Every step lives in one page and one form — the stepping is done in the
+    browser (templates/search_start.html) so moving between questions is
+    instant rather than a page load per answer. That means this handler still
+    receives one complete form and validates it in one place.
+
+    Distance is deliberately not asked: the search is saved at the maximum
+    radius, which searches_compatible() reads as "anywhere". Other people's
+    own distance filters still apply to you, which is why the place is still
+    worth collecting.
     """
     me = require_profile()
     if me is None:
@@ -1903,75 +1932,89 @@ def live_search():
 
     if request.method == "POST":
         wanted = request.form.get("relationship_type", "")
-        if wanted not in RELATIONSHIP_TYPES:
-            flash("Please choose what kind of connection you want.")
-        elif request.form.get("mode") == "skip":
-            # The escape hatch: screen 1 already collected everything a
-            # search needs (connection type + place), so this saves and
-            # starts searching immediately rather than stashing a draft for
-            # screen 2. Location/radius parsed the same way search_criteria()
-            # parses them; physical prefs get the same "no preference" shape
-            # validate_physical() would produce from a blank form.
-            location = request.form.get("location", "").strip()
-            lat = lng = None
-            raw_lat = request.form.get("location_lat", "").strip()
-            raw_lng = request.form.get("location_lng", "").strip()
-            if raw_lat and raw_lng:
-                try:
-                    cand_lat, cand_lng = float(raw_lat), float(raw_lng)
-                    if -90 <= cand_lat <= 90 and -180 <= cand_lng <= 180:
-                        lat, lng = cand_lat, cand_lng
-                except ValueError:
-                    pass
-            try:
-                radius_km = int(request.form.get("radius_km", RADIUS_MAX_KM))
-            except ValueError:
-                radius_km = RADIUS_MAX_KM
-            radius_km = max(1, min(radius_km, RADIUS_MAX_KM))
+        seeking = request.form.get("seeking", "")
+        interests = request.form.get("interests", "").strip()
+        location = request.form.get("location", "").strip()
 
-            _, phys = validate_physical({})
+        # Set only when the combobox resolved a geocoder pick; its JS clears
+        # both the moment the user free-types again, so a stale coordinate can
+        # never be paired with a different typed city.
+        lat = lng = None
+        raw_lat = request.form.get("location_lat", "").strip()
+        raw_lng = request.form.get("location_lng", "").strip()
+        if raw_lat and raw_lng:
+            try:
+                cand_lat, cand_lng = float(raw_lat), float(raw_lng)
+                if -90 <= cand_lat <= 90 and -180 <= cand_lng <= 180:
+                    lat, lng = cand_lat, cand_lng
+            except ValueError:
+                pass
+
+        # The age step offers bands rather than a slider, so there is nothing
+        # to range-check: an unknown value just reads as "any", and "any" is
+        # the one that has to switch the filter off, since a profile can be
+        # older than the band slider's own ceiling.
+        band = request.form.get("age_band", "any")
+        use_age = band in AGE_BANDS
+        age_min, age_max = AGE_BANDS.get(band, (AGE_MIN_YEARS, AGE_MAX_YEARS))
+
+        # Body type is the only physical filter the wizard asks about; the
+        # rest keep the "no preference" shape validate_physical() produces
+        # from a blank form, and stay editable on the criteria screen.
+        _, phys = validate_physical({})
+        body_types = [b for b in request.form.getlist(PREF_BODY_TYPES_FIELD)
+                      if b in BODY_TYPES]
+
+        error = None
+        if wanted not in RELATIONSHIP_TYPES:
+            error = "Please choose what kind of connection you want."
+        elif seeking not in SEEKING_OPTIONS:
+            error = "Please choose who you're looking for."
+
+        if error:
+            flash(error)
+        else:
             save_search(
-                session["user_id"], seeking=me["seeking"],
-                age_min=AGE_MIN_YEARS, age_max=AGE_MAX_YEARS,
-                relationship_type=wanted, interests="",
-                location=location, lat=lat, lng=lng, radius_km=radius_km,
+                session["user_id"], seeking=seeking,
+                age_min=age_min, age_max=age_max,
+                relationship_type=wanted, interests=interests,
+                location=location, lat=lat, lng=lng,
+                radius_km=RADIUS_MAX_KM,
                 pref_height_min=phys["pref_height_min"],
                 pref_height_max=phys["pref_height_max"],
-                pref_body_types=phys[PREF_BODY_TYPES_FIELD],
+                pref_body_types=",".join(body_types),
                 pref_fitness_level=phys["pref_fitness_level"],
                 pref_hair_color=phys["pref_hair_color"],
                 pref_eye_color=phys["pref_eye_color"],
                 pref_tattoos=phys["pref_tattoos"],
-                use_gender=True, use_age=True, use_distance=True, use_physical=True,
+                use_gender=True, use_age=use_age, use_distance=True,
+                use_physical=bool(body_types),
             )
             session.pop("search_draft", None)
+
+            # No try_pair() here: the search is brand new, so it cannot be
+            # paired yet anyway (see MIN_SEARCH_SECONDS). The waiting page's
+            # poll picks it up once it ripens.
             return redirect(url_for("search_waiting"))
-        else:
-            session["search_draft"] = {
-                "location": request.form.get("location", "").strip(),
-                "location_lat": request.form.get("location_lat", "").strip(),
-                "location_lng": request.form.get("location_lng", "").strip(),
-                "radius_km": request.form.get("radius_km", str(RADIUS_MAX_KM)),
-            }
-            return redirect(url_for("search_criteria", relationship_type=wanted))
 
     existing = get_db().execute(
         "SELECT * FROM searches WHERE user_id = ?", (session["user_id"],)
     ).fetchone()
 
-    # Coming back from screen 2 must show what you typed, not what you last
-    # searched for, so the draft wins over the saved row when it exists.
-    draft = session.get("search_draft") or {}
-
     return render_template(
         "search_start.html",
         me=me,
         relationship_types=RELATIONSHIP_TYPES,
+        seeking_options=SEEKING_OPTIONS,
+        age_bands=AGE_BANDS,
+        body_types=BODY_TYPES,
         existing=existing,
-        draft=draft,
+        existing_body_types=(
+            (existing[PREF_BODY_TYPES_FIELD] or "").split(",") if existing else []
+        ),
+        existing_band=age_band_key(existing),
+        draft=session.get("search_draft") or {},
         city_choices=CITY_CHOICES,
-        radius_max=RADIUS_MAX_KM,
-        step=1,
     )
 
 
@@ -2121,7 +2164,6 @@ def search_criteria():
         height_max=HEIGHT_MAX_CM,
         age_min_bound=AGE_MIN_YEARS,
         age_max_bound=AGE_MAX_YEARS,
-        step=2,
     )
 
 

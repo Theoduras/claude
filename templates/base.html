@@ -666,182 +666,227 @@
     }
     dd { margin: 0.3rem 0 0; white-space: pre-line; }
 
-    /* ---------- choice tiles ------------------------------------------
-       Whole-tile selection with no visible radio bullet: the input hides
-       (.visually-hidden) and .tile-face is styled off its :checked state,
-       the same hidden-input + sibling-selector pattern .switch uses. */
-    .tile-grid {
-      display: grid;
-      /* a deliberate 2x2 block: two even columns, capped so the tiles stay
-         square-ish on a wide card instead of stretching into banners */
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.9rem;
-      max-width: 34rem;
-    }
-    .tile { display: block; cursor: pointer; }
-    .tile-face {
-      position: relative;
+    /* ---------- wizard (live search) ---------------------------------
+       One question per screen, in the shape of the reference design: a
+       progress bar, a big question, a stack of tappable option rows, and a
+       back/next pair pinned under them. Selection uses the same hidden-input
+       + sibling-selector pattern .switch and the old tiles used, so the whole
+       row is the hit target and there is no separate radio to style. */
+    .wiz {
+      /* 90% of the screen, not of main's content box. The negative inline
+         margin cancels main's own horizontal padding so the form spans the
+         full width, then a 5% pad on each side leaves exactly 90% for the
+         content -- and because the block still fills the line, it stays
+         centred without fighting `margin: auto`. */
+      box-sizing: border-box;
+      margin-inline: calc(-1 * clamp(1rem, 4vw, 2rem));
+      padding-inline: 5%;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      gap: 0.7rem;
+      min-height: 68vh;
+    }
+    /* past phone widths the bleed stops earning its keep: cap it and centre */
+    @media (min-width: 600px) {
+      .wiz {
+        margin-inline: auto;
+        padding-inline: 0;
+        max-width: 27rem;
+      }
+    }
+    .wiz-progress {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--ink-hairline);
+      overflow: hidden;
+    }
+    .wiz-progress > span {
+      display: block;
       height: 100%;
-      min-height: 9.5rem;
-      box-sizing: border-box;
-      padding: 1.5rem 1.1rem;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--ink-hairline);
-      background-image: linear-gradient(155deg, rgba(75, 20, 124, 0.3), rgba(11, 7, 19, 0.85));
-      transition: border-color 0.18s ease, transform 0.18s ease,
-                  background-image 0.18s ease, box-shadow 0.18s ease;
+      width: 16.6%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--violet), var(--violet-crest));
+      transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .tile:hover .tile-face { border-color: rgba(168, 85, 247, 0.5); transform: translateY(-2px); }
-    /* the input is .visually-hidden, so the ring has to be drawn on the face */
-    .tile input:focus-visible ~ .tile-face {
-      outline: 2px solid var(--champagne);
-      outline-offset: 2px;
-    }
-    /* selected: champagne is the "lit" colour in this palette, so the icon and
-       the label both change hue rather than the border alone */
-    .tile input:checked ~ .tile-face {
-      border-color: var(--champagne);
-      background-image: linear-gradient(155deg, rgba(138, 43, 226, 0.45), rgba(30, 10, 52, 0.94));
-      box-shadow: 0 0 0 1px var(--champagne) inset,
-                  0 10px 30px -16px rgba(232, 211, 169, 0.75);
-    }
-    /* a tick as well as the colour, so selection never rests on hue alone */
-    .tile input:checked ~ .tile-face::after {
-      content: "";
-      position: absolute;
-      top: 0.6rem;
-      right: 0.6rem;
-      width: 1.05rem;
-      height: 1.05rem;
-      border-radius: 50%;
-      background: var(--champagne)
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.3 4.9 8.7 9.4 3.5' fill='none' stroke='%230B0713' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
-        center / 0.7rem no-repeat;
-    }
-    .tile-icon {
-      width: 2rem;
-      height: 2rem;
-      color: var(--violet-crest);
-      transition: color 0.18s ease, transform 0.18s ease;
-    }
-    .tile input:checked ~ .tile-face .tile-icon {
-      color: var(--champagne);
-      transform: scale(1.08);
-    }
-    .tile-face strong {
-      font-family: var(--serif);
-      font-size: 1.02rem;
-      font-weight: 500;
-      color: var(--text-muted);
-      transition: color 0.18s ease;
-    }
-    .tile input:checked ~ .tile-face strong { color: var(--champagne); }
-    .tile-tag {
+    .wiz-count {
+      margin: 1.5rem 0 0;
+      text-align: center;
       font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--teal-crest);
       font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--text-faint);
     }
-    /* stays 2x2 on a phone rather than collapsing to a column, so all four
-       options fit one screen; the tile gets shorter, tighter and smaller-set
-       instead. The label steps down twice — a two-word option like "Long-term
-       relationship" is what decides whether a tile reads or wraps. */
-    @media (max-width: 720px) {
-      .tile-face strong { font-size: 0.92rem; }
-      .tile-tag { font-size: 0.66rem; }
+    .wiz-q {
+      margin: 0.5rem 0 1.6rem;
+      text-align: center;
+      font-size: clamp(1.6rem, 6vw, 2.1rem);
+      line-height: 1.18;
     }
-    @media (max-width: 480px) {
-      .tile-grid { gap: 0.65rem; }
-      .tile-face { min-height: 7.2rem; padding: 1rem 0.6rem; gap: 0.5rem; }
-      .tile-icon { width: 1.6rem; height: 1.6rem; }
-      .tile-face strong { font-size: 0.8rem; letter-spacing: 0.01em; }
-      .tile-tag { font-size: 0.6rem; }
+    .wiz-hint {
+      margin: -1.1rem 0 1.4rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
     }
-    @media (max-width: 360px) {
-      .tile-face { min-height: 6.6rem; padding: 0.85rem 0.5rem; }
-      .tile-face strong { font-size: 0.74rem; }
-    }
-    /* the debug viewport toggle fakes a phone inside a wide window, where
-       width-based queries never fire — mirror the phone sizes off the flag */
-    html[data-viewport="mobile"] .tile-grid { gap: 0.65rem; }
-    html[data-viewport="mobile"] .tile-face {
-      min-height: 7.2rem;
-      padding: 1rem 0.6rem;
-      gap: 0.5rem;
-    }
-    html[data-viewport="mobile"] .tile-icon { width: 1.6rem; height: 1.6rem; }
-    html[data-viewport="mobile"] .tile-face strong {
-      font-size: 0.8rem;
-      letter-spacing: 0.01em;
-    }
-    html[data-viewport="mobile"] .tile-tag { font-size: 0.6rem; }
+    .wiz-field { margin-bottom: 0.5rem; }
+    .wiz-field > label:first-child { margin-top: 0; }
 
-    /* ---------- step dots -------------------------------------------
-       Real links, not decoration: the search flow is two screens and both
-       are reachable in either direction, so each dot is an <a> that can be
-       tabbed to and followed. The visible dot stays small while the hit
-       target around it is thumb-sized. */
-    .step-dots {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 0.15rem;
-      margin: 0 0 1.4rem;
+    /* Without JS every step stays visible and the form still posts; the
+       stepper adds .wiz-js only once it is actually driving. */
+    .wiz-js .wiz-step { display: none; }
+    .wiz-js .wiz-step.is-on { display: block; }
+    .wiz-step { flex: 1 0 auto; }
+    .wiz-in { animation: wiz-in 0.28s cubic-bezier(0.4, 0, 0.2, 1) both; }
+    @keyframes wiz-in {
+      from { opacity: 0; transform: translateX(14px); }
+      to   { opacity: 1; transform: none; }
     }
-    .step-dot {
+    /* asking for an answer the step requires, without a modal or a flash */
+    .wiz-nudge .opt-list { animation: wiz-nudge 0.4s ease; }
+    @keyframes wiz-nudge {
+      25% { transform: translateX(-5px); }
+      60% { transform: translateX(5px); }
+    }
+
+    .opt-list { display: flex; flex-direction: column; gap: 0.7rem; }
+    /* .opt is a <label>, so the global field-caption rule above would
+       otherwise render every option uppercase, tracked out and faint. */
+    .opt {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      margin-bottom: 0;
+      text-transform: none;
+      letter-spacing: normal;
+      font-weight: 400;
+      padding: 0.9rem 1.05rem;
+      border-radius: 1.15rem;
+      border: 1.5px solid transparent;
+      background: var(--ink-raised);
+      cursor: pointer;
+      transition: border-color 0.16s ease, background 0.16s ease,
+                  transform 0.16s ease;
+    }
+    .opt:hover { transform: translateY(-1px); background: rgba(59, 11, 102, 0.5); }
+    .opt input:focus-visible ~ .opt-mark {
+      outline: 2px solid var(--champagne);
+      outline-offset: 3px;
+    }
+    .opt-icon {
+      flex: none;
       display: grid;
       place-items: center;
-      width: 2.25rem;
-      height: 2.25rem;
+      width: 2.4rem;
+      height: 2.4rem;
       border-radius: 50%;
-      text-decoration: none;
-      border: 0;
-      background: none;
-      padding: 0;
+      color: #FFF;
+      background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
+    }
+    /* each row gets its own hue so a list reads as distinct choices rather
+       than one repeated swatch, the way the reference design does it */
+    .opt-2 .opt-icon { background-image: linear-gradient(150deg, var(--teal-crest), var(--teal)); }
+    .opt-3 .opt-icon { background-image: linear-gradient(150deg, #F0C97B, #C98A2B); }
+    .opt-4 .opt-icon { background-image: linear-gradient(150deg, #FF9DAA, var(--danger)); }
+    .opt-5 .opt-icon { background-image: linear-gradient(150deg, #8FA6FF, #4356C4); }
+    .opt-6 .opt-icon { background-image: linear-gradient(150deg, #6FE3C4, #169B7C); }
+    .opt-icon svg { width: 1.25rem; height: 1.25rem; }
+    .opt-label {
+      flex: 1;
+      font-size: 0.98rem;
+      color: var(--text);
+      transition: color 0.16s ease;
+    }
+    .opt-mark {
+      flex: none;
+      width: 1.15rem;
+      height: 1.15rem;
+      border-radius: 50%;
+      border: 2px solid var(--text-faint);
+      transition: border-color 0.16s ease, background 0.16s ease;
+    }
+    .opt-mark-box { border-radius: 0.4rem; }
+    .opt input:checked ~ .opt-mark {
+      border-color: var(--violet-crest);
+      background: var(--violet-crest)
+        radial-gradient(circle, var(--ink) 0, var(--ink) 2.6px, transparent 2.7px);
+    }
+    .opt-mark-box { background-position: center; }
+    .opt input:checked ~ .opt-mark-box {
+      background: var(--violet-crest)
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.3 4.9 8.7 9.4 3.5' fill='none' stroke='%230B0713' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+        center / 0.72rem no-repeat;
+    }
+    .opt input:checked ~ .opt-label { color: var(--violet-crest); font-weight: 600; }
+    .opt:has(input:checked) {
+      border-color: var(--violet-crest);
+      background: rgba(138, 43, 226, 0.14);
+    }
+
+    .wiz-nav {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      margin-top: 2rem;
+      padding-top: 0.5rem;
+    }
+    .wiz-back, .wiz-next {
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
       cursor: pointer;
+      transition: transform 0.16s ease, background 0.16s ease, opacity 0.16s ease;
     }
-    .step-dot::before {
-      content: "";
-      width: 0.5rem;
-      height: 0.5rem;
-      border-radius: 50%;
-      background: var(--ink-hairline);
-      transition: background 0.18s ease, transform 0.18s ease,
-                  box-shadow 0.18s ease;
+    .wiz-back {
+      width: 2.6rem;
+      height: 2.6rem;
+      border: none;
+      background: none;
+      color: var(--text-muted);
     }
-    .step-dot:hover::before { background: var(--text-faint); }
-    .step-dot[aria-current="step"]::before {
-      background: var(--violet-crest);
-      box-shadow: 0 0 10px rgba(168, 85, 247, 0.7);
-      transform: scale(1.25);
+    .wiz-back:hover { color: var(--text); transform: translateX(-2px); }
+    .wiz-back[hidden] { display: none; }
+    .wiz-skip {
+      border: none;
+      background: none;
+      color: var(--text-faint);
+      font-size: 0.85rem;
+      cursor: pointer;
+      padding: 0.4rem 0.2rem;
     }
-    .step-dot:focus-visible {
-      outline: 2px solid var(--champagne);
-      outline-offset: -4px;
+    .wiz-skip:hover { color: var(--violet-crest); }
+    .wiz-skip[hidden] { display: none; }
+    .wiz-next {
+      width: 3.4rem;
+      height: 3.4rem;
+      margin-left: auto;
+      border: none;
+      color: #FFF;
+      background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
+      box-shadow: 0 10px 26px -12px rgba(138, 43, 226, 0.9);
     }
-    /* Screen 2 is meaningless without a connection type, so its dot is inert
-       until one is picked rather than absent — the flow's length stays legible. */
-    .step-dot[aria-disabled="true"] {
-      cursor: default;
-      pointer-events: none;
-      opacity: 0.4;
+    .wiz-next:hover { transform: translateX(2px); }
+    .wiz-back svg, .wiz-next svg { width: 1.35rem; height: 1.35rem; }
+    /* the last step commits, so it stops being a chevron and says so */
+    .wiz-next.is-final {
+      width: auto;
+      border-radius: 999px;
+      padding: 0 1.5rem;
+      height: 3rem;
+      background-image: linear-gradient(150deg, var(--teal-crest), var(--teal));
+      box-shadow: 0 10px 26px -12px rgba(29, 166, 162, 0.9);
     }
-    /* the thin rule between dots reads as a path rather than a list */
-    .step-dot + .step-dot { position: relative; }
-    .step-dot + .step-dot::after {
-      content: "";
-      position: absolute;
-      right: 100%;
-      width: 1.1rem;
-      height: 1px;
-      background: var(--ink-hairline);
+    .wiz-next.is-final svg { display: none; }
+    .wiz-next.is-final::after {
+      content: "Start searching";
+      font-size: 0.92rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .wiz-in { animation: none; }
+      .wiz-nudge .opt-list { animation: none; }
+      .opt:hover, .wiz-back:hover, .wiz-next:hover { transform: none; }
     }
 
     /* ---------- recap line: "here's what's running" -------------------
