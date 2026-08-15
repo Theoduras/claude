@@ -38,12 +38,27 @@
       </div>
     </div>
 
-    {% if not fits %}
-      <p class="waiting-none">
+    {# A rescue, not an upsell: only shown once nobody fits. Each button is
+       one thing that would actually open this up, biggest opening first,
+       and taking one keeps the search (and its accumulated wait) running. #}
+    <div class="waiting-fix" id="waiting-fix" {% if fits %}hidden{% endif %}>
+      <p class="waiting-none" id="waiting-none">
         Nobody searching right now fits all of this. You'll be paired the
-        moment someone does — or change what you're after.
+        moment someone does{% if options %} — or loosen one thing{% endif %}.
       </p>
-    {% endif %}
+
+      <div class="pillset waiting-options" id="waiting-options">
+        {% for opt in options %}
+        <form method="post" action="{{ url_for('search_widen') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="{{ opt.action }}">
+          <button class="pill" type="submit">
+            {{ opt.label }} <span class="pill-count">· {{ opt.count }}</span>
+          </button>
+        </form>
+        {% endfor %}
+      </div>
+    </div>
   </div>
 
   <div class="wiz-nav">
@@ -112,6 +127,66 @@
     phrase = (phrase + 1) % PHRASES.length;
     statusLine.textContent = PHRASES[phrase];
   }, 2600);
+
+  // ---- the "loosen one thing" offers -------------------------------------
+  // On their own slow timer, not the 1.5s match poll: working these out
+  // means checking every waiting search against every relaxation, which is
+  // far too much to run twice a second. Refreshing at all matters because
+  // the pool moves while you wait — a button promising "3 people" after
+  // those three have paired off would be offering a match that no longer
+  // exists.
+  var OPTIONS_MS = 10000;
+  var fixWrap = document.getElementById("waiting-fix");
+  var noneLine = document.getElementById("waiting-none");
+  var optionsWrap = document.getElementById("waiting-options");
+  var csrf = window.velvtCsrf();
+  var widenUrl = "{{ url_for('search_widen') }}";
+
+  function renderOptions(data) {
+    if (data.fits) {           // somebody fits again — the offers are moot
+      fixWrap.hidden = true;
+      return;
+    }
+    fixWrap.hidden = false;
+    noneLine.textContent = "Nobody searching right now fits all of this. "
+      + "You'll be paired the moment someone does"
+      + (data.options.length ? " — or loosen one thing." : ".");
+
+    optionsWrap.innerHTML = "";
+    data.options.forEach(function (opt) {
+      var form = document.createElement("form");
+      form.method = "post";
+      form.action = widenUrl;
+
+      var t = document.createElement("input");
+      t.type = "hidden"; t.name = "csrf_token"; t.value = csrf;
+      form.appendChild(t);
+
+      var a = document.createElement("input");
+      a.type = "hidden"; a.name = "action"; a.value = opt.action;
+      form.appendChild(a);
+
+      var b = document.createElement("button");
+      b.type = "submit";
+      b.className = "pill";
+      b.textContent = opt.label + " ";
+      var c = document.createElement("span");
+      c.className = "pill-count";
+      c.textContent = "· " + opt.count;
+      b.appendChild(c);
+      form.appendChild(b);
+
+      optionsWrap.appendChild(form);
+    });
+  }
+
+  setInterval(function () {
+    if (!connected) return;
+    fetch("{{ url_for('search_options') }}", { headers: { "Accept": "application/json" } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) { if (data) renderOptions(data); })
+      .catch(function () { /* the match poll already reports connection state */ });
+  }, OPTIONS_MS);
 
   // Short-poll loop — see the note in chat.html. Each poll also re-runs
   // the pairing attempt server-side, so a partner who starts searching

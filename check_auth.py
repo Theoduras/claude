@@ -455,6 +455,155 @@ with app.test_client() as c:
     check("a flood of reset requests is throttled", 429 in codes,
           f"saw {sorted(set(codes))}")
 
+# --- 12. widening a stuck search ----------------------------------------
+def aged_searcher(label, age, age_min, age_max, height=None, **over):
+    """A searcher with a specific age and age filter, everything else open.
+
+    `height` matters for the physical checks: physical_ok() only blocks a
+    candidate who actually has the trait, so a profile with no height is
+    never excluded by a height filter.
+    """
+    with app.test_request_context():
+        db = A.get_db()
+        uid = db.insert_returning_id(
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+            (f"wid_{label}_{uuid.uuid4().hex[:6]}", "x"))
+        db.execute(
+            """INSERT INTO profiles (user_id, name, age, gender, seeking, location, height_cm)
+               VALUES (?, ?, ?, 'Woman', 'Everyone', 'Berlin', ?)""",
+            (uid, label, age, height))
+        cols = dict(seeking="Everyone", age_min=age_min, age_max=age_max,
+                    use_gender=False, use_age=True, use_distance=False,
+                    use_physical=False)
+        cols.update(over)
+        db.execute(
+            f"""INSERT INTO searches
+                  (user_id, location, lat, lng, radius_km, status, created_at,
+                   {','.join(cols)})
+                VALUES (?, 'Berlin', 52.52, 13.405, 500, 'waiting',
+                        NOW() - INTERVAL '60 seconds', {','.join(['?'] * len(cols))})""",
+            (uid, *cols.values()))
+        db.commit()
+    return uid
+
+
+def login_as(client, uid):
+    """Attach a real session row to a client, for users made without the form."""
+    with app.test_request_context():
+        tok = A.secrets.token_urlsafe(32)
+        db = A.get_db()
+        db.execute("""INSERT INTO sessions (user_id, token_hash, expires_at)
+                      VALUES (?, ?, NOW() + INTERVAL '1 day')""", (uid, A.hash_token(tok)))
+        db.commit()
+    with client.session_transaction() as s:
+        s["sid"] = tok
+
+
+def offers_for(uid):
+    with app.test_request_context():
+        mine, others = A._search_pool(uid)
+        b = A.search_blockers(mine, others)
+        return b.get("current_count", 0), A.widen_options(b, mine)
+
+
+def search_row(uid):
+    with app.test_request_context():
+        return A.get_db().execute(
+            "SELECT * FROM searches WHERE user_id = ?", (uid,)).fetchone()
+
+
+empty_the_pool()
+me = aged_searcher("me", 28, 25, 30)      # wants 25-30
+them = aged_searcher("them", 41, 18, 60)  # is 41, wants anyone
+
+fits, offers = offers_for(me)
+actions = [o["action"] for o in offers]
+check("a stuck search is offered a way out", fits == 0 and "widen:age" in actions,
+      f"fits={fits}, offered {actions}")
+check("the offer names the smallest widening that works",
+      any(o["action"] == "widen:age" and "25–41" in o["label"] for o in offers),
+      str([o["label"] for o in offers]))
+check("the offer counts who it would actually reach",
+      all(o["count"] >= 1 for o in offers))
+
+# Nothing is offered while somebody already fits.
+_, open_offers = offers_for(them)
+check("no offers while someone already fits", open_offers == [],
+      f"offered {[o['action'] for o in open_offers]}")
+
+with app.test_client() as c:
+    login_as(c, me)
+    before = search_row(me)
+
+    check("widening needs a CSRF token",
+          c.post("/search/widen", data={"action": "widen:age"}).status_code == 400)
+
+    # A value in the body must be ignored: the server re-derives its own.
+    r = c.post("/search/widen",
+               data={"action": "widen:age", "age_min": 0, "age_max": 99,
+                     "csrf_token": token(c, "/search/waiting")},
+               follow_redirects=False)
+    after = search_row(me)
+    check("applying an offer succeeds", r.status_code == 302, f"HTTP {r.status_code}")
+    check("the server's own value is applied, not the request's",
+          (after["age_min"], after["age_max"]) == (25, 41),
+          f"{after['age_min']}-{after['age_max']}")
+    check("the accumulated wait is preserved",
+          before["created_at"] == after["created_at"])
+    check("widening pairs immediately when it can", after["status"] == "matched",
+          after["status"])
+
+# An action that isn't currently on offer changes nothing.
+empty_the_pool()
+solo = aged_searcher("solo", 30, 18, 39)
+with app.test_client() as c:
+    login_as(c, solo)
+    was = search_row(solo)
+    r = c.post("/search/widen",
+               data={"action": "off:physical", "csrf_token": token(c, "/search/waiting")},
+               follow_redirects=False)
+    now = search_row(solo)
+    check("an offer that isn't available is refused",
+          now["use_physical"] == was["use_physical"] and now["age_min"] == was["age_min"],
+          f"HTTP {r.status_code}")
+    r = c.post("/search/widen",
+               data={"action": "off:everything; DROP TABLE users",
+                     "csrf_token": token(c, "/search/waiting")})
+    check("an invented action is refused", r.status_code in (302, 400),
+          f"HTTP {r.status_code}")
+    with app.test_request_context():
+        still = A.get_db().execute("SELECT 1 AS h FROM users LIMIT 1").fetchone()
+    check("the database is intact", still is not None)
+
+# Physical traits blocking: no suggestion helper covers these, so the
+# off-switch is the only thing that can help.
+empty_the_pool()
+picky = aged_searcher("picky", 30, 18, 39, height=170, use_physical=True,
+                      pref_height_min=200, pref_height_max=220)
+short = aged_searcher("short", 30, 18, 39, height=165)
+fits2, offers2 = offers_for(picky)
+check("a physical filter that blocks is offered as an off-switch",
+      fits2 == 0 and "off:physical" in [o["action"] for o in offers2],
+      f"fits={fits2}, offered {[o['action'] for o in offers2]}")
+
+with app.test_client() as c:
+    login_as(c, picky)
+    c.post("/search/widen", data={"action": "off:physical",
+                                  "csrf_token": token(c, "/search/waiting")})
+    check("switching the physical filter off works",
+          search_row(picky)["use_physical"] is False)
+
+# /search/options answers the waiting page's refresh.
+empty_the_pool()
+a1 = aged_searcher("poll", 28, 25, 30)
+a2 = aged_searcher("pollb", 41, 18, 60)
+with app.test_client() as c:
+    login_as(c, a1)
+    data = c.get("/search/options").get_json()
+    check("/search/options reports the live offers",
+          data["fits"] == 0 and any(o["action"] == "widen:age" for o in data["options"]),
+          str(data))
+
 failed = [n for n, ok, _ in RESULTS if not ok]
 print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
 if failed:

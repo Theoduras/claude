@@ -982,6 +982,25 @@
       line-height: 1.5;
       color: var(--text-muted);
     }
+    /* The "loosen one thing" offers. Plain .pill against the recap's
+       .pill.is-static above: the recap reports, these act, and the hover
+       and focus states .pill already carries are the whole affordance --
+       no new component, and nothing that reads as a second filter form. */
+    .waiting-options {
+      justify-content: center;
+      margin: 0.85rem 0 0;
+    }
+    .waiting-options form { display: contents; }
+    .waiting-options .pill {
+      font: inherit;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .waiting-options .pill-count {
+      color: var(--text-faint);
+      font-variant-numeric: tabular-nums;
+    }
+    .waiting-options .pill:hover .pill-count { color: var(--text-muted); }
     .wiz-stop { width: auto; padding-inline: 1.4rem; }
 
     /* the waiting screen carries an animation the wizard steps do not, so
@@ -995,6 +1014,8 @@
       .waiting-none { margin-top: 0.7rem; font-size: 0.78rem; }
       .waiting .pillset { gap: 0.35rem; }
       .waiting .pill { padding: 0.35rem 0.7rem; font-size: 0.78rem; }
+      .waiting-options { margin-top: 0.6rem; }
+      .waiting-options .pill { font-size: 0.78rem; }
     }
 
     /* ---------- bottom sheet (the wizard's "More" overlay) ------------

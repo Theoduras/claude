@@ -18,7 +18,7 @@ docker compose up -d      # Postgres, once per boot
 .\dev.ps1                 # venv + seed + Flask with the reloader
 # edit -> save -> refresh the browser. No restart, no git.
 python smoke.py           # hit every GET route, report 5xxs
-python check_auth.py      # 51 behaviour checks: auth, CSRF, safety, deletion
+python check_auth.py      # 66 behaviour checks: auth, CSRF, safety, deletion, widening
 python check_bots.py      # demo members never reach a real person's search pool
 ```
 
@@ -115,6 +115,20 @@ Three queries select the waiting search pool — `try_pair()`, `_search_pool()` 
 `CANDIDATE_ELIGIBLE_SQL` and `NOT_BLOCKED_SQL`. **Keep them in step:** if the preview and
 the matcher disagree, the preview promises candidates the matcher then refuses.
 
+`search_blockers()` explains *why* a search isn't matching — a count per filter of who
+would fit without it, plus a concrete suggested value for each, every one verified through
+a real `searches_compatible()` call. It feeds two screens: the criteria screen's live
+preview, and the waiting screen's "loosen one thing" buttons via `widen_options()`. Both
+follow the same rule — **offers appear only when nothing fits**, never alongside a
+non-zero count.
+
+`POST /search/widen` takes only *which* offer was taken, never a value: it recomputes the
+suggestions and applies its own, so the endpoint can't be used to set an arbitrary search
+and a stale page can't apply a number that has stopped making sense. It writes one column
+with a targeted `UPDATE` — **not `save_search()`**, which resets `created_at` and would
+drop the searcher back below `MIN_SEARCH_SECONDS` and to the back of `try_pair()`'s
+longest-wait ordering as a penalty for adjusting.
+
 Starting a search is **two screens**: `/search` picks the connection type and the location
 + radius (carried to screen 2 in `session["search_draft"]`), `/search/criteria` asks which
 filters matter as a list of switches. Each switch writes a `searches.use_*` column —
@@ -152,7 +166,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 | settings | `/settings`, `…/password`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/export`, `…/delete`, `…/delete/cancel` |
 | safety | `/report/<id>`, `/block/<id>`, `/unblock/<id>` |
 | moderation | `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate` |
-| search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/status`, `/search/cancel` |
+| search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/status`, `/search/options`, `/search/widen`, `/search/cancel` |
 | match lifecycle | `/match/<id>/state`, `/match/<id>/decide`, `/match/<id>/skip-reveal` |
 | chat | `/chats`, `/chat/<id>`, `…/messages`, `…/send` |
 

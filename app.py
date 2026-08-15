@@ -4158,6 +4158,82 @@ def search_summary_chips(search):
     return chips
 
 
+def widen_options(blockers, mine):
+    """The changes that would actually open up a match, as offerable actions.
+
+    search_blockers() already works all of this out and the waiting screen
+    used to throw every field but the count away. Each entry is
+    {action, label, count}: `action` is the only thing the browser sends
+    back, so /search/widen re-derives the value itself and a stale page
+    cannot apply a number that has stopped making sense.
+
+    Only what is actually in the way is listed. The old panel showed a row
+    per parameter whether or not it mattered, which is what made it too
+    long for a phone.
+
+    Both kinds are needed. The suggestion helpers cover age, distance,
+    relationship and gender; physical and interests have no suggestion of
+    their own, so an off-switch is the only thing that can unblock them.
+    """
+    if not blockers:
+        return []
+
+    now = blockers.get("current_count", 0)
+    out = []
+
+    def add(action, label, count):
+        # Never offer a change that would not actually help.
+        if count > now:
+            out.append({"action": action, "label": label, "count": count})
+
+    # --- widen to a specific value ---------------------------------------
+    age = blockers.get("age_suggestion")
+    if age:
+        add("widen:age", f"Widen to {age['age_min']}–{age['age_max']}", age["count"])
+
+    dist = blockers.get("distance_suggestion")
+    if dist:
+        add("widen:distance", f"Search within {dist['radius_km']} km", dist["count"])
+
+    gender = (blockers.get("gender_suggestions") or [])[:1]
+    for g in gender:
+        add("switch:gender", f"Switch to {g['seeking']}", g["count"])
+
+    rel = (blockers.get("relationship_suggestions") or [])[:1]
+    for r in rel:
+        add("switch:relationship", f"Switch to {r['relationship_type']}", r["count"])
+
+    # --- drop a filter entirely ------------------------------------------
+    # Only where the searcher actually has it switched on; offering to turn
+    # off something already off is noise. use_relationship has no switch --
+    # it *is* the connection type chosen on screen 1.
+    if mine.get("use_gender"):
+        add("off:gender", "Anyone, any gender", blockers.get("if_any_gender", 0))
+    if mine.get("use_age"):
+        add("off:age", "Any age", blockers.get("if_any_age", 0))
+    if mine.get("use_distance"):
+        add("off:distance", "Any distance", blockers.get("if_any_distance", 0))
+    if mine.get("use_physical"):
+        add("off:physical", "Drop the physical filters", blockers.get("if_any_physical", 0))
+    if (mine.get("interests") or "").strip():
+        add("off:interests", "Any interests", blockers.get("if_any_interests", 0))
+
+    # Biggest opening first: when someone is stuck, the most useful option
+    # should not be the one they have to read to the end to find.
+    out.sort(key=lambda o: -o["count"])
+    return out
+
+
+# Which column each "turn it off" action clears. Whitelisted rather than
+# interpolated from the request -- this lands in a SQL UPDATE.
+WIDEN_OFF_COLUMNS = {
+    "off:gender": "use_gender",
+    "off:age": "use_age",
+    "off:distance": "use_distance",
+    "off:physical": "use_physical",
+}
+
+
 @app.route("/search/waiting")
 @login_required
 def search_waiting():
@@ -4170,13 +4246,19 @@ def search_waiting():
         return redirect(url_for("chat", match_id=mine["match_id"]))
 
     blockers = search_blockers(mine, others)
+    fits = blockers.get("current_count", 0)
 
     return render_template(
         "search_waiting.html",
         search=mine,
         chips=search_summary_chips(mine),
         waiting=len(others),
-        fits=blockers.get("current_count", 0),
+        fits=fits,
+        # A rescue, not an upsell -- the same rule the criteria screen's
+        # preview follows. Above zero someone mutually compatible is already
+        # waiting and try_pair() will reach them within a poll, so offering
+        # changes would just be noise over the top of a working search.
+        options=widen_options(blockers, mine) if not fits else [],
     )
 
 
@@ -4207,6 +4289,105 @@ def search_status():
         result["match_id"] = row["match_id"]
         result["chat_url"] = url_for("chat", match_id=row["match_id"])
     return result
+
+
+@app.route("/search/options")
+@login_required
+def search_options():
+    """The currently-offered widenings, for the waiting page to refresh.
+
+    Deliberately its own endpoint rather than a field on /search/status.
+    That polls every 1.5s and has to stay cheap; search_blockers() runs
+    searches_compatible() across the whole pool several thousand times, so
+    it gets a slower timer of its own.
+    """
+    mine, others = _search_pool(current_uid())
+    if mine is None or mine["status"] != "waiting":
+        return {"waiting": 0, "fits": 0, "options": []}
+
+    blockers = search_blockers(mine, others)
+    fits = blockers.get("current_count", 0)
+    return {
+        "waiting": len(others),
+        "fits": fits,
+        "options": widen_options(blockers, mine) if not fits else [],
+    }
+
+
+@app.route("/search/widen", methods=["POST"])
+@login_required
+def search_widen():
+    """Apply one of the offered changes without restarting the search.
+
+    The request carries only *which* action, never a value. Everything
+    applied is recomputed here from the live pool, so this cannot be used
+    to set an arbitrary search state, and an action that is no longer on
+    offer -- because the pool moved since the page rendered -- is refused
+    rather than applied against stale numbers.
+    """
+    user_id = current_uid()
+    action = request.form.get("action", "")
+
+    mine, others = _search_pool(user_id)
+    if mine is None or mine["status"] != "waiting":
+        return redirect(url_for("live_search"))
+
+    blockers = search_blockers(mine, others)
+    offered = {o["action"] for o in widen_options(blockers, mine)}
+    if action not in offered:
+        flash("That option isn't available any more — here's where things stand.")
+        return redirect(url_for("search_waiting"))
+
+    db = get_db()
+    # Only ever the one column this action names, and never created_at:
+    # save_search() would reset it, dropping the searcher back below
+    # MIN_SEARCH_SECONDS and to the back of try_pair()'s longest-wait
+    # ordering -- punishing them for adjusting.
+    if action == "widen:age":
+        s = blockers["age_suggestion"]
+        db.execute(
+            "UPDATE searches SET age_min = ?, age_max = ?, use_age = TRUE WHERE user_id = ?",
+            (s["age_min"], s["age_max"], user_id),
+        )
+        told = f"Now looking for {s['age_min']}–{s['age_max']}."
+    elif action == "widen:distance":
+        s = blockers["distance_suggestion"]
+        db.execute(
+            "UPDATE searches SET radius_km = ?, use_distance = TRUE WHERE user_id = ?",
+            (s["radius_km"], user_id),
+        )
+        told = f"Now searching within {s['radius_km']} km."
+    elif action == "switch:gender":
+        s = blockers["gender_suggestions"][0]
+        db.execute(
+            "UPDATE searches SET seeking = ?, use_gender = TRUE WHERE user_id = ?",
+            (s["seeking"], user_id),
+        )
+        told = f"Now looking for {s['seeking']}."
+    elif action == "switch:relationship":
+        s = blockers["relationship_suggestions"][0]
+        db.execute(
+            "UPDATE searches SET relationship_type = ? WHERE user_id = ?",
+            (s["relationship_type"], user_id),
+        )
+        told = f"Now looking for {s['relationship_type']}."
+    elif action == "off:interests":
+        # The stored text *is* the switch: empty means no preference.
+        db.execute("UPDATE searches SET interests = '' WHERE user_id = ?", (user_id,))
+        told = "Interests no longer need to match."
+    else:
+        column = WIDEN_OFF_COLUMNS[action]  # whitelisted, never from the request
+        db.execute(f"UPDATE searches SET {column} = FALSE WHERE user_id = ?", (user_id,))
+        told = "Filter switched off."
+    db.commit()
+
+    # Pay off immediately where it can, rather than on the next poll.
+    match_id = try_pair(user_id)
+    if match_id:
+        return redirect(url_for("chat", match_id=match_id))
+
+    flash(told)
+    return redirect(url_for("search_waiting"))
 
 
 @app.route("/search/cancel", methods=["POST"])
