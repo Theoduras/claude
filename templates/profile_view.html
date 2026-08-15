@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ profile['name'] or profile['username'] }} — Velvet{% endblock %}
 {% block content %}
-<div class="card">
+{# The same column the search steps, the match screens and the room use --
+   the hero, the chips and the fact rows are the app's own parts rather
+   than a page of its own. This screen is a document, so it may scroll. #}
+<div class="wiz profile-screen">
+  <div class="wiz-body">
   {# The first viewable photo becomes the hero; the rest stay in the grid
      below. With no photo to show, the hatch stands in and the name still
      reads against the scrim. #}
@@ -23,11 +27,15 @@
     </div>
   </div>
 
-  {% if profile['seeking'] %}
-    <span class="tag">Looking for: {{ profile['seeking'] }}</span>
-  {% endif %}
-  {% if profile['relationship_type'] %}
-    <span class="tag">Wants: {{ profile['relationship_type'] }}</span>
+  {% if profile['seeking'] or profile['relationship_type'] %}
+    <div class="pillset">
+      {% if profile['relationship_type'] %}
+        <span class="pill is-static">{{ profile['relationship_type'] }}</span>
+      {% endif %}
+      {% if profile['seeking'] %}
+        <span class="pill is-static is-faint">Looking for {{ profile['seeking'] }}</span>
+      {% endif %}
+    </div>
   {% endif %}
 
   {% if profile['bio'] %}
@@ -66,8 +74,8 @@
        or profile['pref_fitness_level'] or profile['pref_hair_color']
        or profile['pref_eye_color'] or profile['pref_tattoos'] %}
     {% if has_prefs %}
-      <h2 style="margin-top: 1.75rem;">Looking for (physical)</h2>
-      <p class="subtitle">Only you can see this. It counts both ways when ranking matches.</p>
+      <p class="section-label" style="margin-top: 1.6rem;">Looking for (physical)</p>
+      <p class="section-note">Only you can see this. It counts both ways when ranking matches.</p>
       <dl class="facts">
         {% if profile['pref_height_min'] and profile['pref_height_max'] %}
           <div><dt>Height</dt>
@@ -92,10 +100,12 @@
     {% endif %}
   {% endif %}
 
+  </div>
+
   {% if is_own %}
-    <p style="margin-top: 1.5rem;">
-      <a class="btn btn-secondary btn-block" href="{{ url_for('edit_profile') }}">Edit profile</a>
-    </p>
+    <div class="wiz-nav">
+      <a class="btn btn-secondary" href="{{ url_for('edit_profile') }}">Edit profile</a>
+    </div>
   {% endif %}
 </div>
 {% endblock %}

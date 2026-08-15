@@ -613,6 +613,19 @@
         max-width: 27rem;
       }
     }
+    /* A screen where one part scrolls inside itself (the room's transcript,
+       the decision screens') has to be bounded by the viewport first: main
+       is `flex: 1 0 auto`, so without a ceiling the column simply grows and
+       the whole page scrolls instead of the log. The forced-mobile preview
+       sets its own frame height, and its selector outranks this one. */
+    .app-shell:has(.wiz-fit) { height: 100dvh; }
+    main:has(.wiz-fit) { min-height: 0; flex: 1 1 auto; overflow: hidden; }
+    .wiz-fit { flex: 1 1 auto; min-height: 0; }
+    /* .wiz-body is flex: 1 0 auto by default -- it may grow but never
+       shrink, which is right for a step and wrong here: the part that
+       scrolls can only give way if its parent can. */
+    .wiz-fit .wiz-body { flex: 1 1 auto; min-height: 0; }
+
     .wiz-progress {
       height: 4px;
       border-radius: 2px;
@@ -851,6 +864,38 @@
       font-weight: 600;
       letter-spacing: 0.01em;
     }
+    /* The same committing action, for screens whose label is real content
+       rather than a fixed string: the match reveal's "Yes, start chatting",
+       the decision's "Continue". Same height as .wiz-next so a column that
+       mixes them keeps one baseline for its action row. */
+    .wiz-go {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 3.4rem;
+      padding: 0 1.5rem;
+      border: none;
+      border-radius: 999px;
+      font-family: var(--sans);
+      font-size: 0.92rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: #FFF;
+      cursor: pointer;
+      background-image: linear-gradient(150deg, var(--teal-crest), var(--teal));
+      box-shadow: 0 10px 26px -12px rgba(29, 166, 162, 0.9);
+      transition: transform 0.16s ease;
+    }
+    .wiz-go:hover { transform: translateX(2px); color: #FFF; }
+    .wiz-go:focus-visible { outline: 2px solid var(--champagne); outline-offset: 3px; }
+    .wiz-go-violet {
+      background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
+      box-shadow: 0 10px 26px -12px rgba(138, 43, 226, 0.9);
+    }
+    /* leaving is a text button, never a filled one -- the loud control on
+       these screens is always the one that keeps the match alive */
+    .wiz-skip-danger { color: var(--danger); }
+    .wiz-skip-danger:hover { color: var(--danger); background: rgba(255, 122, 138, 0.12); }
     /* ---------- waiting screen ---------------------------------------
        Borrows the wizard's column so the two screens read as one flow: the
        step chrome (.wiz-count/.wiz-q/.wiz-hint) is reused verbatim and only
@@ -876,7 +921,11 @@
     }
     .waiting-fits { color: var(--teal-crest); }
 
-    .waiting-recap-label {
+    /* the label over a stated block -- the waiting recap, the reveal's
+       shared interests, a profile section. Same eyebrow the steps use for
+       "STEP 3 OF 6", so every screen names its parts the same way. */
+    .waiting-recap-label,
+    .section-label {
       margin: 0 0 0.55rem;
       text-align: center;
       font-size: 0.7rem;
@@ -892,6 +941,13 @@
       color: var(--text);
       border-color: rgba(168, 85, 247, 0.4);
       background: rgba(138, 43, 226, 0.14);
+    }
+    /* a stated chip that is context rather than the point of the list --
+       the reveal's non-shared interests next to the shared ones */
+    .pill.is-static.is-faint {
+      color: var(--text-muted);
+      border-color: var(--ink-hairline);
+      background: none;
     }
     .waiting-none {
       margin: 1.1rem 0 0;
@@ -1299,28 +1355,86 @@
       border-radius: 999px;
     }
     .countdown.countdown-low { color: var(--danger); border-color: rgba(255, 122, 138, 0.4); }
-    .decision-actions {
-      display: flex;
-      gap: 0.7rem;
-      flex-wrap: wrap;
-      margin-top: 1rem;
-    }
-    .decision-actions .btn { flex: 1; min-width: 9rem; }
     .btn-danger {
       color: #fff;
       background-color: var(--danger);
       background-image: linear-gradient(160deg, #FF97A3, var(--danger) 55%, var(--danger-deep));
       box-shadow: 0 12px 30px -12px rgba(255, 122, 138, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.24);
     }
-    .reveal-card { text-align: center; }
-    .reveal-card .pulse-heart { width: 5.5rem; height: 5.5rem; }
-    /* The reveal's headline wraps to two lines ("Congratulations — /
-       you matched"), so the global h1 + .subtitle pull-up (tuned for a
-       one-line h1) overlaps the subtitle instead of just tightening the
-       gap. Give this one room instead, and trim the headline itself --
-       full display size reads oversized against the chips/buttons under it. */
-    .reveal-card h1 { font-size: clamp(1.6rem, 3.4vw, 2.3rem); }
-    .reveal-card h1 + .subtitle { margin-top: 0.5rem; }
+
+    /* ---------- match screens (reveal / decide / ended) ----------------
+       Same column as the search steps and the waiting screen: the state is
+       stated in the middle (eyebrow, question, chips) and the two answers
+       sit in the nav row at the foot, always at the same y. */
+    .match .wiz-body { gap: 0; }
+    .match .pair { margin: 0 0 1.2rem; }
+    .match .pair > * { width: 5.2rem; height: 5.2rem; }
+    .match .ring { margin: 0.2rem auto 0; }
+    .match .pillset { justify-content: center; margin-bottom: 0; }
+    .match-line {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      margin: 0 0 1rem;
+      font-weight: 700;
+      font-size: 0.59rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    /* the line under a stated block: the reveal's opener, a section's
+       caption. .section-note is the same voice sitting directly under a
+       .section-label, so it does not carry the leading gap. */
+    .match-note,
+    .section-note {
+      margin: 1rem 0 0;
+      text-align: center;
+      font-size: 0.84rem;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    .section-note { margin: -0.15rem 0 0; }
+    .match-note strong,
+    .section-note strong { color: var(--champagne); font-weight: 600; }
+    /* the decision screens carry the transcript, which is the one part of
+       these screens allowed to scroll -- it takes the slack and the rest
+       of the column stays put */
+    .match .chat-log {
+      flex: 1 1 auto;
+      min-height: 4rem;
+      max-height: none;
+      margin: 1rem 0 0;
+    }
+    @media (max-height: 740px) {
+      .match .pair > * { width: 4.2rem; height: 4.2rem; }
+      .match .pair { margin-bottom: 0.8rem; }
+      .match .ring { width: 4.6rem; height: 4.6rem; }
+      .match .ring .ring-num { font-size: 1.25rem; }
+      .match-note { margin-top: 0.7rem; font-size: 0.78rem; }
+    }
+    /* the reveal carries more than a step does -- two portraits, chips, a
+       countdown -- so a 640-tall screen needs a second, harder trim to
+       clear the fold without scrolling */
+    @media (max-height: 700px) {
+      .match .pair > * { width: 3.4rem; height: 3.4rem; }
+      .match .pair { margin-bottom: 0.55rem; }
+      .match .wiz-q { font-size: clamp(1.2rem, 5vw, 1.45rem); margin-bottom: 0.7rem; }
+      .match .wiz-hint { margin-bottom: 0.7rem; font-size: 0.78rem; }
+      .match-line { margin-bottom: 0.7rem; }
+      .match .ring { width: 3.9rem; height: 3.9rem; }
+      .match .ring::after { inset: 0.3rem; }
+      .match .ring .ring-num { font-size: 1rem; }
+      .match .ring-unit { font-size: 0.44rem; }
+      .match .pillset { gap: 0.35rem; }
+      .match .pill { padding: 0.32rem 0.65rem; font-size: 0.76rem; }
+      .match-note { margin-top: 0.5rem; font-size: 0.75rem; }
+      .match .section-label { margin-bottom: 0.4rem; }
+      .match .wiz-count { margin-top: 0.4rem; }
+      .match .wiz-nav { margin-top: 0.7rem; }
+      /* the ring and the two buttons already say this */
+      .match-note.is-aside { display: none; }
+    }
     .tag-ended {
       color: var(--text-faint);
       border-color: var(--ink-hairline);
@@ -1593,6 +1707,44 @@
       color: var(--text);
     }
 
+    /* ---------- profile screen ----------------------------------------
+       The same column as the steps and the room, so a profile opened from
+       a chat keeps the app's width and its parts are the ones used
+       everywhere else: a rounded raised block, chips, an eyebrow label,
+       and the action at the foot. This screen may scroll -- it is a
+       document, not a question -- but it starts at the top rather than
+       centring what it happens to contain. */
+    .profile-screen .wiz-body { justify-content: flex-start; }
+    .profile-screen .profile-hero {
+      height: 16rem;
+      margin: 0 0 1rem;
+      border-radius: 1.15rem;
+      border: 1px solid var(--ink-hairline);
+    }
+    .profile-screen .profile-hero-caption { left: 1.1rem; right: 1.1rem; bottom: 0.9rem; }
+    .profile-screen .profile-hero-caption h1 { font-size: clamp(1.7rem, 6vw, 2.1rem); }
+    .profile-screen .pillset { justify-content: center; margin-bottom: 0; }
+    .profile-screen .profile-quote { text-align: center; font-size: 1.1rem; }
+    /* the fact rows, gathered into one raised block instead of floating
+       hairlines -- the same ground and radius an .opt row uses */
+    .profile-screen .facts {
+      margin-top: 1.1rem;
+      padding: 0.15rem 1rem;
+      border-radius: 1.15rem;
+      background: var(--ink-raised);
+    }
+    .profile-screen .facts > div:last-child { border-bottom: 0; }
+    .profile-screen .photo-grid { margin: 1.1rem 0 0; }
+    .profile-screen .photo-locked {
+      max-width: none;
+      aspect-ratio: auto;
+      padding: 1.1rem;
+      margin-top: 1.1rem;
+      border-radius: 1.15rem;
+    }
+    .profile-screen .wiz-nav { justify-content: center; }
+    .profile-screen .wiz-nav .btn { width: 100%; }
+
     /* offscreen but still focusable — the file inputs are driven by their
        labels (the + tile), not by showing the browser's own control */
     .visually-hidden {
@@ -1817,17 +1969,8 @@
       box-shadow: 0 0 40px -8px rgba(29, 166, 162, 0.6);
     }
 
-    .eyebrow-gold { color: var(--champagne); letter-spacing: 0.24em; }
-
-    /* the room strip: timer beside the explanation of what it means */
-    .room-timer {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      padding: 1rem 0;
-      border-bottom: 1px solid var(--ink-hairline);
-      margin-bottom: 0.9rem;
-    }
+    /* the room strip: timer beside the explanation of what it means.
+       Laid out with the rest of the room, further down. */
     .room-timer-label {
       font-weight: 700;
       font-size: 0.625rem;
@@ -1841,20 +1984,51 @@
       line-height: 1.5;
       color: var(--text-muted);
     }
-    .decision-actions { display: flex; gap: 0.7rem; }
-    .decision-actions .btn { flex: 1; }
-    .decision-actions .btn-continue { flex: 1.35; }
+    /* the room's decision strip: who has answered on the left, the two
+       answers on the right, in the same quiet/loud pairing the step nav
+       uses -- one size down, since the composer sits under it */
+    .room-decide {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.8rem;
+    }
+    .room-decide .match-line {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      justify-content: flex-start;
+      text-align: left;
+    }
+    .wiz-go-sm { height: 2.6rem; padding: 0 1.1rem; font-size: 0.85rem; }
 
     /* ---------- chat header ------------------------------------------ */
+    /* A raised row in the same shape as an .opt: the room's own screens
+       are built from the wizard's parts, so its header is a card of the
+       same radius and ground rather than a hairline rule. */
     .chat-head {
       display: flex;
       align-items: center;
       gap: 0.8rem;
-      padding-bottom: 0.9rem;
-      margin-bottom: 0.9rem;
-      border-bottom: 1px solid var(--ink-hairline);
+      padding: 0.65rem 0.9rem;
+      margin-bottom: 0.75rem;
+      border-radius: 1.15rem;
+      border: 1.5px solid transparent;
+      background: var(--ink-raised);
     }
-    .chat-back { color: var(--text-muted); font-size: 1.2rem; line-height: 1; }
+    .chat-back {
+      display: grid;
+      place-items: center;
+      flex: none;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      color: var(--text-muted);
+      font-size: 1.2rem;
+      line-height: 1;
+      transition: color 0.16s ease, background 0.16s ease;
+    }
+    .chat-back:hover { color: var(--text); background: rgba(168, 133, 247, 0.12); }
     /* generic, not scoped to .chat-head: the chats list reuses the same
        circular avatar (with .ph for the locked-photo hatch) per row. */
     .avatar {
@@ -1891,19 +2065,70 @@
       text-transform: uppercase;
       color: var(--text-faint);
     }
-    /* round send button, sized to sit flush with the pill composer */
+    /* round send button, sized to sit flush with the pill composer -- and
+       to the same 3.4rem as the wizard's Next, since the composer occupies
+       the same foot-of-the-column slot the step nav does */
     .chat-form input[type="text"] {
-      height: 3rem;
+      height: 3.4rem;
       border-radius: 999px;
       padding-inline: 1.1rem;
     }
     .btn-send {
-      width: 3rem;
-      height: 3rem;
+      width: 3.4rem;
+      height: 3.4rem;
       flex: none;
       padding: 0;
       border-radius: 50%;
       font-size: 1.1rem;
+      background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
+      box-shadow: 0 10px 26px -12px rgba(138, 43, 226, 0.9);
+    }
+    .btn-send:hover { transform: translateX(2px); }
+
+    /* ---------- the room (timed / active chat) -------------------------
+       The wizard's column again: header pinned at the top, transcript
+       taking the slack and scrolling inside itself, composer at the foot
+       where Back/Next sit on a step. Nothing but the log ever scrolls. */
+    .room .wiz-body {
+      justify-content: flex-start;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .room .chat-log {
+      flex: 1 1 auto;
+      min-height: 4rem;
+      max-height: none;
+      margin-bottom: 0;
+    }
+    /* a half-empty room reads better with its messages down by the
+       composer than stranded at the top. An auto margin rather than
+       justify-content: flex-end, which makes the top of an overflowing
+       scroll box unreachable. */
+    .room .chat-log > :first-child { margin-top: auto; }
+    /* the transcript now runs to the edge of its box, so the scrolled-past
+       message is cut mid-word at the top. Fade it out instead. */
+    .room .chat-log,
+    .match .chat-log {
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 1.4rem);
+      mask-image: linear-gradient(to bottom, transparent 0, #000 1.4rem);
+    }
+    .room .wiz-nav { margin-top: 0.85rem; }
+    .room .chat-form { flex: 1; flex-wrap: nowrap; }
+    /* the room's clock, restated as a raised strip rather than a ruled one */
+    .room-timer {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      padding: 0.7rem 0.9rem;
+      margin-bottom: 0.75rem;
+      border-radius: 1.15rem;
+      background: rgba(59, 11, 102, 0.42);
+    }
+    @media (max-height: 740px) {
+      .room .room-timer { padding: 0.55rem 0.8rem; }
+      .room .ring-sm { width: 3.6rem; height: 3.6rem; }
+      .room .ring-sm .ring-num { font-size: 1rem; }
+      .room .room-timer p { font-size: 0.78rem; }
     }
 
     /* live telemetry: counts that tick while you watch. Monospace and

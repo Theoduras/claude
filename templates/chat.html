@@ -4,117 +4,140 @@
 {% set left = profiles[0] %}
 {% set right = profiles[1] %}
 {% set other = right if left['user_id'] == me_id else left %}
-<div class="card{% if phase == 'reveal' %} reveal-card{% endif %}">
-  {% if is_participant and phase == 'reveal' %}
-    <div style="text-align: center;">
-      <p class="eyebrow eyebrow-gold">Match found</p>
+{# Every phase of a match is a screen in the same column the search steps
+   and the waiting screen use: what is happening is stated in the middle,
+   and the answers sit in the nav row at the foot, at the same y each
+   time. Only the room's transcript scrolls. #}
+{% if is_participant and phase == 'reveal' %}
+  <div class="wiz match">
+    <div class="wiz-body">
+      <p class="wiz-count">Match found</p>
 
       {# photos are still locked this early, so these are hatched stand-ins #}
       <div class="pair">
         <span class="ph"></span>
         <span class="ph"></span>
       </div>
-      <p class="subtitle" style="margin-inline: auto;">Photos unlock once you both continue the match.</p>
 
-      <h1 style="margin-top: 1.4rem;">Congratulations —<br>you matched</h1>
-      <p class="subtitle" style="margin-inline: auto;">
-        You and <strong style="color: var(--text);">{{ other['name'] }}{% if other['age'] %}, {{ other['age'] }}{% endif %}</strong>
-        were both looking for each other.
+      <h1 class="wiz-q">You matched with<br>{{ other['name'] }}{% if other['age'] %}, {{ other['age'] }}{% endif %}</h1>
+      <p class="wiz-hint">
+        You were both looking for each other. Photos unlock once you both continue.
       </p>
-      <p class="chat-head-live" style="justify-content: center; margin-top: 1.1rem;">
+      <p class="match-line">
         <span class="live-dot"></span>{{ other['name'] }} is already in the room
       </p>
 
       {% if reveal_chips %}
-        <p class="eyebrow" style="margin-top: 1.3rem;">{{ reveal_heading }}</p>
-        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 0.5rem;">
+        <p class="section-label">{{ reveal_heading }}</p>
+        <div class="pillset">
           {% for chip in reveal_chips %}
-            <span class="tag{% if not chip.shared %} tag-outline{% endif %}">{{ chip.text }}</span>
+            <span class="pill is-static{% if not chip.shared %} is-faint{% endif %}">{{ chip.text }}</span>
           {% endfor %}
         </div>
-        <p class="subtitle" style="margin-inline: auto; margin-top: 0.7rem;">
-          Ask {{ reveal_pronoun }} about <strong style="color: var(--champagne);">{{ reveal_highlight }}</strong>.
+        <p class="match-note">
+          Ask {{ reveal_pronoun }} about <strong>{{ reveal_highlight }}</strong>.
         </p>
       {% else %}
-        <p class="subtitle" style="margin-inline: auto; margin-top: 1.1rem;">{{ match_reason }}</p>
+        <p class="match-note">{{ match_reason }}</p>
       {% endif %}
 
-      <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1.6rem;">
-        <div class="ring" id="reveal-ring"
-             style="--deg: {{ (state.seconds_left / reveal_seconds * 360) | round | int }}deg;">
-          <div class="ring-inner">
-            <span class="ring-num" id="reveal-count">{{ state.seconds_left }}</span>
-            <span class="ring-unit">seconds</span>
-          </div>
+      <div class="ring" id="reveal-ring"
+           style="--deg: {{ (state.seconds_left / reveal_seconds * 360) | round | int }}deg;">
+        <div class="ring-inner">
+          <span class="ring-num" id="reveal-count">{{ state.seconds_left }}</span>
+          <span class="ring-unit">seconds</span>
         </div>
-        <p class="subtitle" style="margin-inline: auto;">
-          Say yes to start now — or wait, and the chat opens on its own.
-        </p>
-        {# Accepting is implicit — waiting is the yes. Leaving needs a
-           button and ends the match before the room ever opens; entering
-           early needs one too, since it opens the room for both sides. #}
-        <form method="post" action="{{ url_for('match_skip_reveal', match_id=match['id']) }}"
-              style="width: 100%;">
-          <button class="btn btn-primary btn-block" type="submit">Yes, start chatting</button>
-        </form>
-        <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
-              style="width: 100%;">
-          <input type="hidden" name="choice" value="unmatch">
-          <button class="btn btn-secondary btn-block" type="submit">Not this one</button>
-        </form>
       </div>
+      <p class="match-note is-aside">Say yes to start now — or wait, and the chat opens on its own.</p>
     </div>
 
-  {% elif is_participant and phase == 'deciding' %}
-    <h1 style="font-size: 1.25rem;">Time's up — continue with {{ other['name'] }}?</h1>
-    <p class="subtitle">
-      Your 5 minutes are over. Press Continue if you'd like to keep talking, or Unmatch to move on.
-      {% if state.their_decision %}{{ other['name'] }} has already decided.{% endif %}
-    </p>
-
-    <div class="chat-log" id="chat-log-static">
-      {% for msg in messages %}
-        {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
-        <div class="bubble {{ side }}">
-          <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
-        </div>
-      {% endfor %}
+    {# Accepting is implicit — waiting is the yes. Leaving needs a button
+       and ends the match before the room ever opens; entering early needs
+       one too, since it opens the room for both sides. #}
+    <div class="wiz-nav">
+      <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}">
+        <input type="hidden" name="choice" value="unmatch">
+        <button class="wiz-skip wiz-skip-danger" type="submit">Not this one</button>
+      </form>
+      <form method="post" action="{{ url_for('match_skip_reveal', match_id=match['id']) }}"
+            class="wiz-nav-end">
+        <button class="wiz-go" type="submit">Yes, start chatting</button>
+      </form>
     </div>
+  </div>
 
-    {% if state.my_decision %}
-      <p class="hint" style="margin-top: 0.5rem;">
-        You chose <strong>{{ 'Continue' if state.my_decision == 'continue' else 'Unmatch' }}</strong>.
-        Waiting for {{ other['name'] }}…
+{% elif is_participant and phase == 'deciding' %}
+  <div class="wiz match wiz-fit">
+    <div class="wiz-body">
+      <p class="wiz-count">Time's up</p>
+      <h1 class="wiz-q">Continue with<br>{{ other['name'] }}?</h1>
+      <p class="wiz-hint">
+        Your five minutes are over.
+        {% if state.their_decision %}{{ other['name'] }} has already decided.{% endif %}
       </p>
-      <div id="decision-status" data-state-url="{{ url_for('match_state', match_id=match['id']) }}" data-chat-url="{{ url_for('chat', match_id=match['id']) }}"></div>
-    {% else %}
-      <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}" class="decision-actions" id="decision-form">
+
+      <div class="chat-log" id="chat-log-static">
+        {% for msg in messages %}
+          {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
+          <div class="bubble {{ side }}">
+            <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
+          </div>
+        {% endfor %}
+      </div>
+
+      {% if state.my_decision %}
+        <p class="match-note">
+          You chose <strong>{{ 'Continue' if state.my_decision == 'continue' else 'Unmatch' }}</strong>.
+          Waiting for {{ other['name'] }}…
+        </p>
+        <div id="decision-status" data-state-url="{{ url_for('match_state', match_id=match['id']) }}" data-chat-url="{{ url_for('chat', match_id=match['id']) }}"></div>
+      {% endif %}
+    </div>
+
+    {% if not state.my_decision %}
+      <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
+            class="wiz-nav" id="decision-form">
         <input type="hidden" name="choice" id="decision-choice" value="">
-        <button class="btn" type="submit" data-choice="continue">Continue match</button>
-        <button class="btn btn-danger" type="submit" data-choice="unmatch">Unmatch</button>
+        <button class="wiz-skip wiz-skip-danger" type="submit" data-choice="unmatch">Unmatch</button>
+        <span class="wiz-nav-end">
+          <button class="wiz-go" type="submit" data-choice="continue">Continue match</button>
+        </span>
       </form>
     {% endif %}
+  </div>
 
-  {% elif is_participant and phase == 'ended' %}
-    <h1 style="font-size: 1.25rem;">This match has ended</h1>
-    <p class="subtitle">
-      {% if state.my_decision == 'unmatch' or state.their_decision == 'unmatch' %}
-        One of you chose to unmatch.
-      {% else %}
-        The decision window closed without an answer from both sides.
-      {% endif %}
-    </p>
-    <div class="chat-log" id="chat-log-static">
-      {% for msg in messages %}
-        {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
-        <div class="bubble {{ side }}">
-          <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
-        </div>
-      {% endfor %}
+{% elif is_participant and phase == 'ended' %}
+  <div class="wiz match wiz-fit">
+    <div class="wiz-body">
+      <p class="wiz-count">Match ended</p>
+      <h1 class="wiz-q">This one's<br>over</h1>
+      <p class="wiz-hint">
+        {% if state.my_decision == 'unmatch' or state.their_decision == 'unmatch' %}
+          One of you chose to unmatch.
+        {% else %}
+          The decision window closed without an answer from both sides.
+        {% endif %}
+      </p>
+      <div class="chat-log" id="chat-log-static">
+        {% for msg in messages %}
+          {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
+          <div class="bubble {{ side }}">
+            <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
+          </div>
+        {% endfor %}
+      </div>
     </div>
-    <p style="margin-top: 1rem;"><a class="btn btn-secondary" href="{{ url_for('live_search') }}">Back to search</a></p>
+    <div class="wiz-nav">
+      <a class="wiz-skip" href="{{ url_for('chats') }}">Your chats</a>
+      <span class="wiz-nav-end">
+        <a class="wiz-go wiz-go-violet" href="{{ url_for('live_search') }}">Search again</a>
+      </span>
+    </div>
+  </div>
 
-  {% else %}
+{% else %}
+  <div class="wiz room wiz-fit">
+    <div class="wiz-body">
     {# 'timed' or 'active', and non-participant (admin) viewers of any phase #}
     {% if is_participant %}
       <div class="chat-head">
@@ -159,16 +182,23 @@
         </div>
       {% endif %}
     {% else %}
-      <h1 style="font-size: 1.25rem;">
-        &#10084; {{ left['name'] }} &amp; {{ right['name'] }}
-      </h1>
-      <p class="subtitle">
-        {% if phase == 'active' %}Matched chatroom{% else %}Timed chat{% endif %} &middot;
-        <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">@{{ left['username'] }}</a>
-        and
-        <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">@{{ right['username'] }}</a>
-        &middot; <span class="muted" id="live-status">live</span>
-      </p>
+      <div class="chat-head">
+        <a class="chat-back" href="{{ url_for('chats') }}" aria-label="Back to chats">&lsaquo;</a>
+        <span class="avatar ph"></span>
+        <div class="chat-head-main">
+          <span class="chat-head-name">{{ left['name'] }} &amp; {{ right['name'] }}</span>
+          <p class="chat-head-live">
+            <span class="live-dot"></span>
+            <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">@{{ left['username'] }}</a>
+            &middot;
+            <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">@{{ right['username'] }}</a>
+            &middot; <span id="live-status">live</span>
+          </p>
+        </div>
+        <span class="tag{% if phase != 'active' %} tag-timed{% endif %}">
+          {% if phase == 'active' %}Matched{% else %}Timed{% endif %}
+        </span>
+      </div>
     {% endif %}
 
     <div class="chat-log" id="chat-log"
@@ -197,41 +227,47 @@
     {% if is_participant and phase == 'timed' %}
       {# You can commit before the clock runs out — the room does not have
          to expire first for a decision to count. #}
-      <div style="margin: 0.9rem 0;">
-        <p class="chat-head-live" style="margin-bottom: 0.7rem;">
+      {% if state.my_decision %}
+        <p class="match-line" style="margin: 0.8rem 0 0;">
           <span class="live-dot"></span>
-          {% if state.my_decision %}
-            You chose {{ 'to continue' if state.my_decision == 'continue' else 'to unmatch' }} — waiting for {{ other['name'] }}
-          {% elif state.their_decision %}
-            {{ other['name'] }} has already decided
-          {% else %}
-            {{ other['name'] }} hasn't decided yet
-          {% endif %}
+          You chose {{ 'to continue' if state.my_decision == 'continue' else 'to unmatch' }} — waiting for {{ other['name'] }}
         </p>
-        {% if not state.my_decision %}
-          <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
-                class="decision-actions" id="decision-form">
-            <input type="hidden" name="choice" id="decision-choice" value="">
-            <button class="btn btn-secondary" type="submit" data-choice="unmatch">Unmatch</button>
-            <button class="btn btn-continue" type="submit" data-choice="continue">Continue match</button>
-          </form>
-        {% endif %}
-      </div>
+      {% else %}
+        <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
+              class="room-decide" id="decision-form">
+          <input type="hidden" name="choice" id="decision-choice" value="">
+          <p class="match-line">
+            <span class="live-dot"></span>
+            {% if state.their_decision %}
+              {{ other['name'] }} has already decided
+            {% else %}
+              {{ other['name'] }} hasn't decided yet
+            {% endif %}
+          </p>
+          <button class="wiz-skip wiz-skip-danger" type="submit" data-choice="unmatch">Unmatch</button>
+          <button class="wiz-go wiz-go-sm" type="submit" data-choice="continue">Continue</button>
+        </form>
+      {% endif %}
     {% endif %}
+    </div>
 
     {% if is_participant %}
-      <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
-        <input type="text" name="body" id="chat-input" placeholder="Type a message…"
-               autofocus required autocomplete="off">
-        <button class="btn btn-send" type="submit" aria-label="Send">&#8593;</button>
-      </form>
+      <div class="wiz-nav">
+        <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
+          <input type="text" name="body" id="chat-input" placeholder="Type a message…"
+                 autofocus required autocomplete="off">
+          <button class="btn btn-send" type="submit" aria-label="Send">&#8593;</button>
+        </form>
+      </div>
     {% else %}
-      <p class="hint" style="margin-top: 0.5rem;">
-        You're viewing this chatroom as admin — only the two matched members can write here.
-      </p>
+      <div class="wiz-nav">
+        <p class="match-line" style="margin: 0;">
+          Admin view — only the two matched members can write here
+        </p>
+      </div>
     {% endif %}
-  {% endif %}
-</div>
+  </div>
+{% endif %}
 
 <script>
 (function () {
@@ -294,6 +330,33 @@
     render();
     poll();
   }
+
+  /* Keep a log stuck to its last message.
+
+     The log takes whatever height the column has left, and that height is
+     not final at init: the composer, the decision strip and the serif
+     webfont all settle afterwards, and every one of them shortens the box
+     under a scroll position that was already at the bottom. So rather than
+     scrolling once, watch the box and re-pin whenever it resizes -- but
+     only while the reader is actually at the bottom, so scrolling back
+     through the conversation is never yanked forward. */
+  function pinToBottom(el) {
+    if (!el) return function () {};
+    var pinned = true;
+    function toBottom() { el.scrollTop = el.scrollHeight; }
+    el.addEventListener("scroll", function () {
+      pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    });
+    if (window.ResizeObserver) {
+      new ResizeObserver(function () { if (pinned) toBottom(); }).observe(el);
+    }
+    toBottom();
+    return function () { pinned = true; toBottom(); };
+  }
+
+  // The decision screens show the transcript as a recap, and what matters
+  // in a recap is how it ended -- open it at the bottom, as the room does.
+  pinToBottom(document.getElementById("chat-log-static"));
 
   // ---- reveal countdown: redirect to the chat once the server says so ----
   var revealCount = document.getElementById("reveal-count");
@@ -365,9 +428,7 @@
     lastId = Math.max(lastId, parseInt(b.dataset.id, 10));
   });
 
-  function scrollDown() {
-    log.scrollTop = log.scrollHeight;
-  }
+  var scrollDown = pinToBottom(log);
 
   function addMessage(msg) {
     if (log.querySelector('.bubble[data-id="' + msg.id + '"]')) return;
