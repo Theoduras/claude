@@ -176,28 +176,6 @@ RADIUS_MAX_KM = 500  # slider maximum; at the top it means "anywhere"
 
 AGE_MIN_YEARS, AGE_MAX_YEARS = 18, 39
 
-# The wizard asks for an age band rather than two slider handles, so the step
-# stays one tap like every other step. "Any" is not in here on purpose: it is
-# the absence of a band, and switches searches.use_age off rather than picking
-# the widest one -- a profile can be older than AGE_MAX_YEARS, and only the
-# flag lets those through. The criteria screen still sets exact bounds.
-AGE_BANDS = {
-    "18-25": (18, 25),
-    "26-32": (26, 32),
-    "33-39": (33, 39),
-}
-
-
-def age_band_key(search):
-    """Which band a saved search matches, for re-selecting it in the wizard."""
-    if search is None or not search["use_age"]:
-        return "any"
-    for key, (lo, hi) in AGE_BANDS.items():
-        if search["age_min"] == lo and search["age_max"] == hi:
-            return key
-    return "any"
-
-
 # How long a search must run before it can be paired. The demo pool is
 # always populated, so without this every search resolves on its first
 # attempt and the waiting screen never actually shows.
@@ -1950,13 +1928,21 @@ def live_search():
             except ValueError:
                 pass
 
-        # The age step offers bands rather than a slider, so there is nothing
-        # to range-check: an unknown value just reads as "any", and "any" is
-        # the one that has to switch the filter off, since a profile can be
-        # older than the band slider's own ceiling.
-        band = request.form.get("age_band", "any")
-        use_age = band in AGE_BANDS
-        age_min, age_max = AGE_BANDS.get(band, (AGE_MIN_YEARS, AGE_MAX_YEARS))
+        # Left at the full span, the slider is saying "no preference" rather
+        # than "18 to 39": AGE_MAX_YEARS is the slider's own ceiling, so a
+        # range that reaches it cannot be expressing an upper bound. That has
+        # to switch use_age off, otherwise anyone older than the ceiling would
+        # be filtered out by a range the searcher never actually narrowed.
+        try:
+            age_min = int(request.form.get("age_min", AGE_MIN_YEARS))
+            age_max = int(request.form.get("age_max", AGE_MAX_YEARS))
+        except ValueError:
+            age_min, age_max = AGE_MIN_YEARS, AGE_MAX_YEARS
+        age_min = max(AGE_MIN_YEARS, min(age_min, AGE_MAX_YEARS))
+        age_max = max(AGE_MIN_YEARS, min(age_max, AGE_MAX_YEARS))
+        if age_min > age_max:
+            age_min, age_max = age_max, age_min
+        use_age = not (age_min == AGE_MIN_YEARS and age_max == AGE_MAX_YEARS)
 
         # Body type is the only physical filter the wizard asks about; the
         # rest keep the "no preference" shape validate_physical() produces
@@ -2006,13 +1992,13 @@ def live_search():
         me=me,
         relationship_types=RELATIONSHIP_TYPES,
         seeking_options=SEEKING_OPTIONS,
-        age_bands=AGE_BANDS,
+        age_min_bound=AGE_MIN_YEARS,
+        age_max_bound=AGE_MAX_YEARS,
         body_types=BODY_TYPES,
         existing=existing,
         existing_body_types=(
             (existing[PREF_BODY_TYPES_FIELD] or "").split(",") if existing else []
         ),
-        existing_band=age_band_key(existing),
         draft=session.get("search_draft") or {},
         city_choices=CITY_CHOICES,
     )

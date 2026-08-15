@@ -88,32 +88,24 @@
   {# ---- 3. age ------------------------------------------------------- #}
   <section class="wiz-step" data-step="3">
     <h1 class="wiz-q">What age are<br>you after?</h1>
-    <div class="opt-list">
-      {% for key, band in age_bands.items() %}
-        <label class="opt opt-{{ loop.index }}">
-          <input type="radio" name="age_band" value="{{ key }}" class="visually-hidden"
-                 {% if existing_band == key %}checked{% endif %}>
-          <span class="opt-icon">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
-              <path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </span>
-          <span class="opt-label">{{ band[0] }}–{{ band[1] }}</span>
-          <span class="opt-mark"></span>
-        </label>
-      {% endfor %}
-      <label class="opt opt-4">
-        <input type="radio" name="age_band" value="any" class="visually-hidden"
-               {% if existing_band == 'any' %}checked{% endif %}>
-        <span class="opt-icon">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M4 12h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-          </svg>
-        </span>
-        <span class="opt-label">Any age</span>
-        <span class="opt-mark"></span>
-      </label>
+    <p class="wiz-hint">
+      Leave it at the full span for no preference.
+    </p>
+    <div class="wiz-field">
+      <p class="wiz-readout" id="age-value"></p>
+      {# the same dual-thumb control the criteria screen uses #}
+      <div class="range-dual">
+        <div class="range-dual-track"></div>
+        <div class="range-dual-fill" id="age-fill"></div>
+        <input type="range" id="age_min" name="age_min"
+               min="{{ age_min_bound }}" max="{{ age_max_bound }}"
+               value="{{ existing['age_min'] if existing else age_min_bound }}"
+               aria-label="Minimum age">
+        <input type="range" id="age_max" name="age_max"
+               min="{{ age_min_bound }}" max="{{ age_max_bound }}"
+               value="{{ existing['age_max'] if existing else age_max_bound }}"
+               aria-label="Maximum age">
+      </div>
     </div>
   </section>
 
@@ -154,7 +146,7 @@
   <section class="wiz-step" data-step="6">
     <h1 class="wiz-q">Any body type<br>in mind?</h1>
     <p class="wiz-hint">Pick as many as you like, or none for no preference.</p>
-    <div class="opt-list">
+    <div class="opt-list opt-list-2col">
       {% for bt in body_types %}
         <label class="opt opt-{{ loop.index }}">
           <input type="checkbox" name="pref_body_types" value="{{ bt }}"
@@ -292,6 +284,38 @@
     ev.preventDefault();
     next.click();
   });
+
+  // ---- age slider (same dual-thumb behaviour as the criteria screen) ----
+  var minEl = document.getElementById("age_min");
+  var maxEl = document.getElementById("age_max");
+  var ageOut = document.getElementById("age-value");
+  var ageFill = document.getElementById("age-fill");
+  var ageLo = parseInt(minEl.min, 10), ageHi = parseInt(minEl.max, 10);
+
+  function pct(v) { return ((v - ageLo) / (ageHi - ageLo)) * 100; }
+
+  function syncAge(changed) {
+    var lo = parseInt(minEl.value, 10);
+    var hi = parseInt(maxEl.value, 10);
+    if (lo > hi) {
+      if (changed === "min") maxEl.value = lo; else minEl.value = hi;
+      lo = parseInt(minEl.value, 10);
+      hi = parseInt(maxEl.value, 10);
+    }
+    ageOut.textContent = (lo === ageLo && hi === ageHi)
+      ? "Any age"
+      : lo + " – " + hi + " years";
+    ageFill.style.left = pct(lo) + "%";
+    ageFill.style.width = (pct(hi) - pct(lo)) + "%";
+    // Whichever thumb is behind gets priority so overlapping handles can
+    // still be pulled apart.
+    minEl.style.zIndex = changed === "max" ? 2 : 3;
+    maxEl.style.zIndex = changed === "max" ? 3 : 2;
+  }
+
+  minEl.addEventListener("input", function () { syncAge("min"); });
+  maxEl.addEventListener("input", function () { syncAge("max"); });
+  syncAge();
 
   go(0);
 })();

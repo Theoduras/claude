@@ -683,7 +683,6 @@
       padding-inline: 5%;
       display: flex;
       flex-direction: column;
-      min-height: 68vh;
     }
     /* past phone widths the bleed stops earning its keep: cap it and centre */
     @media (min-width: 600px) {
@@ -708,7 +707,7 @@
       transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .wiz-count {
-      margin: 1.5rem 0 0;
+      margin: 1.1rem 0 0;
       text-align: center;
       font-size: 0.72rem;
       font-weight: 700;
@@ -717,25 +716,32 @@
       color: var(--text-faint);
     }
     .wiz-q {
-      margin: 0.5rem 0 1.6rem;
+      margin: 0.4rem 0 1.2rem;
       text-align: center;
       font-size: clamp(1.6rem, 6vw, 2.1rem);
       line-height: 1.18;
     }
     .wiz-hint {
-      margin: -1.1rem 0 1.4rem;
+      margin: -0.8rem 0 1.1rem;
       text-align: center;
       font-size: 0.85rem;
       color: var(--text-muted);
     }
     .wiz-field { margin-bottom: 0.5rem; }
+    .wiz-readout {
+      margin: 0 0 1.4rem;
+      text-align: center;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 1.05rem;
+      color: var(--champagne);
+    }
     .wiz-field > label:first-child { margin-top: 0; }
 
     /* Without JS every step stays visible and the form still posts; the
        stepper adds .wiz-js only once it is actually driving. */
     .wiz-js .wiz-step { display: none; }
     .wiz-js .wiz-step.is-on { display: block; }
-    .wiz-step { flex: 1 0 auto; }
     .wiz-in { animation: wiz-in 0.28s cubic-bezier(0.4, 0, 0.2, 1) both; }
     @keyframes wiz-in {
       from { opacity: 0; transform: translateX(14px); }
@@ -748,7 +754,19 @@
       60% { transform: translateX(5px); }
     }
 
-    .opt-list { display: flex; flex-direction: column; gap: 0.7rem; }
+    .opt-list { display: flex; flex-direction: column; gap: 0.6rem; }
+    /* six short labels stack too tall for a phone screen in one column, so
+       the multi-select step pairs them up instead of scrolling */
+    .opt-list-2col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.55rem;
+    }
+    .opt-list-2col .opt { padding: 0.7rem 0.75rem; gap: 0.55rem; }
+    .opt-list-2col .opt-icon { width: 2rem; height: 2rem; }
+    .opt-list-2col .opt-icon svg { width: 1.05rem; height: 1.05rem; }
+    .opt-list-2col .opt-label { font-size: 0.88rem; }
+    .opt-list-2col .opt-mark { width: 1rem; height: 1rem; }
     /* .opt is a <label>, so the global field-caption rule above would
        otherwise render every option uppercase, tracked out and faint. */
     .opt {
@@ -760,7 +778,7 @@
       text-transform: none;
       letter-spacing: normal;
       font-weight: 400;
-      padding: 0.9rem 1.05rem;
+      padding: 0.8rem 1.05rem;
       border-radius: 1.15rem;
       border: 1.5px solid transparent;
       background: var(--ink-raised);
@@ -823,12 +841,14 @@
       background: rgba(138, 43, 226, 0.14);
     }
 
+    /* sits just under whichever step is showing rather than at the foot of
+       a stretched column -- the old min-height left a dead band below the
+       options on every short step. */
     .wiz-nav {
       display: flex;
       align-items: center;
       gap: 0.9rem;
-      margin-top: 2rem;
-      padding-top: 0.5rem;
+      margin-top: 1.5rem;
     }
     .wiz-back, .wiz-next {
       display: grid;
@@ -882,6 +902,21 @@
       font-size: 0.92rem;
       font-weight: 600;
       letter-spacing: 0.01em;
+    }
+    /* short screens: the flow's promise is that a step never scrolls, so
+       trade type scale and padding for height rather than let it spill. */
+    @media (max-height: 740px) {
+      .wiz-count { margin-top: 0.7rem; font-size: 0.68rem; }
+      .wiz-q { font-size: clamp(1.35rem, 5.4vw, 1.7rem); margin-bottom: 0.9rem; }
+      .wiz-hint { margin: -0.6rem 0 0.85rem; font-size: 0.8rem; }
+      .opt-list { gap: 0.45rem; }
+      .opt { padding: 0.62rem 0.9rem; }
+      .opt-icon { width: 2.1rem; height: 2.1rem; }
+      .opt-icon svg { width: 1.1rem; height: 1.1rem; }
+      .opt-label { font-size: 0.92rem; }
+      .wiz-nav { margin-top: 1rem; }
+      .wiz-next { width: 3rem; height: 3rem; }
+      .wiz-readout { margin-bottom: 1rem; }
     }
     @media (prefers-reduced-motion: reduce) {
       .wiz-in { animation: none; }
