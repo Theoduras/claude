@@ -3114,11 +3114,21 @@ def match_decide(match_id):
         "reveal": ("unmatch",),
         "timed": ("continue", "unmatch"),
         "deciding": ("continue", "unmatch"),
+        # A match you both kept is still one either of you can leave. There
+        # is no "continue" here -- you already did.
+        "active": ("unmatch",),
     }.get(match_phase(match), ())
     if choice in allowed:
         col = "decision_a" if user_id == match["user_a"] else "decision_b"
         db = get_db()
         db.execute(f"UPDATE matches SET {col} = ? WHERE id = ?", (choice, match_id))
+        # resolve_match() treats 'active' as terminal and will not revisit
+        # it, so leaving a kept match has to be written here and now.
+        if match["status"] == "active":
+            db.execute(
+                "UPDATE matches SET status = 'ended', ended_at = NOW() WHERE id = ?",
+                (match_id,),
+            )
         db.commit()
         match = resolve_match(match_id) or match
 

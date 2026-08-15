@@ -1560,6 +1560,193 @@
       box-shadow: 0 12px 30px -12px rgba(255, 122, 138, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.24);
     }
 
+    /* ---------- veils: the two moments worth interrupting for ----------
+       A centred dialog rather than the bottom sheet: this is not a list to
+       browse, it is one thing to answer. Scoped to the app frame the same
+       way .sheet is, so on a wide screen it covers the phone-width column
+       and not the whole browser window. */
+    .veil { position: absolute; inset: 0; z-index: 60; }
+    .veil-scrim {
+      position: absolute;
+      inset: 0;
+      background: rgba(6, 3, 12, 0.76);
+      backdrop-filter: blur(6px);
+      opacity: 0;
+      transition: opacity 0.22s ease;
+    }
+    .veil.is-open .veil-scrim { opacity: 1; }
+    .veil-card {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(21rem, calc(100% - 2.5rem));
+      box-sizing: border-box;
+      padding: 1.5rem 1.35rem 1.35rem;
+      border-radius: 1.6rem;
+      border: 1px solid rgba(168, 85, 247, 0.28);
+      background-color: var(--ink-raised);
+      background-image:
+        var(--nap),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 26%),
+        linear-gradient(158deg, rgba(75, 20, 124, 0.55), rgba(11, 7, 19, 0.97) 62%);
+      background-size: 180px 180px, auto, auto;
+      background-blend-mode: overlay, normal, normal;
+      box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.95);
+      text-align: center;
+      transform: translate(-50%, -46%) scale(0.94);
+      opacity: 0;
+      transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+    }
+    .veil.is-open .veil-card { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    .veil-q {
+      margin: 0.3rem 0 0.8rem;
+      font-size: clamp(1.5rem, 6vw, 1.9rem);
+      line-height: 1.16;
+    }
+    .veil-sub {
+      margin: 0 0 1.2rem;
+      font-size: 0.87rem;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    .veil-nav { display: flex; flex-direction: column; gap: 0.6rem; }
+    /* Nevermind sits first: the way out should be the easier thing to hit,
+       and the confirm stays dead until the box is ticked. */
+    .veil-nav .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .veil-nav .btn:disabled:hover { transform: none; }
+    /* the tick, on the same raised ground an .opt row uses. This is a
+       <label>, so it arrives wearing the form-label styling -- uppercase,
+       tracked out, 0.72rem -- which is right for a field caption and wrong
+       for a sentence you are meant to read before agreeing to it. */
+    .veil-check {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      margin: 0 0 1.1rem;
+      padding: 0.75rem 0.9rem;
+      border-radius: 1.05rem;
+      border: 1.5px solid transparent;
+      background: var(--ink-raised);
+      text-align: left;
+      text-transform: none;
+      letter-spacing: normal;
+      font-size: 0.87rem;
+      font-weight: 400;
+      line-height: 1.4;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: border-color 0.16s ease, color 0.16s ease;
+    }
+    .veil-check:has(input:checked) {
+      border-color: rgba(255, 122, 138, 0.5);
+      color: var(--text);
+    }
+    .veil-check .opt-mark { flex: none; }
+    /* the checked box's tick is defined under `.opt input:checked`, which
+       this row has no .opt ancestor to satisfy -- restate it here in the
+       danger colour rather than leaving a filled box with no mark in it */
+    .veil-check input:checked ~ .opt-mark-box {
+      border-color: var(--danger);
+      background: var(--danger)
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.3 4.9 8.7 9.4 3.5' fill='none' stroke='%234A0F1E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+        center / 0.72rem no-repeat;
+    }
+    .veil-check input:focus-visible ~ .opt-mark {
+      outline: 2px solid var(--champagne);
+      outline-offset: 3px;
+    }
+
+    /* the landing: two orbs closing on each other, rings going out */
+    .matchpop-art {
+      position: relative;
+      height: 5.5rem;
+      margin-bottom: 0.4rem;
+    }
+    .matchpop-art > * { position: absolute; top: 50%; left: 50%; }
+    .matchpop-orb {
+      width: 2.6rem;
+      height: 2.6rem;
+      margin: -1.3rem 0 0 -1.3rem;
+      border-radius: 50%;
+      box-shadow: 0 0 26px rgba(168, 85, 247, 0.55);
+    }
+    .matchpop-orb-a {
+      background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
+      animation: orb-in-left 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .matchpop-orb-b {
+      background-image: linear-gradient(150deg, var(--teal-crest), var(--teal));
+      animation: orb-in-right 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .matchpop-ring {
+      width: 3rem;
+      height: 3rem;
+      margin: -1.5rem 0 0 -1.5rem;
+      border-radius: 50%;
+      border: 2px solid var(--violet-crest);
+      animation: ring-out 1.6s ease-out 0.55s infinite;
+    }
+    .matchpop-ring-2 { border-color: var(--champagne); animation-delay: 1.05s; }
+    .matchpop-spark {
+      width: 1.1rem;
+      height: 1.1rem;
+      margin: -0.55rem 0 0 -0.55rem;
+      border-radius: 50%;
+      background: var(--champagne);
+      box-shadow: 0 0 34px 10px rgba(232, 211, 169, 0.7);
+      animation: spark 0.9s ease-out 0.55s both;
+    }
+    @keyframes orb-in-left {
+      0% { transform: translateX(-5.5rem) scale(0.7); opacity: 0; }
+      100% { transform: translateX(-0.85rem) scale(1); opacity: 1; }
+    }
+    @keyframes orb-in-right {
+      0% { transform: translateX(5.5rem) scale(0.7); opacity: 0; }
+      100% { transform: translateX(0.85rem) scale(1); opacity: 1; }
+    }
+    @keyframes ring-out {
+      0% { transform: scale(0.7); opacity: 0.85; }
+      100% { transform: scale(2.5); opacity: 0; }
+    }
+    @keyframes spark {
+      0% { transform: scale(0); opacity: 0; }
+      45% { transform: scale(1.5); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.85; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .veil-card { transition: opacity 0.2s ease; transform: translate(-50%, -50%); }
+      .veil.is-open .veil-card { transform: translate(-50%, -50%); }
+      .matchpop-orb-a { animation: none; transform: translateX(-0.85rem); }
+      .matchpop-orb-b { animation: none; transform: translateX(0.85rem); }
+      .matchpop-ring, .matchpop-spark { animation: none; }
+      .matchpop-ring { opacity: 0.5; }
+    }
+
+    /* the active room's way out, sat next to the "Matched" tag */
+    .room-leave { margin: 0; flex: none; }
+    .room-leave-btn {
+      padding: 0.26rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid var(--ink-hairline);
+      background: none;
+      color: var(--text-faint);
+      font-family: var(--sans);
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+    }
+    .room-leave-btn:hover {
+      color: var(--danger);
+      border-color: rgba(255, 122, 138, 0.45);
+      background: rgba(255, 122, 138, 0.1);
+    }
+
     /* ---------- match screens (reveal / decide / ended) ----------------
        Same column as the search steps and the waiting screen: the state is
        stated in the middle (eyebrow, question, chips) and the two answers

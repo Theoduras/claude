@@ -168,7 +168,17 @@
             <span id="live-status">live</span>
           </p>
         </div>
-        {% if phase == 'active' %}<span class="tag">Matched</span>{% endif %}
+        {% if phase == 'active' %}
+          <span class="tag">Matched</span>
+          {# A match you both kept is still one either of you can leave.
+             Guarded behind the confirm overlay like every other unmatch. #}
+          <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
+                class="room-leave" id="active-leave-form">
+            <input type="hidden" name="choice" value="unmatch">
+            <button class="room-leave-btn" type="submit" data-choice="unmatch"
+                    aria-label="Unmatch {{ other['name'] }}">Unmatch</button>
+          </form>
+        {% endif %}
       </div>
 
       {% if phase == 'timed' %}
@@ -287,6 +297,59 @@
         </p>
       </div>
     {% endif %}
+  </div>
+{% endif %}
+
+{% if is_participant %}
+  {# Unmatch is the one action here that cannot be taken back, so it asks
+     twice: the tick is a deliberate second act, not a second button that
+     can be double-tapped through. #}
+  <div class="veil" id="unmatch-veil" hidden>
+    <div class="veil-scrim" data-cancel></div>
+    <div class="veil-card" role="alertdialog" aria-modal="true"
+         aria-labelledby="unmatch-title" aria-describedby="unmatch-body">
+      <p class="wiz-count">Before you go</p>
+      <h2 class="veil-q" id="unmatch-title">Unmatch<br>{{ other['name'] }}?</h2>
+      <p class="veil-sub" id="unmatch-body">
+        This ends the chat for both of you, straight away. You won't be paired
+        with each other again by this search, and the messages go with it.
+      </p>
+
+      <label class="veil-check" for="unmatch-sure">
+        <input type="checkbox" id="unmatch-sure" class="visually-hidden">
+        <span class="opt-mark opt-mark-box" aria-hidden="true"></span>
+        <span>Yes, I'm sure I want to unmatch</span>
+      </label>
+
+      <div class="veil-nav">
+        <button type="button" class="btn btn-secondary btn-block" data-cancel>Nevermind</button>
+        <button type="button" class="btn btn-block btn-danger" id="unmatch-go" disabled>
+          Unmatch
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {# Both sides kept it: the room stops being borrowed and becomes theirs.
+     Worth a beat of ceremony before the page turns into the real thing. #}
+  <div class="veil veil-match" id="match-veil" hidden>
+    <div class="veil-scrim"></div>
+    <div class="veil-card">
+      <div class="matchpop-art" aria-hidden="true">
+        <span class="matchpop-ring"></span>
+        <span class="matchpop-ring matchpop-ring-2"></span>
+        <span class="matchpop-orb matchpop-orb-a"></span>
+        <span class="matchpop-orb matchpop-orb-b"></span>
+        <span class="matchpop-spark"></span>
+      </div>
+      <p class="wiz-count">It's mutual</p>
+      <h2 class="veil-q">You both<br>said yes</h2>
+      <p class="veil-sub">
+        The room is yours now — no clock, and the photos are open.
+      </p>
+      <a class="btn btn-block" id="match-go"
+         href="{{ url_for('chat', match_id=match['id']) }}">Open the chat</a>
+    </div>
   </div>
 {% endif %}
 
@@ -428,22 +491,125 @@
     });
   }
 
+  // ---- the two overlays: leaving, and landing ----
+  // Both live outside <main>, which is a stacking context (position:
+  // relative; z-index: 1) -- the same reason the wizard's sheet is hoisted.
+  var shell = document.querySelector(".app-shell") || document.body;
+  var unmatchVeil = document.getElementById("unmatch-veil");
+  var matchVeil = document.getElementById("match-veil");
+  if (unmatchVeil) shell.appendChild(unmatchVeil);
+  if (matchVeil) shell.appendChild(matchVeil);
+
+  function openVeil(v) {
+    v.hidden = false;
+    requestAnimationFrame(function () { v.classList.add("is-open"); });
+  }
+  function closeVeil(v) {
+    v.classList.remove("is-open");
+    setTimeout(function () { v.hidden = true; }, 220);
+  }
+
+  // Landing: hold the celebration for a beat, then go. The link is there
+  // for anyone who would rather not wait (and for reduced-motion, where
+  // the art does not animate and the beat would just be a stall).
+  var celebrated = false;
+  function celebrate(url) {
+    if (celebrated) return;
+    celebrated = true;
+    if (!matchVeil) { window.location.href = url; return; }
+    document.getElementById("match-go").href = url;
+    openVeil(matchVeil);
+    var quick = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setTimeout(function () { window.location.href = url; }, quick ? 900 : 2600);
+  }
+
+  // Leaving: every unmatch on the page routes through the tick-box, whichever
+  // screen it was pressed on -- there is no path that ends a match on one tap.
+  var pendingUnmatch = null;
+  if (unmatchVeil) {
+    var sure = document.getElementById("unmatch-sure");
+    var go = document.getElementById("unmatch-go");
+
+    sure.addEventListener("change", function () { go.disabled = !sure.checked; });
+    unmatchVeil.addEventListener("click", function (ev) {
+      if (ev.target.closest("[data-cancel]")) cancelUnmatch();
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && !unmatchVeil.hidden) cancelUnmatch();
+    });
+    go.addEventListener("click", function () {
+      if (!sure.checked || !pendingUnmatch) return;
+      var run = pendingUnmatch;
+      pendingUnmatch = null;
+      closeVeil(unmatchVeil);
+      run();
+    });
+  }
+
+  function cancelUnmatch() {
+    pendingUnmatch = null;
+    var sure = document.getElementById("unmatch-sure");
+    if (sure) { sure.checked = false; }
+    var go = document.getElementById("unmatch-go");
+    if (go) { go.disabled = true; }
+    closeVeil(unmatchVeil);
+  }
+
+  // Ask first; `run` is what happens only if they tick and confirm.
+  function confirmUnmatch(run) {
+    if (!unmatchVeil) { run(); return; }
+    pendingUnmatch = run;
+    openVeil(unmatchVeil);
+  }
+
+  function postDecision(action, choice) {
+    return fetch(action, {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: "choice=" + encodeURIComponent(choice)
+    }).then(function (res) { return res.json(); });
+  }
+
+  // The active room's Unmatch: a plain form, upgraded to ask first.
+  var leaveForm = document.getElementById("active-leave-form");
+  if (leaveForm) {
+    leaveForm.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      confirmUnmatch(function () {
+        postDecision(leaveForm.action, "unmatch")
+          .then(function () { window.location.reload(); })
+          .catch(function () { window.location.reload(); });
+      });
+    });
+  }
+
   // ---- deciding: submit choice, then poll until the other side answers ----
   var decisionForm = document.getElementById("decision-form");
   if (decisionForm) {
     decisionForm.querySelectorAll("button[data-choice]").forEach(function (btn) {
       btn.addEventListener("click", function (ev) {
         ev.preventDefault();
-        document.getElementById("decision-choice").value = btn.dataset.choice;
-        var body = "choice=" + encodeURIComponent(btn.dataset.choice);
-        fetch(decisionForm.action, {
-          method: "POST",
-          headers: {
-            "Accept": "application/json",
-            "Content-Type": "application/x-www-form-urlencoded"
-          },
-          body: body
-        }).then(function () { window.location.reload(); });
+        var choice = btn.dataset.choice;
+        document.getElementById("decision-choice").value = choice;
+
+        function send() {
+          postDecision(decisionForm.action, choice)
+            .then(function (data) {
+              // Deciding last: the pair resolves on this very request, so
+              // the celebration is owed here rather than on a later poll.
+              if (choice === "continue" && data && data.phase === "active") {
+                celebrate(data.chat_url || window.location.href);
+                return;
+              }
+              window.location.reload();
+            })
+            .catch(function () { window.location.reload(); });
+        }
+
+        if (choice === "unmatch") confirmUnmatch(send); else send();
       });
     });
   }
@@ -460,7 +626,11 @@
       fetch(decideLive.dataset.stateUrl, { headers: { "Accept": "application/json" } })
         .then(function (res) { return res.json(); })
         .then(function (data) {
-          if (data.phase === "active" || data.phase === "ended") {
+          if (data.phase === "active") {
+            celebrate(data.chat_url || window.location.href);
+            return;
+          }
+          if (data.phase === "ended") {
             window.location.reload();
             return;
           }
@@ -482,7 +652,13 @@
       fetch(decisionStatus.dataset.stateUrl, { headers: { "Accept": "application/json" } })
         .then(function (res) { return res.json(); })
         .then(function (data) {
-          if (data.phase === "active" || data.phase === "ended") {
+          // Deciding first: the wait ends when the other side answers, and
+          // the answer being "yes" is the moment worth marking.
+          if (data.phase === "active") {
+            celebrate(data.chat_url || decisionStatus.dataset.chatUrl);
+            return;
+          }
+          if (data.phase === "ended") {
             window.location.reload();
             return;
           }
