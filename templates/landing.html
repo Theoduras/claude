@@ -7,15 +7,18 @@
 <div class="wiz landing wiz-fit">
   <div class="wiz-body">
     <div class="landing-head">
+      {# decorative: the nav already carries the name, so this is hidden from
+         screen readers rather than read out a second time. Comes first in
+         the markup so it sits above the headline when the column is
+         stacked on a phone; the desktop row puts it back on the copy's
+         right with `order`, rather than the reverse. #}
+      <div class="landing-logo" aria-hidden="true"></div>
       <div class="landing-copy">
         <h1>Something<br>softer than<br>swiping.</h1>
         <p class="landing-lede">
           Sign in and search — we pair you the moment someone is looking for you too.
         </p>
       </div>
-      {# decorative: the nav already carries the name, so this is hidden from
-         screen readers rather than read out a second time #}
-      <div class="landing-logo" aria-hidden="true"></div>
     </div>
   </div>
 

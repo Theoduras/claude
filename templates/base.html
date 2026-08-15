@@ -2897,15 +2897,17 @@
       color: var(--text-muted);
       max-width: 22ch;
     }
-    /* Phone first: the copy, then the wordmark filling the empty middle the
-       layout already had between the lede and the buttons. */
+    /* Phone first: the wordmark leads, then the copy -- the markup order
+       .wiz-head puts them in, so the same source order that gives the
+       stacked column its top-to-bottom reading also gives the desktop row
+       its left-to-right one (see the `order` swap below). */
     .landing-head {
       display: flex;
       flex-direction: column;
     }
-    /* Stacked, the wordmark is doing the work the tall opening gap used to do,
-       so the headline no longer needs to start a seventh of the way down. */
-    .landing-head h1 { margin-top: clamp(1.25rem, 6vh, 3.25rem); }
+    /* The wordmark carries its own top margin (below); the headline only
+       needs the smaller gap that separates it from what's above. */
+    .landing-head h1 { margin-top: clamp(0.75rem, 3vh, 1.5rem); }
     @media (min-width: 721px) {
       html:not([data-viewport="mobile"]) .landing-head h1 {
         margin-top: clamp(2.5rem, 13vh, 7.5rem);
@@ -2996,6 +2998,10 @@
         gap: clamp(1.5rem, 5vw, 4rem);
       }
       html:not([data-viewport="mobile"]) .landing-copy {
+        /* The logo comes first in the markup so a stacked phone gets it
+           above the headline; `order` puts the copy back on the left here
+           without touching the source order that mobile relies on. */
+        order: 1;
         flex: 0 1 auto;
         min-width: 0;
       }
@@ -3003,6 +3009,7 @@
         /* Fixed size, not stretched: without this the box fills the whole
            flex slot and the mark (anchored `center` inside it, but the box
            itself flush against .landing-copy) reads as pinned to the left. */
+        order: 2;
         flex: 0 0 auto;
         width: min(30vw, 26rem);
         min-width: 0;
