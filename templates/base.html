@@ -2287,6 +2287,10 @@
       html:not([data-viewport="mobile"]) .landing-head {
         flex-direction: row;
         align-items: center;
+        /* .landing-copy is fixed to its own content width, so centering the
+           row centers the leftover space rather than dragging the text off
+           the left edge. */
+        justify-content: center;
         gap: clamp(1.5rem, 5vw, 4rem);
       }
       html:not([data-viewport="mobile"]) .landing-copy {
@@ -2294,12 +2298,15 @@
         min-width: 0;
       }
       html:not([data-viewport="mobile"]) .landing-logo {
-        flex: 1 1 0;
-        width: auto;
+        /* Fixed size, not stretched: without this the box fills the whole
+           flex slot and the mark (anchored `center` inside it, but the box
+           itself flush against .landing-copy) reads as pinned to the left. */
+        flex: 0 0 auto;
+        width: min(30vw, 26rem);
         min-width: 0;
         max-width: 26rem;
         max-height: none;
-        margin: 0;
+        margin: 0 auto;
       }
     }
     .landing-fine {
