@@ -3002,19 +3002,20 @@ def resolve_match(match_id):
         db.commit()
         return db.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
 
-    if phase != "deciding":
-        return match
-
     users = db.execute(
         "SELECT id, is_bot FROM users WHERE id IN (?, ?)",
         (match["user_a"], match["user_b"]),
     ).fetchall()
     is_bot = {u["id"]: u["is_bot"] for u in users}
 
+    # A bot answers as soon as there is anything to answer: the other side
+    # has chosen, or the window has closed. Gating this on the 'deciding'
+    # phase (as it used to be) made a bot the one thing standing between a
+    # human who had already committed and the room they had committed to.
     decision_a, decision_b = match["decision_a"], match["decision_b"]
-    if is_bot.get(match["user_a"]) and not decision_a:
+    if is_bot.get(match["user_a"]) and not decision_a and (decision_b or phase == "deciding"):
         decision_a = "continue"
-    if is_bot.get(match["user_b"]) and not decision_b:
+    if is_bot.get(match["user_b"]) and not decision_b and (decision_a or phase == "deciding"):
         decision_b = "continue"
 
     grace_over = (now - match["paired_at"]).total_seconds() >= (
@@ -3025,6 +3026,13 @@ def resolve_match(match_id):
     if decision_a == "unmatch" or decision_b == "unmatch":
         new_status = "ended"
     elif decision_a == "continue" and decision_b == "continue":
+        # Both are in, so there is nothing left for the clock to decide --
+        # in any phase, not just once the timer has run out. Continue is a
+        # commitment, and making a committed pair sit out the rest of the
+        # countdown was the timer holding them apart rather than pacing
+        # them. (It cannot fire during 'reveal': match_decide() only accepts
+        # 'continue' from 'timed' onward, so a pair still cannot skip the
+        # timed chat wholesale by both accepting on the reveal screen.)
         new_status = "active"
     elif grace_over:
         new_status = "ended"  # no decision from someone within the window

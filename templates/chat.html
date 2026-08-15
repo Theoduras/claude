@@ -236,27 +236,39 @@
     {% if is_participant and phase == 'timed' %}
       {# You can commit before the clock runs out — the room does not have
          to expire first for a decision to count. #}
-      {% if state.my_decision %}
-        <p class="match-line" style="margin: 0.8rem 0 0;">
-          <span class="live-dot"></span>
-          You chose {{ 'to continue' if state.my_decision == 'continue' else 'to unmatch' }} — waiting for {{ other['name'] }}
-        </p>
-      {% else %}
-        <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
-              class="room-decide" id="decision-form">
-          <input type="hidden" name="choice" id="decision-choice" value="">
-          <p class="match-line">
+      {# Both sides can commit before the clock runs out, so this strip has
+         to be live: without a poll it states whatever was true when the
+         page rendered, and the room only moves when the countdown expires
+         -- which is exactly the wait committing early is meant to skip. #}
+      <div id="decide-live"
+           data-state-url="{{ url_for('match_state', match_id=match['id']) }}"
+           data-other="{{ other['name'] }}">
+        {% if state.my_decision %}
+          <p class="match-line" style="margin: 0.8rem 0 0;">
             <span class="live-dot"></span>
-            {% if state.their_decision %}
-              {{ other['name'] }} has already decided
-            {% else %}
-              {{ other['name'] }} hasn't decided yet
-            {% endif %}
+            <span id="decide-mine">
+              You chose {{ 'to continue' if state.my_decision == 'continue' else 'to unmatch' }} — waiting for {{ other['name'] }}
+            </span>
           </p>
-          <button class="wiz-skip wiz-skip-danger" type="submit" data-choice="unmatch">Unmatch</button>
-          <button class="wiz-go wiz-go-sm" type="submit" data-choice="continue">Continue</button>
-        </form>
-      {% endif %}
+        {% else %}
+          <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
+                class="room-decide" id="decision-form">
+            <input type="hidden" name="choice" id="decision-choice" value="">
+            <p class="match-line">
+              <span class="live-dot"></span>
+              <span id="decide-theirs">
+                {% if state.their_decision %}
+                  {{ other['name'] }} has already decided
+                {% else %}
+                  {{ other['name'] }} hasn't decided yet
+                {% endif %}
+              </span>
+            </p>
+            <button class="wiz-skip wiz-skip-danger" type="submit" data-choice="unmatch">Unmatch</button>
+            <button class="wiz-go wiz-go-sm" type="submit" data-choice="continue">Continue</button>
+          </form>
+        {% endif %}
+      </div>
     {% endif %}
     </div>
 
@@ -434,6 +446,34 @@
         }).then(function () { window.location.reload(); });
       });
     });
+  }
+
+  // ---- timed: the decision strip, kept live while the clock runs ----
+  // Reloads the moment the pair resolves (both continued -> 'active', or
+  // either left -> 'ended') instead of waiting out the countdown, and
+  // otherwise just retitles the other side's line in place -- a reload
+  // here would throw away whatever is half-typed in the composer.
+  var decideLive = document.getElementById("decide-live");
+  if (decideLive) {
+    var otherName = decideLive.dataset.other;
+    (function pollDecide() {
+      fetch(decideLive.dataset.stateUrl, { headers: { "Accept": "application/json" } })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.phase === "active" || data.phase === "ended") {
+            window.location.reload();
+            return;
+          }
+          var theirs = document.getElementById("decide-theirs");
+          if (theirs) {
+            theirs.textContent = data.their_decision
+              ? otherName + " has already decided"
+              : otherName + " hasn't decided yet";
+          }
+          setTimeout(pollDecide, POLL_MS);
+        })
+        .catch(function () { setTimeout(pollDecide, RETRY_MS); });
+    })();
   }
 
   var decisionStatus = document.getElementById("decision-status");
