@@ -726,6 +726,13 @@
       .wiz {
         margin-inline: auto;
         padding-inline: 0;
+        /* explicit, for the same reason main needs it: inside a flex column
+           `margin-inline: auto` is a flex auto-margin, so it eats the free
+           space and suppresses the stretch that would otherwise size this
+           box -- leaving the column shrink-to-fit and a different width on
+           every step. max-width still caps it; the auto margins still
+           centre it. */
+        width: 100%;
         max-width: 27rem;
       }
     }
