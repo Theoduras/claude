@@ -387,7 +387,7 @@
   {% endif %}
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   var closeBtn = document.getElementById("pro-close");
   if (closeBtn) {

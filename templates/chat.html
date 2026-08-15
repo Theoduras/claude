@@ -308,6 +308,7 @@
         <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="text" name="body" id="chat-input" placeholder="Type a message…"
+                 maxlength="{{ message_max_chars }}"
                  autofocus required autocomplete="off">
           <button class="btn btn-send" type="submit" aria-label="Send">&#8593;</button>
         </form>
@@ -375,7 +376,7 @@
   </div>
 {% endif %}
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   var POLL_MS = 1500;
   var RETRY_MS = 4000;

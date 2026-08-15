@@ -2,7 +2,7 @@
   <p style="margin-bottom: 1rem;">
     <button type="button" class="btn btn-secondary btn-small" id="fill-all-btn">Fill everything</button>
   </p>
-  <script id="sample-profile-data" type="application/json">{{ sample_profile | tojson }}</script>
+  <script nonce="{{ csp_nonce() }}" id="sample-profile-data" type="application/json">{{ sample_profile | tojson }}</script>
 {% endif %}
 
 {# ---- who you are ----------------------------------------------------- #}
@@ -262,7 +262,7 @@
   </div>
 </details>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   // ---- photos -------------------------------------------------------
   // Everything here is staged. The strip is the truth on screen; the three
@@ -521,7 +521,7 @@
 </script>
 
 {% if sample_profile is defined %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   var sample = JSON.parse(document.getElementById("sample-profile-data").textContent);
 

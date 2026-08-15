@@ -346,6 +346,10 @@ AGE_MIN_YEARS, AGE_MAX_YEARS = 18, 39
 # attempt and the waiting screen never actually shows.
 MIN_SEARCH_SECONDS = 7
 
+# Longest single message. Enforced in send_message(), mirrored as maxlength
+# on the composer.
+MESSAGE_MAX_CHARS = 2000
+
 # How long a search must run with zero fits before the waiting screen offers
 # "Search wider". Measured from searches.created_at (like MIN_SEARCH_SECONDS
 # above), not a client-side clock -- a page reload must not push the offer
@@ -1405,6 +1409,8 @@ def inject_user():
         "csrf_token": csrf_token,
         # The footer on every page needs somewhere to point "Contact".
         "support_email": SUPPORT_EMAIL,
+        # So the composer's maxlength and send_message()'s cap cannot drift.
+        "message_max_chars": MESSAGE_MAX_CHARS,
     }
 
 
@@ -1504,6 +1510,65 @@ def auto_login_admin():
     ).fetchone()
     if admin is not None:
         start_session(admin["id"])
+
+
+# --- security headers ------------------------------------------------------
+# Every inline <script> in templates/ carries nonce="{{ csp_nonce() }}", which
+# is what lets script-src stay strict: 'unsafe-inline' would make the CSP a
+# decoration, since the whole point is that injected markup cannot run.
+#
+# style-src is the honest exception. Inline style="..." attributes are used
+# throughout the templates and a nonce cannot cover an attribute, so
+# 'unsafe-inline' stays there until those are gone. It is a far smaller
+# opening than the script side would be.
+#
+# The photo route sets its own headers and is left alone -- it serves user
+# bytes, not a page, and already says nosniff.
+CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'nonce-{nonce}'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "form-action 'self'; "
+    "base-uri 'self'; "
+    "object-src 'none'; "
+    "frame-ancestors 'none'"
+)
+
+
+@app.before_request
+def make_csp_nonce():
+    g.csp_nonce = secrets.token_urlsafe(16)
+
+
+@app.context_processor
+def expose_csp_nonce():
+    return {"csp_nonce": lambda: getattr(g, "csp_nonce", "")}
+
+
+@app.after_request
+def security_headers(response):
+    # /lab serves the mockup file verbatim -- it is not a Jinja template, so
+    # its inline scripts carry no nonce and it pulls webfonts from Google.
+    # It is admin-only and touches no data; the rest of the headers still
+    # apply to it. Weakening the whole app's CSP to accommodate a design
+    # scratchpad would be the wrong way round.
+    if request.path != "/lab":
+        response.headers.setdefault(
+            "Content-Security-Policy", CSP.format(nonce=getattr(g, "csp_nonce", "")))
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault(
+        "Permissions-Policy", "geolocation=(self), camera=(), microphone=(), payment=()")
+    # Only over TLS, and only in production: sending HSTS from a plain-http
+    # dev server teaches the browser to refuse localhost over http for a year.
+    if IS_PRODUCTION and request.is_secure:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 
 MOCKUPS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mockups")
@@ -5388,6 +5453,12 @@ def send_message(match_id):
 
     if not body:
         return fail("Message can't be empty.", 400)
+    # The composer sets maxlength, which is a courtesy to the person typing
+    # and no obstacle at all to anyone posting here directly. Five minutes
+    # of conversation has no legitimate need for a novel-length message, and
+    # without a cap the only limit on a single row is MAX_CONTENT_LENGTH.
+    if len(body) > MESSAGE_MAX_CHARS:
+        return fail(f"That message is too long — {MESSAGE_MAX_CHARS} characters max.", 400)
 
     db = get_db()
     new_id = db.insert_returning_id(

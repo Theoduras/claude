@@ -176,14 +176,30 @@ with app.test_client() as c:
 with app.test_client() as c:
     name, _ = register(c)
     c.post("/logout", data={"csrf_token": token(c, "/profile/edit")})
+    # Earlier checks have already spent some of this address's hourly /forgot
+    # budget. Without a reset the two posts below can straddle the limit, and
+    # then they differ for that reason rather than the one under test.
+    clear_rate_limits()
     real = c.post("/forgot", data={"email": f"{name}@example.test",
                                    "csrf_token": token(c, "/forgot")},
                   follow_redirects=True)
     fake = c.post("/forgot", data={"email": "nobody-here@example.test",
                                    "csrf_token": token(c, "/forgot")},
                   follow_redirects=True)
+    # Byte-equality stopped being the right comparison once every response
+    # started carrying a per-request CSP nonce and CSRF token. Those differ
+    # between any two renders and say nothing about the address; normalise
+    # them out and the question is again "does this page reveal whether the
+    # account exists".
+    def anonymise(resp):
+        html = resp.get_data(as_text=True)
+        html = re.sub(r'nonce="[^"]+"', 'nonce="N"', html)
+        html = re.sub(r'name="csrf_token" value="[^"]+"',
+                      'name="csrf_token" value="T"', html)
+        return html
+
     check("/forgot answers identically for unknown addresses",
-          real.get_data() == fake.get_data())
+          anonymise(real) == anonymise(fake))
 
 # --- 5. suspension takes effect mid-session -----------------------------
 with app.test_client() as c:
@@ -621,6 +637,75 @@ with app.test_client() as c:
           and any(ch["key"] == "age" for ch in data["chips"]),
           str(data)[:200])
 
+
+# --- security headers ------------------------------------------------------
+# Every page, not just the ones that felt risky. A header set on one route
+# and forgotten on the next is the shape this bug always takes.
+with app.test_client() as c:
+    r = c.get("/login")
+    h = r.headers
+    csp = h.get("Content-Security-Policy", "")
+    check("a CSP is sent", "default-src 'self'" in csp, csp[:80])
+    check("script-src is nonce-based, not unsafe-inline",
+          "'nonce-" in csp and "'unsafe-inline'" not in csp.split("style-src")[0],
+          csp[:120])
+    # Header and markup must come from the SAME response -- the nonce is
+    # regenerated per request, so comparing across two GETs always fails.
+    nonce = csp.split("'nonce-")[1].split("'")[0]
+    body = r.get_data(as_text=True)
+    check("the page's own scripts carry that nonce",
+          body.count("<script") == body.count('nonce="%s"' % nonce),
+          f'{body.count("<script")} script tags, '
+          f'{body.count(chr(34).join(["nonce=", nonce, ""]))} nonced')
+    check("framing is refused", "frame-ancestors 'none'" in csp)
+    check("the referrer is trimmed cross-origin",
+          h.get("Referrer-Policy") == "strict-origin-when-cross-origin")
+    check("sniffing is off", h.get("X-Content-Type-Options") == "nosniff")
+    check("camera and mic are denied", "camera=()" in h.get("Permissions-Policy", ""))
+    check("HSTS is not sent over plain http", "Strict-Transport-Security" not in h)
+
+    # A nonce that repeated across responses would be no better than none.
+    n1 = c.get("/login").headers["Content-Security-Policy"].split("'nonce-")[1].split("'")[0]
+    n2 = c.get("/login").headers["Content-Security-Policy"].split("'nonce-")[1].split("'")[0]
+    check("the nonce is per-response", n1 != n2, f"{n1} vs {n2}")
+
+# --- message length --------------------------------------------------------
+# maxlength on the composer is advice to the browser. This is the rule.
+empty_the_pool()
+with app.test_request_context():
+    db = A.get_db()
+    ids = []
+    for nm in ("cap_a", "cap_b"):
+        uid = db.execute(
+            "INSERT INTO users (username, password_hash, email_verified_at, status)"
+            " VALUES (?, 'x', NOW(), 'active') RETURNING id",
+            (nm + A.secrets.token_hex(4),)).fetchone()["id"]
+        db.execute("INSERT INTO profiles (user_id, name, age, gender, seeking)"
+                   " VALUES (?, ?, 30, 'Man', 'Everyone')", (uid, nm))
+        ids.append(uid)
+    mid = db.execute(
+        """INSERT INTO matches (user_a, user_b, status, paired_at)
+           VALUES (?, ?, 'active', NOW()) RETURNING id""", tuple(ids)).fetchone()["id"]
+    db.commit()
+
+with app.test_client() as c:
+    login_as(c, ids[0])
+    tok = token(c, f"/chat/{mid}")
+    r = c.post(f"/chat/{mid}/send",
+               data={"body": "x" * (A.MESSAGE_MAX_CHARS + 1), "csrf_token": tok},
+               headers={"Accept": "application/json"})
+    check("an over-long message is refused", r.status_code == 400, f"HTTP {r.status_code}")
+    r = c.post(f"/chat/{mid}/send",
+               data={"body": "x" * A.MESSAGE_MAX_CHARS, "csrf_token": tok},
+               headers={"Accept": "application/json"})
+    check("a message at the limit is accepted", r.status_code < 400, f"HTTP {r.status_code}")
+    with app.test_request_context():
+        n = A.get_db().execute(
+            "SELECT COUNT(*) AS n FROM messages WHERE match_id = ?", (mid,)).fetchone()["n"]
+    check("only the accepted one was stored", n == 1, f"{n} rows")
+    html = c.get(f"/chat/{mid}").get_data(as_text=True)
+    check("the composer advertises the same limit",
+          f'maxlength="{A.MESSAGE_MAX_CHARS}"' in html)
 
 failed = [n for n, ok, _ in RESULTS if not ok]
 print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")

@@ -33,7 +33,7 @@
          value="{{ loc_lng_value | default('') }}">
 {% endif %}
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   var locInput = document.getElementById("{{ _id }}");
   var locList = document.getElementById("{{ _id }}-ac-list");

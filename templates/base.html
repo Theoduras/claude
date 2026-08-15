@@ -3251,7 +3251,7 @@
   </style>
   {# One place for the fetch-based endpoints to get their CSRF header, so
      each call site does not re-read the meta tag itself. #}
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     window.velvtCsrf = function () {
       var el = document.querySelector('meta[name="csrf-token"]');
       return el ? el.getAttribute("content") : "";
@@ -3260,7 +3260,7 @@
   {# Runs before body paint so the forced layout never flashes the wrong
        one first. Falls back to the real viewport on the very first visit,
        then a click pins it either way until cleared. #}
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         var v = localStorage.getItem("velvet-viewport-preview");
         if (v !== "mobile" && v !== "desktop") {
@@ -3354,7 +3354,7 @@
     <button type="button" class="viewport-toggle" id="viewport-toggle" aria-label="Toggle mobile/desktop preview">
       <span id="viewport-toggle-label"></span>
     </button>
-    <script>
+    <script nonce="{{ csp_nonce() }}">
       (function () {
         var KEY = "velvet-viewport-preview";
         var btn = document.getElementById("viewport-toggle");
