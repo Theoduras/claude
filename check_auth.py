@@ -771,6 +771,78 @@ try:
 finally:
     A.requests.get = _real_get
 
+# --- security events -------------------------------------------------------
+with app.test_request_context():
+    A.get_db().execute("TRUNCATE security_events")
+    A.get_db().commit()
+clear_rate_limits()
+
+
+def events(kind):
+    with app.test_request_context():
+        return A.get_db().execute(
+            "SELECT * FROM security_events WHERE kind = ? ORDER BY id", (kind,)).fetchall()
+
+
+with app.test_client() as c:
+    nm, _ = register(c)
+    pw = "correct horse battery"   # register()'s default; it returns the response, not this
+    c.post("/logout", data={"csrf_token": token(c, "/profile/edit")})
+    c.post("/login", data={"username": nm, "password": "definitely-wrong",
+                           "csrf_token": token(c)})
+    c.post("/login", data={"username": nm, "password": pw, "csrf_token": token(c)})
+
+logins = events("login")
+outcomes = [r["outcome"] for r in logins]
+check("a failed login is recorded", "failure" in outcomes, str(outcomes))
+check("a successful login is recorded", "success" in outcomes, str(outcomes))
+check("the attempt's address is recorded", all(r["ip"] for r in logins))
+check("the attempted password is never recorded",
+      not any("definitely-wrong" in (r["detail"] or "") for r in logins))
+
+with app.test_client() as c:
+    c.post("/login", data={"username": nm, "password": pw})  # no CSRF token
+check("a rejected CSRF request is recorded", len(events("csrf")) >= 1)
+
+# The spike alarm: once when it crosses, then quiet.
+with app.test_request_context():
+    db = A.get_db()
+    db.execute("DELETE FROM security_events WHERE kind = 'login_failure_spike'")
+    db.execute("DELETE FROM security_events WHERE kind = 'login'")
+    for i in range(A.LOGIN_FAILURE_SPIKE - 1):
+        db.execute("INSERT INTO security_events (kind, outcome, ip)"
+                   " VALUES ('login', 'failure', ?)", (f"10.0.0.{i % 250}",))
+    db.commit()
+    check("no alert below the threshold", len(events("login_failure_spike")) == 0)
+
+    A.security_event("login", "failure", ip="10.9.9.9")
+    check("the alert fires when failures spike",
+          len(events("login_failure_spike")) == 1)
+
+    for _ in range(15):
+        A.security_event("login", "failure", ip="10.9.9.9")
+    check("the alert does not repeat during its cooldown",
+          len(events("login_failure_spike")) == 1,
+          f"{len(events('login_failure_spike'))} alerts")
+
+# Instrumentation must never take a request down with it.
+_broken = A.get_db
+
+
+def explode():
+    raise RuntimeError("database gone")
+
+
+try:
+    A.get_db = explode
+    with app.test_request_context():
+        A.security_event("login", "failure", ip="10.0.0.1")
+    check("a failure to record an event is swallowed", True)
+except Exception as exc:
+    check("a failure to record an event is swallowed", False, repr(exc))
+finally:
+    A.get_db = _broken
+
 failed = [n for n, ok, _ in RESULTS if not ok]
 print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
 if failed:

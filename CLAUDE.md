@@ -225,6 +225,19 @@ schedule is the block of `*_RETENTION_DAYS` constants near `DELETION_GRACE_DAYS`
 | exact `searches.lat/lng` | 30 days | then rounded to ~1km, not deleted |
 | resolved reports | 365 days | the record of a moderation decision |
 | `rate_hits` | 2 days | operational, outlives no window |
+| `security_events` | 90 days | holds IP addresses; not exempt for being useful |
+
+`security_event()` records login success/failure, password changes and resets, reports
+filed, admin actions, CSRF rejections and rate-limit hits — to the `security_events`
+table *and* as a single-line JSON object, which is what Cloud Logging picks up as a
+structured payload. It swallows its own failures on purpose: an audit trail that can
+take a request down with it makes the service less reliable and no more accountable.
+
+Writing to a table as well as the log is what makes `check_login_failure_spike()`
+possible — failures are counted service-wide, not per-IP, because the rate limiter
+already covers one address hammering one account and the pattern it cannot see (many
+addresses, many accounts, each under the limit) is the one worth an alert. It fires
+once and then stays quiet for `SPIKE_ALERT_COOLDOWN_MINUTES`.
 
 An ended match with an **unresolved** report against it is never purged, whatever its
 age — expiring the evidence would answer the complaint by losing it. `check_retention.py`

@@ -280,6 +280,11 @@ COORDINATE_PLACES = 2
 # own window.
 RATE_HIT_RETENTION_DAYS = 2
 
+# Security events record IP addresses, so they cannot be kept indefinitely
+# just because they are useful. A quarter is long enough to investigate an
+# incident that surfaced weeks after it happened.
+AUTH_EVENT_RETENTION_DAYS = 90
+
 # A resolved report is kept longer than the content it describes: it is the
 # record of a moderation decision, and the DSA expects those to be
 # accountable after the fact.
@@ -1085,6 +1090,25 @@ CREATE TABLE IF NOT EXISTS consents (
 -- Backed by Postgres rather than process memory on purpose: Cloud Run runs
 -- many instances against one database, so an in-process counter would let
 -- an attacker have N times the budget by spreading requests across them.
+-- --- security events -----------------------------------------------------
+-- Written as well as logged. Logs answer "what happened" for a person
+-- reading them; this table is what the app itself can query, which is what
+-- makes spike detection possible at all.
+--
+-- It holds an IP address, which is personal data, so it is on the retention
+-- schedule like everything else -- see AUTH_EVENT_RETENTION_DAYS.
+CREATE TABLE IF NOT EXISTS security_events (
+    id BIGSERIAL PRIMARY KEY,
+    at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    kind TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    ip TEXT,
+    detail TEXT
+);
+
+CREATE INDEX IF NOT EXISTS security_events_at_idx ON security_events (kind, at DESC);
+
 CREATE TABLE IF NOT EXISTS rate_hits (
     bucket_key TEXT NOT NULL,
     window_start TIMESTAMPTZ NOT NULL,
@@ -1136,6 +1160,92 @@ def init_db():
                 cur.execute(
                     "UPDATE users SET is_admin = TRUE WHERE id = %s", (admin["id"],)
                 )
+
+
+# How many failed logins across the whole service, within this window,
+# constitute a spike worth waking someone for. Tuned to be quiet: a handful
+# of people mistyping a password is a Tuesday, not an attack.
+LOGIN_FAILURE_SPIKE = 30
+LOGIN_FAILURE_WINDOW_MINUTES = 10
+# Once a spike is called, stay quiet for this long rather than repeating the
+# alert on every subsequent failure -- an alert that fires 400 times is an
+# alert nobody reads.
+SPIKE_ALERT_COOLDOWN_MINUTES = 30
+
+
+def security_event(kind, outcome, user_id=None, detail=None, ip=None):
+    """Record something worth being able to reconstruct later.
+
+    Written to the database *and* logged as a single JSON object, which is
+    what Cloud Logging picks up as a structured payload -- so these are
+    filterable by field rather than by grepping a sentence.
+
+    Deliberately swallows its own failures. This is instrumentation: an
+    audit trail that can take a request down with it makes the service less
+    reliable and no more accountable.
+    """
+    if ip is None:
+        ip = request.remote_addr if request else None
+    try:
+        db = get_db()
+        db.execute(
+            """INSERT INTO security_events (kind, outcome, user_id, ip, detail)
+               VALUES (?, ?, ?, ?, ?)""",
+            (kind, outcome, user_id, ip, detail),
+        )
+        db.commit()
+    except Exception:
+        app.logger.exception("could not record security event %s/%s", kind, outcome)
+
+    payload = {"event": kind, "outcome": outcome, "user_id": user_id,
+               "ip": ip, "detail": detail}
+    app.logger.info(json.dumps({k: v for k, v in payload.items() if v is not None}))
+
+    if kind == "login" and outcome == "failure":
+        check_login_failure_spike()
+
+
+def check_login_failure_spike():
+    """Alert once when failed logins spike, then stay quiet for a while.
+
+    Counted service-wide rather than per-IP on purpose: the rate limiter
+    already handles one address hammering one account, and the pattern it
+    cannot see is the one worth waking up for -- many addresses trying many
+    accounts, each below the per-IP limit.
+    """
+    try:
+        db = get_db()
+        recent = db.execute(
+            """SELECT COUNT(*) AS n FROM security_events
+               WHERE kind = 'login' AND outcome = 'failure'
+                 AND at > NOW() - (? * INTERVAL '1 minute')""",
+            (LOGIN_FAILURE_WINDOW_MINUTES,),
+        ).fetchone()["n"]
+        if recent < LOGIN_FAILURE_SPIKE:
+            return
+        alerted = db.execute(
+            """SELECT 1 AS hit FROM security_events
+               WHERE kind = 'login_failure_spike'
+                 AND at > NOW() - (? * INTERVAL '1 minute') LIMIT 1""",
+            (SPIKE_ALERT_COOLDOWN_MINUTES,),
+        ).fetchone()
+        if alerted:
+            return
+        db.execute(
+            """INSERT INTO security_events (kind, outcome, detail)
+               VALUES ('login_failure_spike', 'alert', ?)""",
+            (f"{recent} failed logins in {LOGIN_FAILURE_WINDOW_MINUTES} minutes",),
+        )
+        db.commit()
+        app.logger.error(json.dumps({
+            "event": "login_failure_spike",
+            "outcome": "alert",
+            "severity": "CRITICAL",
+            "failures": recent,
+            "window_minutes": LOGIN_FAILURE_WINDOW_MINUTES,
+        }))
+    except Exception:
+        app.logger.exception("spike check failed")
 
 
 def rate_limit_hit(bucket, limit, window_seconds):
@@ -1190,6 +1300,7 @@ def rate_limited(name, limit, window_seconds, by="ip", include_safe=False):
                 who = request.remote_addr or "unknown"
             if rate_limit_hit(f"{name}:{who}", limit, window_seconds):
                 app.logger.warning("rate limit %s hit by %s", name, who)
+                security_event("rate_limit", "throttled", detail=f"{name} by {who}")
                 retry = window_seconds
                 if "application/json" in request.headers.get("Accept", ""):
                     return (
@@ -1556,6 +1667,7 @@ def check_csrf():
         return
 
     app.logger.warning("CSRF check failed for %s %s", request.method, request.path)
+    security_event("csrf", "rejected", detail=f"{request.method} {request.path}")
     if "application/json" in request.headers.get("Accept", ""):
         return {"error": "Your session expired. Reload the page and try again."}, 400
     return (
@@ -1834,11 +1946,20 @@ def login():
 
         if user and check_password_hash(user["password_hash"], password):
             if user["status"] not in LOGIN_ALLOWED_STATUSES:
+                security_event("login", "refused", user_id=user["id"],
+                               detail=f"status={user['status']}")
                 flash("This account is not available. Please contact support.")
                 return render_template("login.html")
             start_session(user["id"], remember=remember)
+            security_event("login", "success", user_id=user["id"])
             return redirect(url_for("live_search"))
 
+        # The identifier is not recorded: a failed login often *is* somebody's
+        # password typed into the username box, and that would put it in the
+        # log in clear.
+        security_event("login", "failure",
+                       user_id=user["id"] if user else None,
+                       detail="unknown account" if not user else "wrong password")
         flash("Invalid username or password.")
 
     return render_template("login.html")
@@ -1938,6 +2059,7 @@ def reset_password(token):
             # Whoever had the old password is now out, everywhere. That is
             # the point of a reset.
             revoke_user_sessions(user_id)
+            security_event("password_reset", "success", user_id=user_id)
             start_session(user_id)
             flash("Password updated. You've been signed out on other devices.")
             return redirect(url_for("live_search"))
@@ -2788,6 +2910,7 @@ def change_password():
         # Everywhere but here: changing your password should not log you out
         # of the tab you did it in, but it must log out everyone else.
         revoke_user_sessions(me["id"], except_token=session.get("sid"))
+        security_event("password_change", "success", user_id=me["id"])
         flash("Password changed. You've been signed out on other devices.")
     return redirect(url_for("settings"))
 
@@ -3097,6 +3220,13 @@ def purge_expired_data():
          COORDINATE_PLACES, COORDINATE_PLACES),
     ).rowcount
 
+    # This one holds IP addresses. It is on the schedule for the same reason
+    # everything else is, not exempted for being useful to us.
+    counts["security_events"] = db.execute(
+        "DELETE FROM security_events WHERE at < NOW() - (? * INTERVAL '1 day')",
+        (AUTH_EVENT_RETENTION_DAYS,),
+    ).rowcount
+
     counts["rate_hits"] = db.execute(
         "DELETE FROM rate_hits WHERE window_start < NOW() - (? * INTERVAL '1 day')",
         (RATE_HIT_RETENTION_DAYS,),
@@ -3176,6 +3306,8 @@ def report_user(user_id):
             (me, user_id, match_id, reason, detail),
         )
         db.commit()
+        security_event("report", "filed", user_id=me,
+                       detail=f"against user {user_id}, reason={reason}")
 
         if also_block:
             apply_block(me, user_id)
@@ -3315,6 +3447,9 @@ def admin_resolve_report(report_id):
 
     me = current_uid()
     target = report["reported_id"]
+
+    security_event("admin_action", action, user_id=me,
+                   detail=f"report {report_id} against user {target}")
 
     if action in ("suspend", "ban"):
         new_status = "suspended" if action == "suspend" else "banned"
