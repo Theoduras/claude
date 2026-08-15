@@ -2442,6 +2442,10 @@
       border-radius: 0.75rem;
       border: 1px solid var(--ink-hairline);
       overflow: hidden;
+      cursor: grab;
+      touch-action: none;   /* or the drag scrolls the form instead */
+      transition: transform 0.16s ease, border-color 0.16s ease,
+                  box-shadow 0.16s ease;
     }
     .photo-tile > img {
       display: block;
@@ -2449,16 +2453,103 @@
       height: 100%;
       object-fit: cover;
     }
+    /* Nothing in this strip saves on its own -- a tile is a staged
+       intention until the form goes -- so every one of them has to say what
+       it is doing while you do it. That is the whole reason for the states
+       below: without them the screen looked identical before and after you
+       picked a photo. */
+    .photo-tile:hover,
+    .photo-tile:focus-within {
+      border-color: rgba(168, 85, 247, 0.55);
+      transform: translateY(-2px);
+    }
+    .photo-tile.is-dragging {
+      z-index: 2;
+      cursor: grabbing;
+      transform: scale(1.06);
+      border-color: var(--violet-crest);
+      box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.9);
+    }
+    .photo-tile.is-main {
+      border-color: rgba(232, 211, 169, 0.75);
+      box-shadow: 0 0 0 1px rgba(232, 211, 169, 0.35);
+    }
+    .photo-tile.is-removed { border-style: dashed; }
+    .photo-tile.is-removed > img { opacity: 0.22; filter: grayscale(1); }
+
+    /* the tap target for "make this the main": the picture itself, which is
+       what you would reach for anyway */
+    .photo-main {
+      position: absolute;
+      inset: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    .photo-x {
+      position: absolute;
+      top: 0.25rem;
+      right: 0.25rem;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      width: 1.35rem;
+      height: 1.35rem;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: #FFF;
+      background: rgba(11, 7, 19, 0.72);
+      backdrop-filter: blur(4px);
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.16s ease, background 0.16s ease;
+    }
+    .photo-x svg { width: 0.7rem; height: 0.7rem; }
+    .photo-x:hover { background: var(--danger); }
+    /* on a phone there is no hover to reveal it, so it is always there */
+    .photo-tile:hover .photo-x,
+    .photo-tile:focus-within .photo-x { opacity: 1; }
+    @media (hover: none) {
+      .photo-x { opacity: 1; }
+    }
+    .photo-tile.is-removed .photo-x,
+    .photo-tile.is-removed .photo-main,
+    .photo-tile.is-removed .photo-tile-label { display: none; }
+
+    .photo-undo {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: none;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--violet-crest);
+      font-family: var(--mono);
+      font-size: 0.66rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .photo-tile.is-removed .photo-undo { display: block; }
+
     .photo-tile-label {
       position: absolute;
       left: 0;
       bottom: 0;
+      z-index: 1;
+      display: none;
       padding: 0.4rem;
       font-family: var(--mono);
       font-size: 0.5625rem;
       letter-spacing: 0.06em;
-      color: var(--text-faint);
+      color: var(--champagne);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
     }
+    .photo-tile.is-main .photo-tile-label { display: block; }
+
     /* the add slot: dashed, so it reads as an empty place rather than a
        tile that failed to load */
     .photo-tile-add {
@@ -2469,6 +2560,27 @@
       border-color: rgba(168, 133, 247, 0.3);
       color: var(--text-faint);
       font-size: 1.4rem;
+      cursor: pointer;
+    }
+    .photo-tile-add:hover,
+    .photo-tile-add:focus-within {
+      color: var(--violet-crest);
+      border-color: rgba(168, 85, 247, 0.6);
+      background: rgba(168, 133, 247, 0.07);
+    }
+    .photo-tile-add:active { transform: scale(0.96); }
+    /* the strip answers a file dragged anywhere over the window, so the
+       target is visible before you let go rather than after */
+    .photo-tiles.is-dropping .photo-tile-add {
+      color: var(--violet-crest);
+      border-color: var(--violet-crest);
+      background: rgba(168, 133, 247, 0.12);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .photo-tile { transition: none; }
+      .photo-tile:hover, .photo-tile:focus-within { transform: none; }
+      .photo-tile.is-dragging { transform: none; }
     }
 
     .strength-head {

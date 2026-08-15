@@ -98,6 +98,14 @@ Interests, Hobbies, and the `wants`/`needs` prompts), plus an owner-only card fo
 `pref_*` columns. All of it is Jinja over columns `profiles` already has —
 `view_profile()` is untouched — so a new field shows up by adding a card, not a route.
 
+`/profile/edit` stages photo changes and applies them all on Save: the tile strip previews
+picked files with `URL.createObjectURL`, an × marks a photo for removal (Undo takes it
+back), tapping a tile makes it the main one, and dragging reorders. The browser transcribes
+the strip into three hidden fields — `remove_photo_ids`, `photo_order`, `primary_photo_id`
+— and rewrites the file input through a `DataTransfer`, since a `FileList` is read-only;
+`apply_photo_edits()` (`app.py:~1228`) re-checks every id against ownership and writes
+`photos.sort_order`. Reads are `ORDER BY is_primary DESC, sort_order, id` everywhere.
+
 ## Route map (`app.py`)
 
 Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on every edit.

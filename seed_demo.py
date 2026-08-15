@@ -310,8 +310,9 @@ def seed_photos(db, username, user_id):
         mime = sniff_image_mime(data)
         assert mime in PHOTO_ALLOWED_MIMES, mime
         db.execute(
-            "INSERT INTO photos (user_id, data, mime, is_primary) VALUES (?, ?, ?, ?)",
-            (user_id, data, mime, i == 0),
+            "INSERT INTO photos (user_id, data, mime, is_primary, sort_order)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (user_id, data, mime, i == 0, i),
         )
         added += 1
     return added

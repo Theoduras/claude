@@ -51,39 +51,58 @@
   </div>
 </div>
 
-{# Everything past the four fields above is optional: a profile only
+{# ---- photos ----------------------------------------------------------
+   Its own section rather than a row inside "Add more": it is the thing a
+   profile leads with, and it was the one part of this form nobody could
+   find. Nothing here saves on its own -- a tile marked for removal, a new
+   file, a drag, a tap on the main -- it is all staged in the three hidden
+   fields below and lands when the form does. #}
+{% if allow_photos is defined and allow_photos %}
+  <div class="field-group">
+    <h2>Photos</h2>
+  </div>
+  <div class="photo-tiles" id="photo-tiles" data-max="{{ photo_max_per_user }}">
+    {% for photo in (photos if photos is defined else []) %}
+      <div class="photo-tile{% if photo['is_primary'] %} is-main{% endif %}"
+           data-key="{{ photo['id'] }}">
+        <img src="{{ url_for('photo', photo_id=photo['id']) }}" alt="Your photo" loading="lazy">
+        {# two sibling buttons, not one inside the other: nesting them is
+           invalid, and the corner x has to stay clickable on its own #}
+        <button type="button" class="photo-main" data-main
+                aria-label="Make this the main photo"></button>
+        <button type="button" class="photo-x" data-remove aria-label="Remove this photo">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4"
+                  stroke-linecap="round"/>
+          </svg>
+        </button>
+        <span class="photo-tile-label">main</span>
+        <button type="button" class="photo-undo" data-undo>Undo</button>
+      </div>
+    {% endfor %}
+    {# the file input itself is offscreen; this label is the control #}
+    <label class="photo-tile photo-tile-add" id="photo-add" for="photos"
+           title="Add photos">+</label>
+  </div>
+  <p class="hint" style="margin-top: 0;">
+    Tap a photo to make it the main one, drag to reorder. Only visible to
+    someone else once you've both chosen to continue a match. JPEG, PNG or
+    WebP, up to 2 MB each, {{ photo_max_per_user }} total.
+  </p>
+
+  <input class="visually-hidden" id="photos" name="photos" type="file"
+         accept="image/jpeg,image/png,image/webp" multiple>
+  <input type="hidden" id="remove_photo_ids" name="remove_photo_ids" value="">
+  <input type="hidden" id="photo_order" name="photo_order" value="">
+  <input type="hidden" id="primary_photo_id" name="primary_photo_id" value="">
+{% endif %}
+
+{# Everything past the fields above is optional: a profile only
    needs a name to search (require_profile()), and /search asks for
    location and connection type anyway. #}
 <details class="more-fields">
   <summary>Add more</summary>
   <div class="more-fields-body">
-
-{# ---- photos: what you have, and a slot to add more ------------------- #}
-{% if allow_photos is defined and allow_photos %}
-  <label>Photos</label>
-  <div class="photo-tiles">
-    {% for photo in (photos if photos is defined else []) %}
-      <div class="photo-tile">
-        <img src="{{ url_for('photo', photo_id=photo['id']) }}" alt="Your photo" loading="lazy">
-        {% if loop.first %}<span class="photo-tile-label">main</span>{% endif %}
-      </div>
-    {% endfor %}
-    {% if (photos is not defined) or (photos | length < photo_max_per_user) %}
-      {# the file inputs themselves are offscreen; these labels are the UI #}
-      <label class="photo-tile photo-tile-add" for="photos" title="Add photos">+</label>
-    {% endif %}
-  </div>
-  <p class="hint" style="margin-top: 0;">
-    Only visible to someone else once you've both chosen to continue a match.
-    JPEG, PNG or WebP, up to 2 MB each, {{ photo_max_per_user }} total.
-    &middot; <label for="profile_picture" class="inline-link">Set the main photo</label>
-  </p>
-
-  <input class="visually-hidden" id="profile_picture" name="profile_picture" type="file"
-         accept="image/jpeg,image/png,image/webp">
-  <input class="visually-hidden" id="photos" name="photos" type="file"
-         accept="image/jpeg,image/png,image/webp" multiple>
-{% endif %}
 
 {# ---- bio ------------------------------------------------------------- #}
 <label for="bio">Bio
@@ -244,6 +263,215 @@
 </details>
 
 <script>
+(function () {
+  // ---- photos -------------------------------------------------------
+  // Everything here is staged. The strip is the truth on screen; the three
+  // hidden fields are its transcript, rewritten after every change, and the
+  // file input is rewritten with it -- a FileList is read-only, so the only
+  // way to drop or reorder a picked file is to build a new one through a
+  // DataTransfer. Do that on every mutation and the "new:<n>" keys line up
+  // with what the server receives by construction.
+  var strip = document.getElementById("photo-tiles");
+  var input = document.getElementById("photos");
+  if (!strip || !input) return;
+
+  var addSlot = document.getElementById("photo-add");
+  var removedField = document.getElementById("remove_photo_ids");
+  var orderField = document.getElementById("photo_order");
+  var primaryField = document.getElementById("primary_photo_id");
+  var max = Number(strip.dataset.max) || 6;
+  var files = [];            // the File objects still on screen, in order
+  var urls = {};             // key -> object URL, so it can be revoked
+
+  function tiles() {
+    return Array.prototype.filter.call(
+      strip.querySelectorAll(".photo-tile"),
+      function (t) { return t !== addSlot; });
+  }
+
+  function live() {
+    return tiles().filter(function (t) { return !t.classList.contains("is-removed"); });
+  }
+
+  function sync() {
+    // New tiles are keyed by their File, not by an index, so the index can
+    // be recomputed here after a removal instead of going stale.
+    var kept = live();
+    files = [];
+    kept.forEach(function (t) {
+      if (t._file) { t._file._n = files.length; files.push(t._file); }
+    });
+
+    var dt = new DataTransfer();
+    files.forEach(function (f) { dt.items.add(f); });
+    input.files = dt.files;
+
+    function keyOf(t) {
+      return t._file ? "new:" + t._file._n : t.dataset.key;
+    }
+    orderField.value = kept.map(keyOf).join(",");
+    removedField.value = tiles()
+      .filter(function (t) { return t.classList.contains("is-removed") && !t._file; })
+      .map(function (t) { return t.dataset.key; })
+      .join(",");
+
+    var main = kept.filter(function (t) { return t.classList.contains("is-main"); })[0];
+    // The main photo can be the one you just removed; hand the lead to
+    // whatever is now first rather than submitting a dead id.
+    if (!main && kept.length) { main = kept[0]; main.classList.add("is-main"); }
+    primaryField.value = main ? keyOf(main) : "";
+
+    addSlot.hidden = kept.length >= max;
+  }
+
+  function controls(tile) {
+    tile.querySelector("[data-main]").addEventListener("click", function () {
+      // A drag that ends back over its own tile still fires a click; that
+      // was a reorder, not a request to change the main photo.
+      if (Date.now() - dragEndedAt < 250) return;
+      if (tile.classList.contains("is-removed")) return;
+      live().forEach(function (t) { t.classList.remove("is-main"); });
+      tile.classList.add("is-main");
+      sync();
+    });
+    tile.querySelector("[data-remove]").addEventListener("click", function () {
+      tile.classList.add("is-removed");
+      sync();
+    });
+    tile.querySelector("[data-undo]").addEventListener("click", function () {
+      // Room has to exist to come back to, or Undo would push the set over
+      // the cap and the save would be refused for a photo you never added.
+      if (live().length >= max) return;
+      tile.classList.remove("is-removed");
+      sync();
+    });
+    drag(tile);
+  }
+
+  tiles().forEach(controls);
+
+  input.addEventListener("change", function () {
+    var picked = Array.prototype.slice.call(input.files);
+    picked.forEach(function (file) {
+      if (live().length >= max) return;
+      var key = "f" + Date.now() + Math.random().toString(36).slice(2, 7);
+      var url = URL.createObjectURL(file);
+      urls[key] = url;
+      var tile = document.createElement("div");
+      tile.className = "photo-tile";
+      tile.dataset.key = key;
+      tile._file = file;
+      tile.innerHTML =
+        '<img alt="Your photo">' +
+        '<button type="button" class="photo-main" data-main' +
+        ' aria-label="Make this the main photo"></button>' +
+        '<button type="button" class="photo-x" data-remove aria-label="Remove this photo">' +
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+        '<path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4"' +
+        ' stroke-linecap="round"/></svg></button>' +
+        '<span class="photo-tile-label">main</span>' +
+        '<button type="button" class="photo-undo" data-undo>Undo</button>';
+      tile.querySelector("img").src = url;
+      strip.insertBefore(tile, addSlot);
+      controls(tile);
+    });
+    sync();
+  });
+
+  // A removed tile's preview is the one thing that can be thrown away for
+  // good: the row it stood for was never saved, so nothing can bring it back.
+  window.addEventListener("pagehide", function () {
+    Object.keys(urls).forEach(function (k) { URL.revokeObjectURL(urls[k]); });
+  });
+
+  // ---- drag to reorder ----
+  // Pointer events, not HTML5 drag-and-drop: DnD never fires on touch, and
+  // this app is used on a phone. One path drives mouse and finger alike.
+  //
+  // The move and up listeners live on the document, not on the tile, and
+  // there is deliberately no setPointerCapture: capture is released the
+  // instant the captured element is moved in the DOM, which is the first
+  // thing a reorder does. Capturing here dropped the rest of the gesture on
+  // the floor after the first swap -- and swallowed the tap that sets the
+  // main photo, because a captured pointer retargets the click to the tile
+  // instead of the button inside it.
+  var held = null, from = null, moved = false, dragEndedAt = 0;
+
+  function onMove(e) {
+    if (!held) return;
+    if (!moved && Math.abs(e.clientX - from.x) + Math.abs(e.clientY - from.y) < 8) return;
+    moved = true;
+    held.classList.add("is-dragging");
+    // Swap past a neighbour once the pointer clears its midpoint, so the
+    // strip reflows under the finger instead of only on drop.
+    live().forEach(function (other) {
+      if (other === held) return;
+      var b = other.getBoundingClientRect();
+      var mid = b.left + b.width / 2;
+      var pos = other.compareDocumentPosition(held);
+      if (e.clientX > mid && (pos & Node.DOCUMENT_POSITION_PRECEDING)) {
+        strip.insertBefore(held, other.nextSibling);
+      } else if (e.clientX < mid && (pos & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        strip.insertBefore(held, other);
+      }
+    });
+  }
+
+  function onUp() {
+    if (!held) return;
+    held.classList.remove("is-dragging");
+    // A press that never moved is a tap, and [data-main] handles that on
+    // its own click -- only a real drag has anything to write.
+    if (moved) { sync(); dragEndedAt = Date.now(); }
+    held = null;
+    moved = false;
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    document.removeEventListener("pointercancel", onUp);
+  }
+
+  function drag(tile) {
+    tile.addEventListener("pointerdown", function (e) {
+      if (e.target.closest("[data-remove], [data-undo]")) return;
+      if (tile.classList.contains("is-removed")) return;
+      held = tile;
+      from = { x: e.clientX, y: e.clientY };
+      moved = false;
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
+    });
+  }
+
+  // The strip lights up while a file is over the window, so the drop target
+  // is visible before you let go rather than after.
+  var depth = 0;
+  window.addEventListener("dragenter", function (e) {
+    if (e.dataTransfer && e.dataTransfer.types.indexOf("Files") !== -1) {
+      depth++; strip.classList.add("is-dropping");
+    }
+  });
+  window.addEventListener("dragleave", function () {
+    if (--depth <= 0) { depth = 0; strip.classList.remove("is-dropping"); }
+  });
+  window.addEventListener("drop", function (e) {
+    depth = 0;
+    strip.classList.remove("is-dropping");
+    if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+    if (!strip.contains(e.target) && e.target !== strip) return;
+    e.preventDefault();
+    var dt = new DataTransfer();
+    Array.prototype.forEach.call(e.dataTransfer.files, function (f) { dt.items.add(f); });
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change"));
+  });
+  window.addEventListener("dragover", function (e) {
+    if (strip.contains(e.target) || e.target === strip) e.preventDefault();
+  });
+
+  sync();
+})();
+
 (function () {
   // ---- bio counter ----
   var bio = document.getElementById("bio");

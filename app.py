@@ -567,8 +567,14 @@ CREATE TABLE IF NOT EXISTS photos (
     data BYTEA NOT NULL,
     mime TEXT NOT NULL,
     is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- The order the edit screen's tiles were dragged into. is_primary still
+-- outranks it: the main photo leads whatever the drag order says, so
+-- every read is `ORDER BY is_primary DESC, sort_order, id`.
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS photos_user_id_idx ON photos (user_id, is_primary);
 """
@@ -1219,6 +1225,80 @@ def profile_strength(profile, photo_count):
     return percent, (missing[0] if missing else None)
 
 
+def apply_photo_edits(db, user_id, removals, uploads, posted_order, posted_primary):
+    """Land one save's worth of photo changes. Does not commit.
+
+    The edit screen stages the lot -- removals, new files, the drag order and
+    which tile is the main one -- and posts them together, so they have to be
+    applied together and in this order: a photo removed here must free its
+    place before the cap is spent, and the order and the primary can only be
+    written once the new rows have ids.
+
+    `posted_order` and `posted_primary` speak the tiles' language: an existing
+    photo is its id, a file picked in this session is "new:<n>", indexing the
+    file input the browser submitted. Anything that doesn't resolve to a row
+    this user owns is dropped on the floor rather than trusted.
+    """
+    if removals:
+        db.execute(
+            "DELETE FROM photos WHERE user_id = ? AND id = ANY(?)",
+            (user_id, list(removals)),
+        )
+
+    # Insert in submission order, so new:<n> lines up with the n-th file.
+    new_ids = [
+        db.insert_returning_id(
+            "INSERT INTO photos (user_id, data, mime, is_primary) VALUES (?, ?, ?, FALSE)",
+            (user_id, data, mime),
+        )
+        for mime, data in uploads
+    ]
+
+    owned = [
+        row["id"] for row in db.execute(
+            "SELECT id FROM photos WHERE user_id = ?"
+            " ORDER BY is_primary DESC, sort_order, id",
+            (user_id,),
+        ).fetchall()
+    ]
+    if not owned:
+        return
+
+    def resolve(key):
+        if key.startswith("new:"):
+            n = key[4:]
+            if n.isdigit() and int(n) < len(new_ids):
+                return new_ids[int(n)]
+            return None
+        return int(key) if key.lstrip("-").isdigit() and int(key) in owned else None
+
+    # Whatever the tiles listed goes first, in that order; anything of theirs
+    # the list forgot keeps its existing relative position after it, so a
+    # stale or partial order can never silently drop a photo out of the set.
+    ranked, seen = [], set()
+    for key in posted_order:
+        pid = resolve(key)
+        if pid is not None and pid not in seen:
+            seen.add(pid)
+            ranked.append(pid)
+    ranked += [pid for pid in owned if pid not in seen]
+
+    for index, pid in enumerate(ranked):
+        db.execute("UPDATE photos SET sort_order = ? WHERE id = ?", (index, pid))
+
+    # The main photo: the tapped tile if it survived, otherwise whichever
+    # photo now sorts first. A set is never left headless -- everything that
+    # shows one photo takes the primary, so losing it would blank the avatars.
+    primary = resolve(posted_primary) if posted_primary else None
+    if primary is None:
+        current = db.execute(
+            "SELECT id FROM photos WHERE user_id = ? AND is_primary LIMIT 1", (user_id,)
+        ).fetchone()
+        primary = current["id"] if current else ranked[0]
+
+    db.execute("UPDATE photos SET is_primary = (id = ?) WHERE user_id = ?", (primary, user_id))
+
+
 @app.route("/profile/edit", methods=["GET", "POST"])
 @login_required
 def edit_profile():
@@ -1239,12 +1319,27 @@ def edit_profile():
         # Photos: sniff magic bytes rather than trusting the browser's
         # Content-Type, cap size and count. Validated up front so a bad
         # upload doesn't half-save the rest of the profile.
+        #
+        # The edit screen stages everything and submits it here in one go:
+        # which existing photos to drop, which order the tiles were dragged
+        # into, and which one was tapped as the main. Those three fields are
+        # a convenience for the browser -- every id in them is re-checked
+        # against ownership below, so a hand-written POST can only ever
+        # rearrange the poster's own photos.
+        removals = {
+            int(part) for part in request.form.get("remove_photo_ids", "").split(",")
+            if part.strip().lstrip("-").isdigit()
+        }
+        posted_order = [
+            part.strip() for part in request.form.get("photo_order", "").split(",")
+            if part.strip()
+        ]
+        posted_primary = request.form.get("primary_photo_id", "").strip()
+
         uploads = []
-        primary_file = request.files.get("profile_picture")
-        extra_files = request.files.getlist("photos")
-        candidates = [(True, primary_file)] if primary_file and primary_file.filename else []
-        candidates += [(False, f) for f in extra_files if f and f.filename]
-        for is_primary, f in candidates:
+        for f in request.files.getlist("photos"):
+            if not f or not f.filename:
+                continue
             data = f.read(PHOTO_MAX_BYTES + 1)
             if len(data) > PHOTO_MAX_BYTES:
                 error = error or "Each photo must be under 2 MB."
@@ -1253,13 +1348,19 @@ def edit_profile():
             if mime is None or mime not in PHOTO_ALLOWED_MIMES:
                 error = error or "Photos must be JPEG, PNG, or WebP."
                 break
-            uploads.append((is_primary, mime, data))
+            uploads.append((mime, data))
         else:
             if uploads:
-                existing_count = db.execute(
-                    "SELECT COUNT(*) AS n FROM photos WHERE user_id = ?", (user_id,)
-                ).fetchone()["n"]
-                if existing_count + len(uploads) > PHOTO_MAX_PER_USER:
+                owned = {
+                    row["id"] for row in db.execute(
+                        "SELECT id FROM photos WHERE user_id = ?", (user_id,)
+                    ).fetchall()
+                }
+                # Removals count against the cap: swapping two photos for two
+                # others is a legal save, and checking the stored count alone
+                # (as this did) refused it at six.
+                kept = len(owned - removals)
+                if kept + len(uploads) > PHOTO_MAX_PER_USER:
                     error = error or f"You can have at most {PHOTO_MAX_PER_USER} photos."
 
         if error is None:
@@ -1318,13 +1419,7 @@ def edit_profile():
                     values["relationship_type"],
                 ),
             )
-            for is_primary, mime, data in uploads:
-                if is_primary:
-                    db.execute("UPDATE photos SET is_primary = FALSE WHERE user_id = ?", (user_id,))
-                db.insert_returning_id(
-                    "INSERT INTO photos (user_id, data, mime, is_primary) VALUES (?, ?, ?, ?)",
-                    (user_id, data, mime, is_primary),
-                )
+            apply_photo_edits(db, user_id, removals, uploads, posted_order, posted_primary)
             db.commit()
             flash("Profile saved.")
             return redirect(url_for("view_profile", user_id=user_id))
@@ -1345,7 +1440,8 @@ def edit_profile():
 
     # Shown as tiles so you can see what you already have while editing.
     photos = db.execute(
-        "SELECT id FROM photos WHERE user_id = ? ORDER BY is_primary DESC, id",
+        "SELECT id, is_primary FROM photos WHERE user_id = ?"
+        " ORDER BY is_primary DESC, sort_order, id",
         (user_id,),
     ).fetchall()
     strength_pct, strength_hint = profile_strength(profile, len(photos))
@@ -1405,7 +1501,8 @@ def view_profile(user_id):
     photos = (
         get_db()
         .execute(
-            "SELECT id, is_primary FROM photos WHERE user_id = ? ORDER BY is_primary DESC, id",
+            "SELECT id, is_primary FROM photos WHERE user_id = ?"
+            " ORDER BY is_primary DESC, sort_order, id",
             (user_id,),
         )
         .fetchall()
@@ -3240,7 +3337,8 @@ def chats():
             room["other_photo_id"] = None
             if room["status"] == "active":
                 photo = get_db().execute(
-                    "SELECT id FROM photos WHERE user_id = ? ORDER BY id LIMIT 1",
+                    "SELECT id FROM photos WHERE user_id = ?"
+                    " ORDER BY is_primary DESC, sort_order, id LIMIT 1",
                     (room["other_id"],),
                 ).fetchone()
                 room["other_photo_id"] = photo["id"] if photo else None
@@ -3354,7 +3452,8 @@ def chat(match_id):
         other_id = match["user_b"] if user["id"] == match["user_a"] else match["user_a"]
         if can_view_photos(other_id, user["id"], user["is_admin"]):
             row = get_db().execute(
-                "SELECT id FROM photos WHERE user_id = ? ORDER BY id LIMIT 1",
+                "SELECT id FROM photos WHERE user_id = ?"
+                " ORDER BY is_primary DESC, sort_order, id LIMIT 1",
                 (other_id,),
             ).fetchone()
             other_photo_id = row["id"] if row else None
