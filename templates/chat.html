@@ -4,6 +4,20 @@
 {% set left = profiles[0] %}
 {% set right = profiles[1] %}
 {% set other = right if left['user_id'] == me_id else left %}
+{# One bubble, used everywhere a message renders: the two static recap
+   logs and the live room. Ticks only ever go on a bubble I sent -- there
+   is nothing to report about a message I received. Painted client-side
+   from data-time/data-id so the same markup works for a poll-appended
+   bubble as for one Jinja rendered. #}
+{% macro bubble(msg, side, ticks) %}
+  <div class="bubble {{ side }}" data-id="{{ msg['id'] }}">
+    <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
+    <span class="bubble-meta">
+      <span class="bubble-time" data-time="{{ msg['created_at'].isoformat() }}"></span>
+      {% if ticks %}<span class="bubble-ticks" data-id="{{ msg['id'] }}"></span>{% endif %}
+    </span>
+  </div>
+{% endmacro %}
 {# Every phase of a match is a screen in the same column the search steps
    and the waiting screen use: what is happening is stated in the middle,
    and the answers sit in the nav row at the foot, at the same y each
@@ -76,12 +90,10 @@
         {% if state.their_decision %}{{ other['name'] }} has already decided.{% endif %}
       </p>
 
-      <div class="chat-log" id="chat-log-static">
+      <div class="chat-log" id="chat-log-static" data-their-read-id="{{ their_read_id or 0 }}">
         {% for msg in messages %}
           {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
-          <div class="bubble {{ side }}">
-            <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
-          </div>
+          {{ bubble(msg, side, side == 'right') }}
         {% endfor %}
       </div>
 
@@ -118,12 +130,10 @@
           The decision window closed without an answer from both sides.
         {% endif %}
       </p>
-      <div class="chat-log" id="chat-log-static">
+      <div class="chat-log" id="chat-log-static" data-their-read-id="{{ their_read_id or 0 }}">
         {% for msg in messages %}
           {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
-          <div class="bubble {{ side }}">
-            <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
-          </div>
+          {{ bubble(msg, side, side == 'right') }}
         {% endfor %}
       </div>
     </div>
@@ -206,6 +216,7 @@
          data-left="{{ left['user_id'] }}"
          data-participant="{{ 1 if is_participant else 0 }}"
          data-phase="{{ phase }}"
+         data-their-read-id="{{ their_read_id or 0 }}"
          data-messages-url="{{ url_for('chat_messages', match_id=match['id']) }}"
          data-send-url="{{ url_for('send_message', match_id=match['id']) }}"
          data-state-url="{{ url_for('match_state', match_id=match['id']) if is_participant else '' }}">
@@ -215,9 +226,7 @@
         {% else %}
           {% set side = 'left' if msg['sender_id'] == left['user_id'] else 'right' %}
         {% endif %}
-        <div class="bubble {{ side }}" data-id="{{ msg['id'] }}">
-          <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
-        </div>
+        {{ bubble(msg, side, is_participant and side == 'right') }}
       {% endfor %}
       <p class="muted" id="empty-note" {% if messages %}hidden{% endif %} style="margin: 0;">
         No messages yet — break the ice!
@@ -354,9 +363,39 @@
     return function () { pinned = true; toBottom(); };
   }
 
+  /* Timestamps render client-side from each bubble's data-time (its own
+     local zone, not the server's UTC), and ticks from a single
+     "their read pointer" number compared against each bubble's id --
+     single check once the message exists, double once that pointer has
+     passed it. Both are repainted rather than computed once, since a poll
+     can move the read pointer forward on a room that is just sitting open. */
+  function formatBubbleTime(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  function paintTimes(root) {
+    root.querySelectorAll(".bubble-time[data-time]").forEach(function (el) {
+      if (!el.textContent) el.textContent = formatBubbleTime(el.dataset.time);
+    });
+  }
+  function paintTicks(root, theirReadId) {
+    if (theirReadId == null || isNaN(theirReadId)) return;
+    root.querySelectorAll(".bubble-ticks[data-id]").forEach(function (el) {
+      var read = parseInt(el.dataset.id, 10) <= theirReadId;
+      el.textContent = read ? "✓✓" : "✓";
+      el.classList.toggle("is-read", read);
+    });
+  }
+
   // The decision screens show the transcript as a recap, and what matters
   // in a recap is how it ended -- open it at the bottom, as the room does.
-  pinToBottom(document.getElementById("chat-log-static"));
+  var staticLog = document.getElementById("chat-log-static");
+  if (staticLog) {
+    paintTimes(staticLog);
+    paintTicks(staticLog, parseInt(staticLog.dataset.theirReadId, 10));
+  }
+  pinToBottom(staticLog);
 
   // ---- reveal countdown: redirect to the chat once the server says so ----
   var revealCount = document.getElementById("reveal-count");
@@ -429,6 +468,10 @@
   });
 
   var scrollDown = pinToBottom(log);
+  var theirReadId = parseInt(log.dataset.theirReadId, 10);
+
+  paintTimes(log);
+  paintTicks(log, theirReadId);
 
   function addMessage(msg) {
     if (log.querySelector('.bubble[data-id="' + msg.id + '"]')) return;
@@ -446,10 +489,27 @@
     sender.textContent = msg.sender_name;
     bubble.appendChild(sender);
     bubble.appendChild(document.createTextNode(msg.body));
+
+    var meta = document.createElement("span");
+    meta.className = "bubble-meta";
+    var time = document.createElement("span");
+    time.className = "bubble-time";
+    time.dataset.time = msg.created_at;
+    time.textContent = formatBubbleTime(msg.created_at);
+    meta.appendChild(time);
+    if (isParticipant && side === "right") {
+      var ticks = document.createElement("span");
+      ticks.className = "bubble-ticks";
+      ticks.dataset.id = msg.id;
+      meta.appendChild(ticks);
+    }
+    bubble.appendChild(meta);
+
     log.insertBefore(bubble, emptyNote);
     emptyNote.hidden = true;
     lastId = Math.max(lastId, msg.id);
     scrollDown();
+    paintTicks(log, theirReadId);
   }
 
   // Short-poll loop. The app runs across many stateless instances, so the
@@ -466,6 +526,14 @@
       })
       .then(function (data) {
         data.messages.forEach(addMessage);
+        // Polling this endpoint is what tells the server "I'm looking at
+        // this room", so the response also carries the other side's
+        // freshly-advanced read pointer -- repaint even when no new
+        // message arrived, since it can move on its own between polls.
+        if (typeof data.their_read_id === "number") {
+          theirReadId = data.their_read_id;
+          paintTicks(log, theirReadId);
+        }
         status.textContent = "live";
         setTimeout(listen, POLL_MS);
       })

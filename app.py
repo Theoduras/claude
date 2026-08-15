@@ -471,6 +471,12 @@ ALTER TABLE matches ADD COLUMN IF NOT EXISTS paired_at TIMESTAMPTZ;
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS decision_a TEXT NOT NULL DEFAULT '';
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS decision_b TEXT NOT NULL DEFAULT '';
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ;
+-- Read receipts: the highest messages.id each side has had the room open
+-- for. A single counter per side rather than a per-message table, since
+-- "read" only ever moves forward and only the high-water mark is ever
+-- shown (a single vs. double check on the sender's own bubbles).
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS read_a BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS read_b BIGINT NOT NULL DEFAULT 0;
 
 -- One row per member currently looking for a live match.
 CREATE TABLE IF NOT EXISTS searches (
@@ -2961,6 +2967,17 @@ def chat(match_id):
 
     state = match_state_payload(match, user["id"]) if is_participant else None
 
+    # Being on this page is the read signal: whatever is rendered here is
+    # what the viewer has now seen, so advance their pointer to the last
+    # message and read the other side's current pointer for the sender's
+    # own bubbles (see mark_read()).
+    their_read_id = None
+    if is_participant:
+        if messages:
+            mark_read(match, user["id"], messages[-1]["id"])
+            match = get_db().execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
+        their_read_id = match[their_read_column(match, user["id"])]
+
     # The reveal's hook: the shared-interest overlap try_pair() already
     # computed to pick this partner, rendered as chips (shared ones filled,
     # the rest outlined) plus a one-line opener naming the best one to ask
@@ -3045,6 +3062,7 @@ def chat(match_id):
         reveal_highlight=reveal_highlight,
         reveal_pronoun=reveal_pronoun,
         match_reason=match_reason,
+        their_read_id=their_read_id,
     )
 
 
@@ -3056,6 +3074,29 @@ def message_dict(row):
         "body": row["body"],
         "created_at": row["created_at"].isoformat(),
     }
+
+
+def their_read_column(match, user_id):
+    """Which column holds the *other* participant's read pointer."""
+    return "read_b" if user_id == match["user_a"] else "read_a"
+
+
+def mark_read(match, user_id, up_to_id):
+    """Advance user_id's read pointer to up_to_id, never backwards.
+
+    Called every time a participant is actually looking at the room (page
+    load, and each poll while the tab stays open) -- there is no separate
+    "seen" event to listen for, so being on the page is the signal.
+    """
+    if not up_to_id:
+        return
+    col = "read_a" if user_id == match["user_a"] else "read_b"
+    db = get_db()
+    db.execute(
+        f"UPDATE matches SET {col} = ? WHERE id = ? AND {col} < ?",
+        (up_to_id, match["id"], up_to_id),
+    )
+    db.commit()
 
 
 def fetch_messages_after(match_id, after):
@@ -3162,6 +3203,20 @@ def maybe_bot_reply(match, profiles):
             db.commit()
             return
 
+        # Replying implies having read up to here -- a bot's messages are
+        # otherwise never marked seen (it never loads the page a human's
+        # own poll marks read from), so the human's ticks would sit on a
+        # single check forever. Inlined rather than mark_read() (which
+        # commits on its own): this update has to land in the same
+        # transaction as the insert below, under the advisory lock already
+        # held, or a second poll could race between the two.
+        if history:
+            read_col = "read_a" if bot_id == match["user_a"] else "read_b"
+            db.execute(
+                f"UPDATE matches SET {read_col} = ? WHERE id = ? AND {read_col} < ?",
+                (history[-1]["id"], match["id"], history[-1]["id"]),
+            )
+
         line = bot_reply_line(bot_profile, history, match["id"], count)
         db.execute(
             "INSERT INTO messages (match_id, sender_id, body) VALUES (?, ?, ?)",
@@ -3190,7 +3245,8 @@ def chat_messages(match_id):
     if user["id"] not in (match["user_a"], match["user_b"]) and not user["is_admin"]:
         return {"error": "forbidden"}, 403
 
-    if user["id"] in (match["user_a"], match["user_b"]):
+    is_participant = user["id"] in (match["user_a"], match["user_b"])
+    if is_participant:
         match = resolve_match(match_id) or match
         maybe_bot_reply(match, profiles)
 
@@ -3200,7 +3256,25 @@ def chat_messages(match_id):
         after = 0
 
     rows = fetch_messages_after(match_id, after)
-    return {"messages": [message_dict(r) for r in rows]}
+
+    # The tab being open and polling is itself the "seen" signal -- mark
+    # read up to the newest message in the room, not just the ones this
+    # particular poll happened to return, since the poll started counting
+    # from the browser's own high-water mark rather than the room's.
+    their_read_id = None
+    if is_participant:
+        latest_id = get_db().execute(
+            "SELECT COALESCE(MAX(id), 0) AS m FROM messages WHERE match_id = ?",
+            (match_id,),
+        ).fetchone()["m"]
+        mark_read(match, user["id"], latest_id)
+        match = get_db().execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
+        their_read_id = match[their_read_column(match, user["id"])]
+
+    return {
+        "messages": [message_dict(r) for r in rows],
+        "their_read_id": their_read_id,
+    }
 
 
 @app.route("/chat/<int:match_id>/send", methods=["POST"])
