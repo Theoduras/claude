@@ -9,16 +9,26 @@
   </p>
 
   <form method="post" action="{{ url_for('login') }}">
-    <label for="username">Username</label>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="username">Username or email</label>
     <input id="username" name="username" type="text" autocomplete="username" required autofocus>
 
     <label for="password">Password</label>
     <input id="password" name="password" type="password" autocomplete="current-password" required>
 
+    <label class="switch-row" for="remember" style="margin-top: 0.9rem;">
+      <input id="remember" name="remember" type="checkbox" value="1" checked>
+      <span>Keep me signed in</span>
+    </label>
+    <p class="hint">Leave this off on a shared computer.</p>
+
     <button class="btn btn-block" type="submit">Sign in</button>
   </form>
 
   <p class="hint" style="margin: 1.1rem 0 0; text-align: center;">
+    <a href="{{ url_for('forgot_password') }}">Forgot your password?</a>
+  </p>
+  <p class="hint" style="margin: 0.4rem 0 0; text-align: center;">
     New to Velvt? <a href="{{ url_for('register') }}">Create an account</a>
   </p>
 </div>

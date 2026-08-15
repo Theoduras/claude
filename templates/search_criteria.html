@@ -17,6 +17,7 @@
   </p>
 
   <form method="post" action="{{ url_for('search_criteria') }}" id="criteria-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="relationship_type" value="{{ wanted }}">
     <input type="hidden" name="location" value="{{ place.location }}">
     <input type="hidden" name="location_lat" value="{{ place.lat }}">
@@ -358,7 +359,10 @@
     previewController = new AbortController();
     fetch("{{ url_for('search_preview') }}", {
       method: "POST",
-      headers: { "Accept": "application/json" },
+      headers: {
+        "Accept": "application/json",
+        "X-CSRF-Token": window.velvtCsrf()
+      },
       body: new FormData(form),
       signal: previewController.signal
     })

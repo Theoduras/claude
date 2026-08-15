@@ -11,6 +11,7 @@
   </div>
 
   <form id="profile-form" method="post" action="{{ url_for('edit_profile') }}"
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         enctype="multipart/form-data">
     {% set allow_photos = true %}
     {% include "_profile_fields.html" %}

@@ -5,18 +5,30 @@
   <p class="eyebrow">Join Velvt</p>
   <h1 style="margin-top: 0.5rem;">Make your entrance.</h1>
   <p class="subtitle" style="margin-bottom: 1.6rem;">
-    Pick a name and a password. Your profile comes next.
+    A few details and a password. Your profile comes next.
   </p>
 
   <form method="post" action="{{ url_for('register') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="username">Username</label>
     <input id="username" name="username" type="text" autocomplete="username"
-           minlength="3" required autofocus>
+           minlength="3" value="{{ form.username }}" required autofocus>
+
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email"
+           value="{{ form.email }}" required>
+    <p class="hint">We'll send a confirmation link. It's also the only way to
+      get back in if you forget your password.</p>
+
+    <label for="dob">Date of birth</label>
+    <input id="dob" name="dob" type="date" autocomplete="bday"
+           value="{{ form.dob }}" required>
+    <p class="hint">You must be {{ age_min }} or over to use Velvt.</p>
 
     <label for="password">Password</label>
     <input id="password" name="password" type="password" autocomplete="new-password"
            minlength="8" required>
-    <p class="hint">At least 8 characters.</p>
+    <p class="hint">At least 8 characters. Longer beats complicated.</p>
 
     <label for="confirm">Confirm password</label>
     <input id="confirm" name="confirm" type="password" autocomplete="new-password"

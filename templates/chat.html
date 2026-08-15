@@ -70,10 +70,12 @@
        one too, since it opens the room for both sides. #}
     <div class="wiz-nav">
       <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="choice" value="unmatch">
         <button class="wiz-skip wiz-skip-danger" type="submit">Not this one</button>
       </form>
       <form method="post" action="{{ url_for('match_skip_reveal', match_id=match['id']) }}"
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             class="wiz-nav-end">
         <button class="wiz-go" type="submit">Yes, start chatting</button>
       </form>
@@ -108,6 +110,7 @@
 
     {% if not state.my_decision %}
       <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             class="wiz-nav" id="decision-form">
         <input type="hidden" name="choice" id="decision-choice" value="">
         <button class="wiz-skip wiz-skip-danger" type="submit" data-choice="unmatch">Unmatch</button>
@@ -243,6 +246,7 @@
         </p>
       {% else %}
         <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               class="room-decide" id="decision-form">
           <input type="hidden" name="choice" id="decision-choice" value="">
           <p class="match-line">
@@ -263,6 +267,7 @@
     {% if is_participant %}
       <div class="wiz-nav">
         <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="text" name="body" id="chat-input" placeholder="Type a message…"
                  autofocus required autocomplete="off">
           <button class="btn btn-send" type="submit" aria-label="Send">&#8593;</button>
@@ -428,7 +433,8 @@
           method: "POST",
           headers: {
             "Accept": "application/json",
-            "Content-Type": "application/x-www-form-urlencoded"
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-CSRF-Token": window.velvtCsrf()
           },
           body: body
         }).then(function () { window.location.reload(); });
@@ -579,7 +585,8 @@
         method: "POST",
         headers: {
           "Accept": "application/json",
-          "Content-Type": "application/x-www-form-urlencoded"
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-CSRF-Token": window.velvtCsrf()
         },
         body: "body=" + encodeURIComponent(body)
       })

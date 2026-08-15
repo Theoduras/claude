@@ -49,6 +49,7 @@
   <div class="wiz-nav">
     <a class="wiz-skip" href="{{ url_for('live_search') }}">Change</a>
     <form method="post" action="{{ url_for('search_cancel') }}" class="wiz-nav-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-secondary wiz-stop" type="submit">Stop searching</button>
     </form>
   </div>
