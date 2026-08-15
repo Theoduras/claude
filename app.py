@@ -1130,6 +1130,30 @@ INTEREST_COMMON = [
     "books", "gaming", "art", "football", "photography", "cycling",
 ]
 
+# Interests are an AND-free filter -- one shared keyword is enough to pair --
+# so a long list makes matching easier, not pickier, and reads as noise on
+# the other person's card. Cap it.
+INTEREST_MAX = 4
+
+
+def clean_interests(raw, limit=INTEREST_MAX):
+    """Normalise an interests CSV: trimmed, de-duplicated, capped.
+
+    Enforced here as well as in the browser, since the cap is a real rule
+    about the stored value rather than a hint about the form.
+    """
+    out = []
+    seen = set()
+    for part in (raw or "").split(","):
+        value = " ".join(part.split())
+        if not value or value.casefold() in seen:
+            continue
+        seen.add(value.casefold())
+        out.append(value)
+        if len(out) >= limit:
+            break
+    return ", ".join(out)
+
 
 def interest_choices(raw):
     """Chips to show, and which are on, for a profile's interests CSV.
@@ -1920,7 +1944,7 @@ def live_search():
     if request.method == "POST":
         wanted = request.form.get("relationship_type", "")
         seeking = request.form.get("seeking", "")
-        interests = request.form.get("interests", "").strip()
+        interests = clean_interests(request.form.get("interests", ""))
         location = request.form.get("location", "").strip()
 
         # Set only when the combobox resolved a geocoder pick; its JS clears
@@ -2006,6 +2030,7 @@ def live_search():
         body_types=BODY_TYPES,
         interest_common=INTEREST_COMMON,
         interest_all=INTEREST_SUGGESTIONS,
+        interest_max=INTEREST_MAX,
         interest_chosen=[
             p.strip() for p in ((existing["interests"] if existing else "") or "").split(",")
             if p.strip()
@@ -2045,7 +2070,7 @@ def search_criteria():
 
     if request.method == "POST":
         seeking = request.form.get("seeking", "")
-        interests = request.form.get("interests", "").strip()
+        interests = clean_interests(request.form.get("interests", ""))
         location = request.form.get("location", "").strip()
 
         # Set only when the combobox on screen 1 resolved a geocoder pick; the

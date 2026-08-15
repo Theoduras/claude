@@ -223,6 +223,9 @@
       display: flex;
       flex-direction: column;
       min-height: 100dvh;
+      /* containing block for the sheet, so the overlay covers the app frame
+         rather than the whole browser window on a wide screen */
+      position: relative;
     }
     main {
       position: relative;
@@ -710,6 +713,14 @@
       justify-content: center;
       min-height: 0;
     }
+    /* main reserves 7rem at the bottom on phones, which is more than the tab
+       bar actually occupies -- fine for a scrolling page, but it leaves the
+       wizard's back/next row floating short of the bottom. Reclaim the
+       difference so the row sits just above the bar, keeping a few px so a
+       device with a home indicator (safe-area inset) cannot overlap it. */
+    @media (max-width: 720px) {
+      .wiz { margin-bottom: -1.25rem; }
+    }
     /* past phone widths the bleed stops earning its keep: cap it and centre */
     @media (min-width: 600px) {
       .wiz {
@@ -959,7 +970,7 @@
     /* ---------- bottom sheet (the wizard's "More" overlay) ------------
        Anchored to the bottom of the screen and scrollable inside, so the
        long list lives here instead of making the step behind it scroll. */
-    .sheet { position: fixed; inset: 0; z-index: 40; }
+    .sheet { position: absolute; inset: 0; z-index: 40; }
     .sheet-backdrop {
       position: absolute;
       inset: 0;
@@ -1024,6 +1035,29 @@
     .sheet-foot {
       padding: 0.85rem 1.25rem calc(1.1rem + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid var(--ink-hairline);
+    }
+    .sheet-count {
+      font-size: 0.78rem;
+      color: var(--text-faint);
+      margin: 0 0 0.6rem;
+    }
+    .sheet-count.is-full { color: var(--champagne); }
+    /* add-your-own, for anything the list does not name */
+    .sheet-add {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.2rem 1.25rem 0.9rem;
+    }
+    .sheet-add input {
+      flex: 1;
+      margin: 0;
+      min-width: 0;
+    }
+    .sheet-add .btn { flex: none; width: auto; padding-inline: 1.1rem; }
+    /* at the cap, the ones you have not picked stop inviting a tap */
+    .pillset.is-full .pill[data-value]:not(.is-on) {
+      opacity: 0.38;
+      cursor: not-allowed;
     }
     /* the chip that opens it -- dashed so it reads as "there is more", not
        as another selectable interest */
@@ -2113,7 +2147,13 @@
     }
     .viewport-toggle:hover { border-color: rgba(168, 85, 247, 0.42); }
     /* sits above the tab bar rather than behind it on a forced-mobile preview */
-    html[data-viewport="mobile"] .viewport-toggle { bottom: 5.5rem; }
+    /* Top-right on phones: at bottom: 5.5rem this sat exactly on the
+       wizard's back/next row and swallowed taps on Next, which is the one
+       control the flow cannot do without. */
+    html[data-viewport="mobile"] .viewport-toggle {
+      bottom: auto;
+      top: 5.5rem;
+    }
 
     /* Forcing mobile on a wide screen: sink the app into an actual
        phone-sized frame instead of just re-flowing the full-width page,
@@ -2148,6 +2188,11 @@
       html[data-viewport="mobile"] .app-shell .tabbar {
         position: sticky;
       }
+      /* ...and being in flow it occupies its own space, so main's 7rem
+         reserve -- sized for the fixed bar on a real phone -- would sit on
+         top of it as a second gap and float the wizard's buttons well
+         short of the bottom. */
+      html[data-viewport="mobile"] main { padding-bottom: 1.5rem; }
     }
   </style>
   {# Runs before body paint so the forced layout never flashes the wrong

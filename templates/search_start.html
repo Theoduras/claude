@@ -134,8 +134,8 @@
   <section class="wiz-step" data-step="5">
     <h1 class="wiz-q">Share any<br>interests?</h1>
     <p class="wiz-hint">
-      Pick none for no preference, or choose a few to only meet people who
-      share at least one.
+      Pick none for no preference, or up to {{ interest_max }} to only meet
+      people who share at least one.
     </p>
     <input type="hidden" id="interests" name="interests"
            value="{{ existing['interests'] if existing else '' }}">
@@ -215,6 +215,7 @@
         </button>
       </div>
       <div class="sheet-body">
+        <p class="sheet-count" id="interest-count"></p>
         <div class="pillset" id="interest-all">
           {% for opt in interest_all %}
             <button type="button" class="pill{% if opt in interest_chosen %} is-on{% endif %}"
@@ -222,6 +223,11 @@
                     aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ opt }}</button>
           {% endfor %}
         </div>
+      </div>
+      <div class="sheet-add">
+        <input type="text" id="interest-custom" maxlength="30"
+               placeholder="Something else…" aria-label="Add your own interest">
+        <button type="button" class="btn btn-secondary" id="interest-add">Add</button>
       </div>
       <div class="sheet-foot">
         <button type="button" class="btn btn-block" data-close>Done</button>
@@ -348,13 +354,23 @@
 
   function paint() {
     var on = chosenList();
+    var full = on.length >= MAX;
     [inlinePills, allPills].forEach(function (set) {
+      set.classList.toggle("is-full", full);
       set.querySelectorAll(".pill[data-value]").forEach(function (pill) {
         var isOn = on.indexOf(pill.dataset.value) !== -1;
         pill.classList.toggle("is-on", isOn);
         pill.setAttribute("aria-pressed", isOn ? "true" : "false");
+        // at the cap the unpicked ones are inert rather than silently
+        // ignoring the tap
+        pill.disabled = full && !isOn;
       });
     });
+    countEl.textContent = on.length + " of " + MAX + " chosen"
+      + (full ? " — remove one to swap" : "");
+    countEl.classList.toggle("is-full", full);
+    customAdd.disabled = full;
+    customIn.disabled = full;
     // a count on the More chip, so picks made in the overlay that have no
     // inline chip of their own are still accounted for on the step
     var hidden = on.filter(function (v) {
@@ -366,12 +382,57 @@
   function toggleInterest(value) {
     var on = chosenList();
     var i = on.indexOf(value);
-    if (i === -1) on.push(value); else on.splice(i, 1);
+    if (i !== -1) {
+      on.splice(i, 1);
+    } else {
+      if (on.length >= MAX) return;   // server caps too, this is just the UI
+      on.push(value);
+    }
     interests.value = on.join(", ");
     paint();
   }
 
+  // A written-in interest becomes a chip in both sets, so it can be toggled
+  // off again like any other rather than being stuck once added.
+  function addCustom() {
+    var value = customIn.value.replace(/[,]/g, " ").trim().replace(/\s+/g, " ");
+    if (!value) return;
+    var existingPill = allPills.querySelector('.pill[data-value="' + CSS.escape(value) + '"]')
+      || inlinePills.querySelector('.pill[data-value="' + CSS.escape(value) + '"]');
+    var already = chosenList().some(function (v) {
+      return v.toLowerCase() === value.toLowerCase();
+    });
+    if (!already) {
+      if (chosenList().length >= MAX) return;
+      if (!existingPill) {
+        [allPills, inlinePills].forEach(function (set) {
+          var pill = document.createElement("button");
+          pill.type = "button";
+          pill.className = "pill";
+          pill.dataset.value = value;
+          pill.textContent = value;
+          if (set === inlinePills) set.insertBefore(pill, inlinePills.firstChild);
+          else set.insertBefore(pill, set.firstChild);
+        });
+      }
+      toggleInterest(value);
+    }
+    customIn.value = "";
+  }
+
   var moreBtn = document.getElementById("interest-more");
+  var countEl = document.getElementById("interest-count");
+  var customIn = document.getElementById("interest-custom");
+  var customAdd = document.getElementById("interest-add");
+  var MAX = {{ interest_max }};
+
+  customAdd.addEventListener("click", addCustom);
+  customIn.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Enter") return;
+    ev.preventDefault();
+    ev.stopPropagation();   // the form-level Enter handler means "next step"
+    addCustom();
+  });
 
   [inlinePills, allPills].forEach(function (set) {
     set.addEventListener("click", function (ev) {
@@ -384,11 +445,12 @@
 
   // main carries `position: relative; z-index: 1`, which makes it a stacking
   // context -- so a sheet left inside it can never rise above the tab bar
-  // (a sibling of main at z-index 3), whatever z-index it asks for. Moving
-  // it to the body is what actually lets it cover the screen. Safe to detach
-  // from the form: the pills write to the hidden input through JS, they are
-  // never submitted themselves.
-  document.body.appendChild(sheet);
+  // (a sibling of main at z-index 3), whatever z-index it asks for. Hoisting
+  // it to .app-shell escapes that context while still scoping the overlay to
+  // the app frame, so on a wide screen it covers the phone-width column
+  // rather than the whole browser window. Safe to detach from the form: the
+  // pills write to the hidden input through JS and are never submitted.
+  (document.querySelector(".app-shell") || document.body).appendChild(sheet);
 
   function openSheet() {
     sheet.hidden = false;
