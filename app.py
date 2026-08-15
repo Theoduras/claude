@@ -199,6 +199,30 @@ AGE_MIN_YEARS, AGE_MAX_YEARS = 18, 39
 # attempt and the waiting screen never actually shows.
 MIN_SEARCH_SECONDS = 7
 
+# The seeded demo members (seed_demo.py, is_bot=TRUE) auto-reply in chat and
+# auto-continue past the decision phase. That is exactly what a local demo
+# wants and exactly what a real deployment must never do: a real person would
+# spend five minutes talking to a canned script and be told it was a match.
+# So bots are out of the pool unless this is switched on, and it is only ever
+# switched on locally -- dev.ps1 sets it, production never does.
+ALLOW_BOT_MATCHES = os.environ.get("ALLOW_BOT_MATCHES", "0") not in ("0", "false", "no")
+
+# Who is allowed to show up in someone else's search pool. Interpolated into
+# both try_pair() and _search_pool() so the matcher and the "why am I not
+# matching" preview can never disagree -- if these two drifted, the preview
+# would promise a candidate the matcher then refuses to pair you with.
+#
+# The fragment is built from constants only, never from request data, and it
+# assumes the queries it lands in have joined `users` as `u`.
+def _candidate_eligible_sql():
+    clauses = []
+    if not ALLOW_BOT_MATCHES:
+        clauses.append("u.is_bot = FALSE")
+    return "".join(f" AND {c}" for c in clauses)
+
+
+CANDIDATE_ELIGIBLE_SQL = _candidate_eligible_sql()
+
 # --- match lifecycle (live-search pairings only; /find stays instant) -----
 REVEAL_SECONDS = 20          # "it's a match" card before the chat opens
 TIMED_CHAT_SECONDS = 300     # 5 minutes to talk before a decision is forced
@@ -715,8 +739,15 @@ def design_lab():
 def index():
     if session.get("user_id"):
         return redirect(url_for("live_search"))
+    # Counts only searchers who could actually be paired with. The landing
+    # page shows this number to logged-out visitors, so counting demo members
+    # here would be advertising a pool that does not exist.
     searching_now = get_db().execute(
-        "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
+        f"""
+        SELECT COUNT(*) AS n FROM searches s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.status = 'waiting' {CANDIDATE_ELIGIBLE_SQL}
+        """
     ).fetchone()["n"]
     return render_template("landing.html", searching_now=searching_now)
 
@@ -1839,11 +1870,13 @@ def try_pair(user_id):
             return None
 
         others = db.execute(
-            """
+            f"""
             SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
+            JOIN users u ON u.id = s.user_id
             WHERE s.status = 'waiting' AND s.user_id != ?
               AND s.created_at <= NOW() - (? * INTERVAL '1 second')
+              {CANDIDATE_ELIGIBLE_SQL}
             ORDER BY s.created_at
             """,
             (user_id, MIN_SEARCH_SECONDS),
@@ -2376,10 +2409,12 @@ def search_preview():
     }
 
     others = get_db().execute(
-        """
+        f"""
         SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
+        JOIN users u ON u.id = s.user_id
         WHERE s.status = 'waiting' AND s.user_id != ?
+          {CANDIDATE_ELIGIBLE_SQL}
         """,
         (session["user_id"],),
     ).fetchall()
@@ -2517,10 +2552,12 @@ def _search_pool(user_id):
         return None, []
 
     others = db.execute(
-        """
+        f"""
         SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
+        JOIN users u ON u.id = s.user_id
         WHERE s.status = 'waiting' AND s.user_id != ?
+          {CANDIDATE_ELIGIBLE_SQL}
         """,
         (user_id,),
     ).fetchall()
