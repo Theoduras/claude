@@ -1122,6 +1122,15 @@ INTEREST_SUGGESTIONS = [
 ]
 
 
+# The handful the search wizard shows inline. The rest stay one tap away in
+# the "More" overlay -- the step's promise is that it never scrolls, and the
+# full 25 do not fit a phone screen.
+INTEREST_COMMON = [
+    "music", "films", "food", "travel", "cooking", "hiking",
+    "books", "gaming", "art", "football", "photography", "cycling",
+]
+
+
 def interest_choices(raw):
     """Chips to show, and which are on, for a profile's interests CSV.
 
@@ -1995,6 +2004,12 @@ def live_search():
         age_min_bound=AGE_MIN_YEARS,
         age_max_bound=AGE_MAX_YEARS,
         body_types=BODY_TYPES,
+        interest_common=INTEREST_COMMON,
+        interest_all=INTEREST_SUGGESTIONS,
+        interest_chosen=[
+            p.strip() for p in ((existing["interests"] if existing else "") or "").split(",")
+            if p.strip()
+        ],
         existing=existing,
         existing_body_types=(
             (existing[PREF_BODY_TYPES_FIELD] or "").split(",") if existing else []

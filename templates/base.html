@@ -215,9 +215,23 @@
     }
     nav form { margin: 0; }
 
+    /* A column the full height of the screen, so a page that wants to fill
+       it (the search wizard) can, instead of floating in the top third.
+       Pages that don't ask to grow are unaffected -- main's children only
+       stretch if they set flex-grow themselves. */
+    .app-shell {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+    }
     main {
       position: relative;
+      flex: 1 0 auto;
       z-index: 1;
+      /* explicit, because .app-shell is a flex column: there `margin: 0 auto`
+         is a flex auto-margin, which absorbs the free space and suppresses
+         the stretch that used to size this box, leaving it shrink-to-fit. */
+      width: 100%;
       max-width: var(--measure);
       margin: 0 auto;
       padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 4vw, 2rem) 4rem;
@@ -683,6 +697,18 @@
       padding-inline: 5%;
       display: flex;
       flex-direction: column;
+      flex: 1 0 auto;
+    }
+    /* The steps live in here and it takes all the slack, so the nav below it
+       lands at the same y on every step no matter how tall the step is --
+       and the step itself sits centred in the space rather than hugging the
+       question. */
+    .wiz-body {
+      flex: 1 0 auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 0;
     }
     /* past phone widths the bleed stops earning its keep: cap it and centre */
     @media (min-width: 600px) {
@@ -742,9 +768,25 @@
        stepper adds .wiz-js only once it is actually driving. */
     .wiz-js .wiz-step { display: none; }
     .wiz-js .wiz-step.is-on { display: block; }
-    .wiz-in { animation: wiz-in 0.28s cubic-bezier(0.4, 0, 0.2, 1) both; }
+    /* the question settles first, then the options arrive under it in a
+       quick stagger -- enough to feel deliberate without making the user
+       wait to tap */
+    .wiz-in .wiz-q,
+    .wiz-in .wiz-hint,
+    .wiz-in .wiz-field {
+      animation: wiz-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .wiz-in .wiz-hint { animation-delay: 0.03s; }
+    .wiz-in .wiz-field { animation-delay: 0.05s; }
+    .wiz-in .opt { animation: wiz-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .wiz-in .opt:nth-child(1) { animation-delay: 0.04s; }
+    .wiz-in .opt:nth-child(2) { animation-delay: 0.08s; }
+    .wiz-in .opt:nth-child(3) { animation-delay: 0.12s; }
+    .wiz-in .opt:nth-child(4) { animation-delay: 0.16s; }
+    .wiz-in .opt:nth-child(5) { animation-delay: 0.20s; }
+    .wiz-in .opt:nth-child(6) { animation-delay: 0.24s; }
     @keyframes wiz-in {
-      from { opacity: 0; transform: translateX(14px); }
+      from { opacity: 0; transform: translateY(10px); }
       to   { opacity: 1; transform: none; }
     }
     /* asking for an answer the step requires, without a modal or a flash */
@@ -841,15 +883,25 @@
       background: rgba(138, 43, 226, 0.14);
     }
 
-    /* sits just under whichever step is showing rather than at the foot of
-       a stretched column -- the old min-height left a dead band below the
-       options on every short step. */
+    /* Pinned to the foot of the column, so it never moves between steps.
+       Back sits alone on the left; Skip is grouped hard against Next on the
+       right so the two read as one control. Both hide with visibility
+       rather than display, which keeps Next in exactly the same spot
+       whether or not the step is skippable. */
     .wiz-nav {
       display: flex;
       align-items: center;
       gap: 0.9rem;
       margin-top: 1.5rem;
+      padding-top: 0.25rem;
     }
+    .wiz-nav-end {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-left: auto;
+    }
+    .is-hidden { visibility: hidden; }
     .wiz-back, .wiz-next {
       display: grid;
       place-items: center;
@@ -865,21 +917,20 @@
       color: var(--text-muted);
     }
     .wiz-back:hover { color: var(--text); transform: translateX(-2px); }
-    .wiz-back[hidden] { display: none; }
     .wiz-skip {
       border: none;
       background: none;
-      color: var(--text-faint);
-      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-size: 0.88rem;
       cursor: pointer;
-      padding: 0.4rem 0.2rem;
+      padding: 0.55rem 0.85rem;
+      border-radius: 999px;
+      transition: color 0.16s ease, background 0.16s ease;
     }
-    .wiz-skip:hover { color: var(--violet-crest); }
-    .wiz-skip[hidden] { display: none; }
+    .wiz-skip:hover { color: var(--text); background: rgba(168, 133, 247, 0.12); }
     .wiz-next {
       width: 3.4rem;
       height: 3.4rem;
-      margin-left: auto;
       border: none;
       color: #FFF;
       background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
@@ -892,7 +943,9 @@
       width: auto;
       border-radius: 999px;
       padding: 0 1.5rem;
-      height: 3rem;
+      /* same height as the chevron it replaces, so the row does not shift
+         by a few pixels on the last step */
+      height: 3.4rem;
       background-image: linear-gradient(150deg, var(--teal-crest), var(--teal));
       box-shadow: 0 10px 26px -12px rgba(29, 166, 162, 0.9);
     }
@@ -903,6 +956,86 @@
       font-weight: 600;
       letter-spacing: 0.01em;
     }
+    /* ---------- bottom sheet (the wizard's "More" overlay) ------------
+       Anchored to the bottom of the screen and scrollable inside, so the
+       long list lives here instead of making the step behind it scroll. */
+    .sheet { position: fixed; inset: 0; z-index: 40; }
+    .sheet-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(4, 2, 8, 0.66);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .sheet.is-open .sheet-backdrop { opacity: 1; }
+    .sheet-panel {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 82vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--ink-raised);
+      border-top: 1px solid var(--ink-hairline);
+      border-radius: 1.6rem 1.6rem 0 0;
+      box-shadow: 0 -24px 60px -20px rgba(0, 0, 0, 0.85);
+      transform: translateY(100%);
+      transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .sheet.is-open .sheet-panel { transform: none; }
+    /* the grabber, so it reads as a sheet you can dismiss */
+    .sheet-panel::before {
+      content: "";
+      width: 2.4rem;
+      height: 0.25rem;
+      border-radius: 999px;
+      background: var(--text-faint);
+      margin: 0.7rem auto 0;
+      opacity: 0.5;
+    }
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.9rem 1.25rem 0.6rem;
+    }
+    .sheet-head h2 { margin: 0; font-size: 1.05rem; }
+    .sheet-x {
+      margin-left: auto;
+      display: grid;
+      place-items: center;
+      width: 2rem;
+      height: 2rem;
+      border: none;
+      border-radius: 50%;
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .sheet-x:hover { color: var(--text); background: rgba(168, 133, 247, 0.12); }
+    .sheet-x svg { width: 1.05rem; height: 1.05rem; }
+    .sheet-body {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 1.25rem;
+    }
+    .sheet-body .pillset { margin-bottom: 0.5rem; }
+    .sheet-foot {
+      padding: 0.85rem 1.25rem calc(1.1rem + env(safe-area-inset-bottom, 0px));
+      border-top: 1px solid var(--ink-hairline);
+    }
+    /* the chip that opens it -- dashed so it reads as "there is more", not
+       as another selectable interest */
+    .pill-more {
+      border-style: dashed;
+      color: var(--violet-crest);
+      border-color: rgba(168, 85, 247, 0.55);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .sheet-backdrop, .sheet-panel { transition: none; }
+    }
+
     /* short screens: the flow's promise is that a step never scrolls, so
        trade type scale and padding for height rather than let it spill. */
     @media (max-height: 740px) {
@@ -919,8 +1052,11 @@
       .wiz-readout { margin-bottom: 1rem; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .wiz-in { animation: none; }
+      .wiz-in .wiz-q, .wiz-in .wiz-hint, .wiz-in .wiz-field, .wiz-in .opt {
+        animation: none;
+      }
       .wiz-nudge .opt-list { animation: none; }
+      .wiz-progress > span { transition: none; }
       .opt:hover, .wiz-back:hover, .wiz-next:hover { transform: none; }
     }
 
@@ -1992,6 +2128,7 @@
         box-sizing: border-box;
       }
       html[data-viewport="mobile"] .app-shell {
+        min-height: 0;
         /* iPhone X's 375×812 — the narrowest phone still in real use — is the
            floor the mobile layout is built to, so the debug preview frame
            should show exactly that rather than a newer, wider phone. */

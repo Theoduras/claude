@@ -12,6 +12,7 @@
 
   <p class="wiz-count" id="wiz-count">Step 1 of 6</p>
 
+  <div class="wiz-body">
   {# ---- 1. connection type ------------------------------------------- #}
   <section class="wiz-step" data-step="1" data-required="relationship_type">
     <h1 class="wiz-q">What are you<br>looking for?</h1>
@@ -128,17 +129,30 @@
   </section>
 
   {# ---- 5. interests ------------------------------------------------- #}
+  {# The value the server reads is this hidden CSV; the chips below (and the
+     overlay) are just two ways of editing it, so it stays one field. #}
   <section class="wiz-step" data-step="5">
     <h1 class="wiz-q">Share any<br>interests?</h1>
     <p class="wiz-hint">
-      Leave this empty for no preference. Fill it in and you'll only be matched
-      with people who share at least one.
+      Pick none for no preference, or choose a few to only meet people who
+      share at least one.
     </p>
-    <div class="wiz-field">
-      <label for="interests">Interests</label>
-      <input type="text" id="interests" name="interests"
-             value="{{ existing['interests'] if existing else '' }}"
-             placeholder="e.g. music, hiking, cooking">
+    <input type="hidden" id="interests" name="interests"
+           value="{{ existing['interests'] if existing else '' }}">
+    <div class="pillset" id="interest-pills">
+      {# anything already chosen that is not one of the common ones leads,
+         so a pick made in the overlay is still visible on the step #}
+      {% for opt in interest_chosen if opt not in interest_common %}
+        <button type="button" class="pill is-on" data-value="{{ opt }}"
+                aria-pressed="true">{{ opt }}</button>
+      {% endfor %}
+      {% for opt in interest_common %}
+        <button type="button" class="pill{% if opt in interest_chosen %} is-on{% endif %}"
+                data-value="{{ opt }}"
+                aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ opt }}</button>
+      {% endfor %}
+      <button type="button" class="pill pill-more" id="interest-more"
+              aria-haspopup="dialog">+ More</button>
     </div>
   </section>
 
@@ -166,6 +180,8 @@
     </div>
   </section>
 
+  </div>
+
   <div class="wiz-nav">
     <button type="button" class="wiz-back" id="wiz-back" aria-label="Previous step">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -173,13 +189,44 @@
               stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </button>
-    <button type="button" class="wiz-skip" id="wiz-skip">Skip</button>
-    <button type="submit" class="wiz-next" id="wiz-next" aria-label="Next step">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
+    <div class="wiz-nav-end">
+      <button type="button" class="wiz-skip" id="wiz-skip">Skip</button>
+      <button type="submit" class="wiz-next" id="wiz-next" aria-label="Next step">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  {# The full list, one tap from the step. A dialog rather than an expanding
+     panel so the step underneath keeps its promise of never scrolling. #}
+  <div class="sheet" id="interest-sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true"
+         aria-labelledby="interest-sheet-title">
+      <div class="sheet-head">
+        <h2 id="interest-sheet-title">All interests</h2>
+        <button type="button" class="sheet-x" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <div class="pillset" id="interest-all">
+          {% for opt in interest_all %}
+            <button type="button" class="pill{% if opt in interest_chosen %} is-on{% endif %}"
+                    data-value="{{ opt }}"
+                    aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ opt }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn btn-block" data-close>Done</button>
+      </div>
+    </div>
   </div>
 </form>
 
@@ -215,10 +262,12 @@
     steps.forEach(function (s, i) { s.classList.toggle("is-on", i === at); });
     bar.style.width = ((at + 1) / steps.length * 100) + "%";
     count.textContent = "Step " + (at + 1) + " of " + steps.length;
-    back.hidden = at === 0;
+    // visibility, not display: Back and Skip keep their space when hidden so
+    // Next never shifts by a pixel between steps.
+    back.classList.toggle("is-hidden", at === 0);
     // A required step has to be answered before it will advance; the optional
     // ones offer Skip instead, so the button never looks enabled-but-dead.
-    skip.hidden = !!required(at) || at === last;
+    skip.classList.toggle("is-hidden", !!required(at) || at === last);
     next.classList.toggle("is-final", at === last);
     next.setAttribute("aria-label", at === last ? "Start searching" : "Next step");
     // The submit only ever belongs to the last step. Everywhere else the
@@ -284,6 +333,80 @@
     ev.preventDefault();
     next.click();
   });
+
+  // ---- interests: two pill sets over one hidden CSV field ----
+  var interests = document.getElementById("interests");
+  var inlinePills = document.getElementById("interest-pills");
+  var allPills = document.getElementById("interest-all");
+  var sheet = document.getElementById("interest-sheet");
+
+  function chosenList() {
+    return interests.value.split(",")
+      .map(function (s) { return s.trim(); })
+      .filter(Boolean);
+  }
+
+  function paint() {
+    var on = chosenList();
+    [inlinePills, allPills].forEach(function (set) {
+      set.querySelectorAll(".pill[data-value]").forEach(function (pill) {
+        var isOn = on.indexOf(pill.dataset.value) !== -1;
+        pill.classList.toggle("is-on", isOn);
+        pill.setAttribute("aria-pressed", isOn ? "true" : "false");
+      });
+    });
+    // a count on the More chip, so picks made in the overlay that have no
+    // inline chip of their own are still accounted for on the step
+    var hidden = on.filter(function (v) {
+      return !inlinePills.querySelector('.pill[data-value="' + CSS.escape(v) + '"]');
+    }).length;
+    moreBtn.textContent = hidden ? "+ More · " + hidden : "+ More";
+  }
+
+  function toggleInterest(value) {
+    var on = chosenList();
+    var i = on.indexOf(value);
+    if (i === -1) on.push(value); else on.splice(i, 1);
+    interests.value = on.join(", ");
+    paint();
+  }
+
+  var moreBtn = document.getElementById("interest-more");
+
+  [inlinePills, allPills].forEach(function (set) {
+    set.addEventListener("click", function (ev) {
+      var pill = ev.target.closest(".pill[data-value]");
+      if (!pill) return;
+      ev.preventDefault();
+      toggleInterest(pill.dataset.value);
+    });
+  });
+
+  // main carries `position: relative; z-index: 1`, which makes it a stacking
+  // context -- so a sheet left inside it can never rise above the tab bar
+  // (a sibling of main at z-index 3), whatever z-index it asks for. Moving
+  // it to the body is what actually lets it cover the screen. Safe to detach
+  // from the form: the pills write to the hidden input through JS, they are
+  // never submitted themselves.
+  document.body.appendChild(sheet);
+
+  function openSheet() {
+    sheet.hidden = false;
+    requestAnimationFrame(function () { sheet.classList.add("is-open"); });
+  }
+  function closeSheet() {
+    sheet.classList.remove("is-open");
+    setTimeout(function () { sheet.hidden = true; }, 200);
+  }
+  moreBtn.addEventListener("click", openSheet);
+  sheet.addEventListener("click", function (ev) {
+    if (ev.target.closest("[data-close]")) closeSheet();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && !sheet.hidden) closeSheet();
+  });
+
+  paint();
 
   // ---- age slider (same dual-thumb behaviour as the criteria screen) ----
   var minEl = document.getElementById("age_min");
