@@ -246,6 +246,45 @@ def password_problem(password, confirm=None):
 # is requested either way.
 DELETION_GRACE_DAYS = 14
 
+# --- retention -----------------------------------------------------------
+# GDPR Article 5(1)(e): personal data is kept no longer than it is needed
+# for what it was collected for. Every number here is a decision about what
+# "needed" means, written down so it can be argued with rather than left to
+# whatever the database happens to still hold.
+#
+# Enforced by purge_expired_data(), which the same scheduler that finishes
+# deletions calls -- see /tasks/purge-deletions.
+
+# An ended match is over: neither side can open it, write to it, or see it.
+# The conversation is kept a while because "we matched and it ended" is
+# still recent history to the people in it, and because a report filed
+# afterwards needs the messages to be judgeable at all.
+ENDED_MATCH_RETENTION_DAYS = 90
+
+# A finished search is working state, not history. Cancelled and matched
+# rows have already done their job; the pairing they produced lives in
+# `matches`. These carry precise coordinates, which is the most sensitive
+# thing the app stores.
+RESOLVED_SEARCH_RETENTION_DAYS = 7
+
+# A live search keeps its exact lat/lng because distance filtering needs
+# them. Once it is old enough that nothing is filtering on it any more,
+# the coordinates are rounded to ~1km (2 decimal places) rather than kept
+# to the metre. Coarsening beats deleting here: the row stays useful for
+# the "where were people searching" question without remaining a record of
+# where one identifiable person stood.
+COORDINATE_COARSEN_DAYS = 30
+COORDINATE_PLACES = 2
+
+# Rate-limit counters are operational data with no reason to outlive their
+# own window.
+RATE_HIT_RETENTION_DAYS = 2
+
+# A resolved report is kept longer than the content it describes: it is the
+# record of a moderation decision, and the DSA expects those to be
+# accountable after the fact.
+RESOLVED_REPORT_RETENTION_DAYS = 365
+
 # The GDPR Article 9 consent. Gender plus who you are seeking makes sexual
 # orientation inferable, which is special category data and needs explicit
 # consent on top of the Article 6 basis.
@@ -2984,6 +3023,109 @@ def purge_due_deletions():
     return len(due)
 
 
+def purge_expired_data():
+    """Enforce the retention schedule above.
+
+    Runs on the same schedule as the deletion purge and reports what it
+    touched, so the job's log line is the evidence that retention is a
+    thing that happens rather than a thing that is written down.
+
+    Order matters in one place only: messages are deleted before the
+    matches that own them, because the foreign key cascades and doing it
+    the other way round would make the message count a lie.
+
+    An ended match with an unresolved report against it is left alone. A
+    report is a request that someone look at what was said, and expiring
+    the evidence while the complaint is open would answer it by losing it.
+    """
+    db = get_db()
+    counts = {}
+
+    kept_open = """
+        AND NOT EXISTS (
+            SELECT 1 FROM reports r
+            WHERE r.match_id = m.id AND r.resolved_at IS NULL
+        )
+    """
+
+    counts["messages"] = db.execute(
+        f"""
+        DELETE FROM messages
+        WHERE match_id IN (
+            SELECT m.id FROM matches m
+            WHERE m.status = 'ended'
+              AND m.ended_at IS NOT NULL
+              AND m.ended_at < NOW() - (? * INTERVAL '1 day')
+              {kept_open}
+        )
+        """,
+        (ENDED_MATCH_RETENTION_DAYS,),
+    ).rowcount
+
+    counts["matches"] = db.execute(
+        f"""
+        DELETE FROM matches m
+        WHERE m.status = 'ended'
+          AND m.ended_at IS NOT NULL
+          AND m.ended_at < NOW() - (? * INTERVAL '1 day')
+          {kept_open}
+        """,
+        (ENDED_MATCH_RETENTION_DAYS,),
+    ).rowcount
+
+    counts["searches"] = db.execute(
+        """
+        DELETE FROM searches
+        WHERE status IN ('cancelled', 'matched')
+          AND created_at < NOW() - (? * INTERVAL '1 day')
+        """,
+        (RESOLVED_SEARCH_RETENTION_DAYS,),
+    ).rowcount
+
+    # Coarsened, not cleared: `location` is the town the searcher typed and
+    # stays, so a row with no coordinates at all would still say roughly
+    # where they were while losing the ability to say it was approximate.
+    counts["coordinates_coarsened"] = db.execute(
+        """
+        UPDATE searches
+        SET lat = ROUND(lat::numeric, ?), lng = ROUND(lng::numeric, ?)
+        WHERE (lat IS NOT NULL OR lng IS NOT NULL)
+          AND created_at < NOW() - (? * INTERVAL '1 day')
+          AND (lat <> ROUND(lat::numeric, ?) OR lng <> ROUND(lng::numeric, ?))
+        """,
+        (COORDINATE_PLACES, COORDINATE_PLACES, COORDINATE_COARSEN_DAYS,
+         COORDINATE_PLACES, COORDINATE_PLACES),
+    ).rowcount
+
+    counts["rate_hits"] = db.execute(
+        "DELETE FROM rate_hits WHERE window_start < NOW() - (? * INTERVAL '1 day')",
+        (RATE_HIT_RETENTION_DAYS,),
+    ).rowcount
+
+    counts["reports"] = db.execute(
+        """
+        DELETE FROM reports
+        WHERE resolved_at IS NOT NULL
+          AND resolved_at < NOW() - (? * INTERVAL '1 day')
+        """,
+        (RESOLVED_REPORT_RETENTION_DAYS,),
+    ).rowcount
+
+    # Tokens are single-use and short-lived; an expired one is dead weight.
+    counts["email_tokens"] = db.execute(
+        "DELETE FROM email_tokens WHERE expires_at < NOW() - INTERVAL '1 day'"
+    ).rowcount
+
+    counts["sessions"] = db.execute(
+        "DELETE FROM sessions WHERE expires_at < NOW()"
+    ).rowcount
+
+    db.commit()
+    app.logger.info("retention purge: %s",
+                    ", ".join(f"{k}={v}" for k, v in counts.items() if v))
+    return counts
+
+
 @app.route("/report/<int:user_id>", methods=["GET", "POST"])
 @login_required
 @rate_limited("report", limit=20, window_seconds=3600, by="user")
@@ -5608,7 +5750,11 @@ def run_purge_deletions():
     if not secrets.compare_digest(presented, TASK_TOKEN):
         return "forbidden", 403
     purged = purge_due_deletions()
-    return {"purged": purged}, 200
+    # One scheduled call does both jobs: a retention schedule that depends on
+    # somebody remembering to wire up a second cron is one that quietly stops
+    # being enforced.
+    expired = purge_expired_data()
+    return {"purged": purged, "expired": expired}, 200
 
 
 @app.get("/healthz")

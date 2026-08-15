@@ -64,9 +64,9 @@ Keep replies concise; prefer the smallest diff that does the job.
 - `templates/` — 27 Jinja templates, all extending `base.html`
 - `docs/style-guide.html` — velvet-textured design system; `docs/deploy-gcp.md` — Cloud Run
 - `docs/launch-readiness.html` — the pre-launch audit these changes came from, with what
-  is still outstanding (image scanning, security headers, retention purge, passkeys,
-  selfie verification, onboarding rework)
+  is still outstanding (image scanning, passkeys, selfie verification, onboarding rework)
 - `check_auth.py` — behaviour checks for auth, CSRF, safety and deletion
+- `check_retention.py` — behaviour checks for the retention schedule
 - `seed_demo.py` — 40 demo members, all live-searching and `is_bot=TRUE` so they reply in
   chat. Idempotent; `--reset` to rebuild
 - `smoke.py`, `dev.ps1`, `docker-compose.yml` — local dev only, not deployed
@@ -212,6 +212,23 @@ without one fails with a 400, not silently.
 `X-Task-Token` against `TASK_TOKEN` and refuses outright when that is unset. Cloud Run
 has no background worker, so without something calling this daily, deletions never
 actually complete.
+
+That one call does two jobs — `purge_due_deletions()` finishes accounts past their
+grace period, then `purge_expired_data()` enforces the retention schedule. The
+schedule is the block of `*_RETENTION_DAYS` constants near `DELETION_GRACE_DAYS`
+(`app.py:~247`), and each one carries the reasoning for its number:
+
+| What | Kept | Why not longer |
+|---|---|---|
+| ended matches + their messages | 90 days | over for both sides; only recent history |
+| cancelled/matched searches | 7 days | working state — the pairing lives in `matches` |
+| exact `searches.lat/lng` | 30 days | then rounded to ~1km, not deleted |
+| resolved reports | 365 days | the record of a moderation decision |
+| `rate_hits` | 2 days | operational, outlives no window |
+
+An ended match with an **unresolved** report against it is never purged, whatever its
+age — expiring the evidence would answer the complaint by losing it. `check_retention.py`
+covers that case, and pairs every "this goes" check with a "this stays" control.
 
 `/find`, `/find/results`, `/matches` and `/browse` were removed — pairing happens only
 through live search now. `create_match()`, `match_score()` and `genders_compatible()`
