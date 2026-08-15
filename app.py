@@ -181,6 +181,13 @@ AGE_MIN_YEARS, AGE_MAX_YEARS = 18, 39
 # attempt and the waiting screen never actually shows.
 MIN_SEARCH_SECONDS = 7
 
+# How long a search must run with zero fits before the waiting screen offers
+# "Search wider". Measured from searches.created_at (like MIN_SEARCH_SECONDS
+# above), not a client-side clock -- a page reload must not push the offer
+# back, and neither must a filter tweak, since the apply endpoint never
+# touches created_at either.
+SEARCH_WIDER_SECONDS = 45
+
 # --- match lifecycle (live-search pairings only; /find stays instant) -----
 REVEAL_SECONDS = 20          # "it's a match" card before the chat opens
 TIMED_CHAT_SECONDS = 300     # 5 minutes to talk before a decision is forced
@@ -2528,34 +2535,211 @@ def search_blockers(mine, others):
     }
 
 
-def search_summary_chips(search):
-    """Short labels describing what a live search is actually looking for.
+def search_chips(search):
+    """The filters a live search is actually applying, as editable chips.
 
-    The waiting screen states this back rather than offering controls: the
-    filters were just chosen a screen ago, so the useful thing here is
-    confirmation, not another form. Anything left at "no preference" is
-    omitted instead of shown as an empty row -- a filter that is not
-    narrowing anything is not worth the space.
+    Each chip is {key, label, off}: `key` identifies what tapping it edits
+    (chip_options() below answers "into what"), `off` marks a filter the
+    searcher has already switched off -- still shown, so it can be switched
+    back on, the same way "Any age" already read before this screen had
+    controls. Anything with no value at all (no location typed, no
+    interests picked) is omitted rather than shown as an empty row.
     """
-    chips = []
-    if search["relationship_type"]:
-        chips.append(search["relationship_type"])
-    chips.append(search["seeking"] or "Anyone")
-    if search["use_age"]:
-        chips.append(f"{search['age_min']}–{search['age_max']}")
-    else:
-        chips.append("Any age")
+    chips = [{
+        "key": "relationship",
+        "label": search["relationship_type"] or "Any connection",
+        "off": not search["use_relationship"],
+    }, {
+        "key": "gender",
+        "label": search["seeking"] or "Everyone",
+        "off": not search["use_gender"],
+    }, {
+        "key": "age",
+        "label": f"{search['age_min']}–{search['age_max']}" if search["use_age"] else "Any age",
+        "off": not search["use_age"],
+    }]
     if search["location"]:
-        chips.append(search["location"])
+        chips.append({"key": "location", "label": search["location"], "off": False})
     for part in (search["interests"] or "").split(","):
         part = part.strip()
         if part:
-            chips.append(part)
+            chips.append({"key": f"interest:{part}", "label": part, "off": False})
     for part in (search[PREF_BODY_TYPES_FIELD] or "").split(","):
         part = part.strip()
         if part:
-            chips.append(part)
+            chips.append({"key": f"body:{part}", "label": part, "off": False})
     return chips
+
+
+def _chip_trial_count(mine, others, **overrides):
+    """How many of `others` a search would fit against with these overrides
+    applied -- the one counting rule every option row below uses, so a count
+    shown in the sheet is never anything other than a real
+    searches_compatible() tally."""
+    trial = dict(mine)
+    trial.update(overrides)
+    return sum(1 for o in others if searches_compatible(trial, o))
+
+
+def chip_options(mine, others, key):
+    """Alternatives for one chip, each priced with the count switching to it
+    would yield: [{value, label, count, current}, ...]. `value` is what a
+    POST to /search/chips echoes back to apply the row; `current` marks the
+    one already in effect.
+    """
+    if key == "relationship":
+        options = [
+            {"value": rt, "label": rt,
+             "current": mine["use_relationship"] and rt == mine["relationship_type"],
+             "count": _chip_trial_count(mine, others, relationship_type=rt, use_relationship=True)}
+            for rt in RELATIONSHIP_TYPES
+        ]
+        options.append({
+            "value": "", "label": "Any connection",
+            "current": not mine["use_relationship"],
+            "count": _chip_trial_count(mine, others, use_relationship=False),
+        })
+        return options
+
+    if key == "gender":
+        options = [
+            {"value": opt, "label": opt, "current": opt == mine["seeking"] and mine["use_gender"],
+             "count": _chip_trial_count(mine, others, seeking=opt, use_gender=True)}
+            for opt in SEEKING_OPTIONS
+        ]
+        options.append({
+            "value": "", "label": "Everyone (no preference)",
+            "current": not mine["use_gender"],
+            "count": _chip_trial_count(mine, others, use_gender=False),
+        })
+        return options
+
+    if key == "age":
+        seen = set()
+        options = []
+
+        def add(lo, hi, label):
+            lo = max(AGE_MIN_YEARS, min(lo, AGE_MAX_YEARS))
+            hi = max(AGE_MIN_YEARS, min(hi, AGE_MAX_YEARS))
+            if lo > hi or (lo, hi) in seen:
+                return
+            seen.add((lo, hi))
+            options.append({
+                "value": f"{lo}-{hi}", "label": label,
+                "current": mine["use_age"] and lo == mine["age_min"] and hi == mine["age_max"],
+                "count": _chip_trial_count(mine, others, age_min=lo, age_max=hi, use_age=True),
+            })
+
+        add(mine["age_min"], mine["age_max"],
+            f"{mine['age_min']}–{mine['age_max']} (current)")
+        suggestion = _minimal_age_suggestion(mine, others)
+        if suggestion:
+            add(suggestion["age_min"], suggestion["age_max"],
+                f"{suggestion['age_min']}–{suggestion['age_max']}")
+        add(mine["age_min"] - 5, mine["age_max"] + 5, "Widen by 5 years")
+        add(mine["age_min"] - 10, mine["age_max"] + 10, "Widen by 10 years")
+        options.append({
+            "value": "", "label": "Any age",
+            "current": not mine["use_age"],
+            "count": _chip_trial_count(mine, others, use_age=False),
+        })
+        return options
+
+    if key == "location":
+        # No alternative city to switch to -- only removal, which is not a
+        # no-op: the wizard always saves radius_km at its maximum (distance
+        # is never asked), so this side's own radius never excludes anyone.
+        # But search_distance_km() returns None when either side lacks
+        # coordinates, so clearing this makes distance unenforceable in
+        # both directions and dodges the OTHER person's radius filter too.
+        return [{
+            "value": "", "label": "No location",
+            "current": False,
+            "count": _chip_trial_count(mine, others, location="", lat=None, lng=None),
+        }]
+
+    if key.startswith("interest:"):
+        word = key.split(":", 1)[1]
+        current_words = [p.strip() for p in (mine["interests"] or "").split(",") if p.strip()]
+
+        def with_words(words):
+            return ",".join(words)
+
+        options = [{
+            "value": with_words([w for w in current_words if w != word]),
+            "label": "Remove", "current": False,
+            "count": _chip_trial_count(
+                mine, others, interests=with_words([w for w in current_words if w != word])),
+        }]
+        # Swap-in candidates: suggested words not already picked, verified
+        # to actually admit someone once swapped in for this one -- capped
+        # by INTEREST_MAX the same way the wizard caps the list itself.
+        room = current_words[:]
+        if word in room:
+            room.remove(word)
+        for cand in INTEREST_SUGGESTIONS:
+            if cand == word or cand in current_words or len(room) >= INTEREST_MAX:
+                continue
+            trial_words = room + [cand]
+            count = _chip_trial_count(mine, others, interests=with_words(trial_words))
+            if count:
+                options.append({
+                    "value": with_words(trial_words), "label": f"Swap for “{cand}”",
+                    "current": False, "count": count,
+                })
+        return options
+
+    if key.startswith("body:"):
+        current = [p.strip() for p in (mine[PREF_BODY_TYPES_FIELD] or "").split(",") if p.strip()]
+        options = []
+        for bt in BODY_TYPES:
+            on = bt in current
+            trial_list = [t for t in current if t != bt] if on else current + [bt]
+            options.append({
+                "value": ",".join(trial_list), "label": bt,
+                "current": on,
+                "count": _chip_trial_count(
+                    mine, others,
+                    **{PREF_BODY_TYPES_FIELD: ",".join(trial_list), "use_physical": bool(trial_list)}),
+            })
+        options.append({
+            "value": "", "label": "Any body type",
+            "current": not mine["use_physical"],
+            "count": _chip_trial_count(mine, others, use_physical=False),
+        })
+        return options
+
+    return []
+
+
+def chip_state(mine, others):
+    """The JSON payload the waiting screen redraws itself from: every chip
+    with its options priced, plus whether "Search wider" should show.
+
+    fits == 0 is necessary but not sufficient -- see SEARCH_WIDER_SECONDS.
+    Elapsed time is measured from searches.created_at (a database value, not
+    a per-request one), so a page reload never pushes the offer back and a
+    filter tweak -- which never touches created_at, see the note on
+    UPDATE below -- never postpones it either.
+    """
+    blockers = search_blockers(mine, others)
+    fits = blockers.get("current_count", 0)
+    elapsed = (dt.now(timezone.utc) - mine["created_at"]).total_seconds()
+
+    chips = search_chips(mine)
+    for chip in chips:
+        chip["options"] = chip_options(mine, others, chip["key"])
+
+    return {
+        "chips": chips,
+        "waiting": len(others),
+        "fits": fits,
+        "elapsed": int(elapsed),
+        "relax_all": {
+            "count": blockers.get("if_all_relaxed", 0),
+            "offer": fits == 0 and elapsed >= SEARCH_WIDER_SECONDS,
+        },
+    }
 
 
 @app.route("/search/waiting")
@@ -2569,15 +2753,118 @@ def search_waiting():
     if mine["status"] == "matched" and mine["match_id"]:
         return redirect(url_for("chat", match_id=mine["match_id"]))
 
-    blockers = search_blockers(mine, others)
+    return render_template("search_waiting.html", search=mine, state=chip_state(mine, others))
 
-    return render_template(
-        "search_waiting.html",
-        search=mine,
-        chips=search_summary_chips(mine),
-        waiting=len(others),
-        fits=blockers.get("current_count", 0),
+
+@app.route("/search/chips")
+@login_required
+def search_chips_get():
+    """Polled alongside /search/status to refresh the waiting screen's
+    pills as the pool changes -- same JSON shape POST returns below, so
+    the browser redraws from either one identically."""
+    user_id = session["user_id"]
+    mine, others = _search_pool(user_id)
+    if mine is None:
+        return {"error": "not searching"}, 404
+    return chip_state(mine, others)
+
+
+@app.route("/search/chips", methods=["POST"])
+@login_required
+def search_chips_apply():
+    """Apply one pill's new value (or "Search wider") without disturbing
+    created_at -- unlike save_search(), which resets it and would restart
+    the MIN_SEARCH_SECONDS/SEARCH_WIDER_SECONDS clocks on every tap. Every
+    posted value is re-validated the same way live_search() validates the
+    wizard's own POST; nothing here trusts chip_options()' own output.
+    """
+    user_id = session["user_id"]
+    mine, others = _search_pool(user_id)
+    if mine is None:
+        return {"error": "not searching"}, 404
+
+    key = request.form.get("key", "")
+    value = request.form.get("value", "")
+
+    db = get_db()
+    columns, params = [], []
+
+    def set_col(col, val):
+        columns.append(f"{col} = ?")
+        params.append(val)
+
+    if key == "all":
+        set_col("use_gender", False)
+        set_col("use_age", False)
+        set_col("use_relationship", False)
+        set_col("use_distance", False)
+        set_col("use_physical", False)
+        set_col("interests", "")
+        set_col("location", "")
+        set_col("lat", None)
+        set_col("lng", None)
+
+    elif key == "relationship":
+        if value == "":
+            set_col("use_relationship", False)
+        elif value in RELATIONSHIP_TYPES:
+            set_col("relationship_type", value)
+            set_col("use_relationship", True)
+        else:
+            return {"error": "invalid relationship_type"}, 400
+
+    elif key == "gender":
+        if value == "":
+            set_col("use_gender", False)
+        elif value in SEEKING_OPTIONS:
+            set_col("seeking", value)
+            set_col("use_gender", True)
+        else:
+            return {"error": "invalid seeking"}, 400
+
+    elif key == "age":
+        if value == "":
+            set_col("use_age", False)
+        else:
+            try:
+                lo_s, hi_s = value.split("-", 1)
+                lo, hi = int(lo_s), int(hi_s)
+            except ValueError:
+                return {"error": "invalid age range"}, 400
+            if not (AGE_MIN_YEARS <= lo <= hi <= AGE_MAX_YEARS):
+                return {"error": "age range out of bounds"}, 400
+            set_col("age_min", lo)
+            set_col("age_max", hi)
+            set_col("use_age", True)
+
+    elif key == "location":
+        set_col("location", "")
+        set_col("lat", None)
+        set_col("lng", None)
+
+    elif key.startswith("interest:"):
+        set_col("interests", clean_interests(value))
+
+    elif key.startswith("body:"):
+        body_types = [b for b in value.split(",") if b in BODY_TYPES]
+        set_col(PREF_BODY_TYPES_FIELD, ",".join(body_types))
+        set_col("use_physical", bool(body_types))
+
+    else:
+        return {"error": "unknown key"}, 400
+
+    db.execute(
+        f"UPDATE searches SET {', '.join(columns)} WHERE user_id = ?",
+        (*params, user_id),
     )
+    db.commit()
+
+    # A change that just opened up a partner should pair now, not on the
+    # next status poll.
+    try_pair(user_id)
+
+    mine, others = _search_pool(user_id)
+    return chip_state(mine, others)
 
 
 @app.route("/search/status")

@@ -3,8 +3,9 @@
 {% block content %}
 {# Same column shape as the wizard this screen follows on from: a fixed
    header, the content centred in the space between, and the action pinned
-   to the foot. No controls -- the filters were chosen a screen ago, so what
-   is useful here is confirmation of what is running, not another form. #}
+   to the foot. The chips used to be pure confirmation; now each one is a
+   button that opens the sheet below with what changing it would buy --
+   verified counts, not guesses, straight from the matching engine. #}
 <div class="wiz waiting">
 
   <div class="wiz-body">
@@ -24,26 +25,32 @@
     <p class="waiting-meta">
       <span id="elapsed">0:00</span>
       <span aria-hidden="true">·</span>
-      <span>{{ waiting }} searching</span>
-      {% if fits %}
+      <span id="waiting-count">{{ state.waiting }} searching</span>
+      <span id="waiting-fits-wrap"{% if not state.fits %} hidden{% endif %}>
         <span aria-hidden="true">·</span>
-        <span class="waiting-fits">{{ fits }} fit</span>
-      {% endif %}
+        <span class="waiting-fits" id="waiting-fits">{{ state.fits }} fit</span>
+      </span>
     </p>
 
     <div class="waiting-recap">
       <p class="waiting-recap-label">Looking for</p>
-      <div class="pillset">
-        {% for chip in chips %}<span class="pill is-static">{{ chip }}</span>{% endfor %}
+      <div class="pillset" id="chip-row">
+        {% for chip in state.chips %}
+          <button type="button" class="pill pill-chip{% if chip.off %} is-off{% endif %}"
+                  data-key="{{ chip.key }}">{{ chip.label }}</button>
+        {% endfor %}
       </div>
     </div>
 
-    {% if not fits %}
-      <p class="waiting-none">
-        Nobody searching right now fits all of this. You'll be paired the
-        moment someone does — or change what you're after.
-      </p>
-    {% endif %}
+    <p class="waiting-none" id="waiting-none"{% if state.fits %} hidden{% endif %}>
+      Nobody searching right now fits all of this. You'll be paired the
+      moment someone does — or tap a filter above to change it.
+    </p>
+
+    <button type="button" class="btn btn-secondary btn-block waiting-wider"
+            id="wider-btn"{% if not state.relax_all.offer %} hidden{% endif %}>
+      Search wider — {{ state.relax_all.count }} fit
+    </button>
   </div>
 
   <div class="wiz-nav">
@@ -54,10 +61,31 @@
   </div>
 </div>
 
+{# One sheet, repopulated on every tap rather than one per chip -- the same
+   overlay the wizard's interest picker uses (see search_start.html). #}
+<div class="sheet" id="filter-sheet" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="filter-sheet-title">
+    <div class="sheet-head">
+      <h2 id="filter-sheet-title">Filter</h2>
+      <button type="button" class="sheet-x" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="sheet-body">
+      <div class="sheet-opt-list" id="filter-sheet-options"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   var statusLine = document.getElementById("status-line");
   var statusUrl = "{{ url_for('search_status') }}";
+  var chipsUrl = "{{ url_for('search_chips_get') }}";
 
   // ---- searching animation (see the note in the wizard: the dotLottie
   // player is the app's only external dependency, injected rather than
@@ -112,6 +140,163 @@
     statusLine.textContent = PHRASES[phrase];
   }, 2600);
 
+  // ---- filter chips: tap one, see (and apply) verified alternatives ----
+  var chipRow = document.getElementById("chip-row");
+  var waitingCountEl = document.getElementById("waiting-count");
+  var waitingFitsWrap = document.getElementById("waiting-fits-wrap");
+  var waitingFitsEl = document.getElementById("waiting-fits");
+  var waitingNoneEl = document.getElementById("waiting-none");
+  var widerBtn = document.getElementById("wider-btn");
+  var sheet = document.getElementById("filter-sheet");
+  var sheetTitle = document.getElementById("filter-sheet-title");
+  var sheetOptions = document.getElementById("filter-sheet-options");
+
+  // main carries `position: relative; z-index: 1`, a stacking context the
+  // tab bar's z-index cannot outrank from inside -- see the same note in
+  // search_start.html. Hoisting to .app-shell escapes it while still
+  // scoping the overlay to the app frame on a wide screen.
+  (document.querySelector(".app-shell") || document.body).appendChild(sheet);
+
+  var TITLES = {
+    relationship: "What kind of connection?",
+    gender: "Who are you looking for?",
+    age: "What age range?",
+    location: "Location"
+  };
+  function titleFor(key) {
+    if (TITLES[key]) return TITLES[key];
+    if (key.indexOf("interest:") === 0) return "Interest: " + key.slice(9);
+    if (key.indexOf("body:") === 0) return "Body type";
+    return "Filter";
+  }
+
+  var state = null;  // last state payload, so a tap can render without a round-trip
+
+  function renderState(data) {
+    state = data;
+
+    chipRow.innerHTML = "";
+    data.chips.forEach(function (chip) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pill pill-chip" + (chip.off ? " is-off" : "");
+      btn.dataset.key = chip.key;
+      btn.textContent = chip.label;
+      chipRow.appendChild(btn);
+    });
+
+    waitingCountEl.textContent = data.waiting + " searching";
+    if (data.fits) {
+      waitingFitsWrap.hidden = false;
+      waitingFitsEl.textContent = data.fits + " fit";
+    } else {
+      waitingFitsWrap.hidden = true;
+    }
+    waitingNoneEl.hidden = !!data.fits;
+
+    if (data.relax_all.offer) {
+      var wasHidden = widerBtn.hidden;
+      widerBtn.hidden = false;
+      widerBtn.textContent = "Search wider — " + data.relax_all.count + " fit";
+      if (wasHidden) {
+        widerBtn.classList.remove("wiz-in");
+        // restart the entrance animation on the newly-shown button
+        void widerBtn.offsetWidth;
+        widerBtn.classList.add("wiz-in");
+      }
+    } else {
+      widerBtn.hidden = true;
+    }
+
+    // If the sheet is open on a chip that no longer exists (its filter was
+    // just switched off elsewhere) or whose options changed, refresh it in
+    // place rather than leaving stale counts up.
+    if (!sheet.hidden && sheet.dataset.key) {
+      var chip = data.chips.find(function (c) { return c.key === sheet.dataset.key; });
+      if (chip) openSheetFor(chip); else closeSheet();
+    }
+  }
+
+  function openSheetFor(chip) {
+    sheet.dataset.key = chip.key;
+    sheetTitle.textContent = titleFor(chip.key);
+    sheetOptions.innerHTML = "";
+    chip.options.forEach(function (opt) {
+      var row = document.createElement("button");
+      row.type = "button";
+      row.className = "sheet-opt" + (opt.current ? " is-current" : "");
+      row.dataset.value = opt.value;
+
+      var label = document.createElement("span");
+      label.className = "sheet-opt-label";
+      label.textContent = opt.label;
+      row.appendChild(label);
+
+      var count = document.createElement("span");
+      count.className = "sheet-opt-count" + (opt.count ? "" : " is-zero");
+      count.textContent = opt.count ? (opt.count + " fit") : "none yet";
+      row.appendChild(count);
+
+      row.addEventListener("click", function () { applyChip(chip.key, opt.value); });
+      sheetOptions.appendChild(row);
+    });
+    openSheet();
+  }
+
+  function openSheet() {
+    sheet.hidden = false;
+    requestAnimationFrame(function () { sheet.classList.add("is-open"); });
+  }
+  function closeSheet() {
+    sheet.classList.remove("is-open");
+    delete sheet.dataset.key;
+    setTimeout(function () { sheet.hidden = true; }, 200);
+  }
+
+  chipRow.addEventListener("click", function (ev) {
+    var btn = ev.target.closest(".pill-chip");
+    if (!btn || !state) return;
+    var chip = state.chips.find(function (c) { return c.key === btn.dataset.key; });
+    if (chip) openSheetFor(chip);
+  });
+
+  sheet.addEventListener("click", function (ev) {
+    if (ev.target.closest("[data-close]")) closeSheet();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && !sheet.hidden) closeSheet();
+  });
+
+  function applyChip(key, value) {
+    var body = new URLSearchParams();
+    body.set("key", key);
+    body.set("value", value);
+    fetch(chipsUrl, {
+      method: "POST",
+      headers: { "Accept": "application/json" },
+      body: body,
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) return;
+        closeSheet();
+        renderState(data);
+      });
+  }
+
+  widerBtn.addEventListener("click", function () { applyChip("all", ""); });
+
+  // Refreshes the chips/counts independently of the match poll below, so
+  // they track the pool as it moves rather than only redrawing after a tap.
+  var CHIP_REFRESH_EVERY = 4;  // ticks of the poll loop below (~6s at 1.5s/poll)
+  var pollTick = 0;
+  function refreshChips() {
+    fetch(chipsUrl, { headers: { "Accept": "application/json" } })
+      .then(function (res) { return res.json(); })
+      .then(function (data) { if (!data.error) renderState(data); })
+      .catch(function () {});
+  }
+
   // Short-poll loop — see the note in chat.html. Each poll also re-runs
   // the pairing attempt server-side, so a partner who starts searching
   // after this page loaded is still picked up.
@@ -139,6 +324,8 @@
           return;
         }
         connected = true;
+        pollTick += 1;
+        if (pollTick % CHIP_REFRESH_EVERY === 0) refreshChips();
         setTimeout(listen, POLL_MS);
       })
       .catch(function () {
@@ -148,6 +335,7 @@
       });
   }
 
+  renderState({{ state | tojson }});
   listen();
 })();
 </script>

@@ -977,7 +977,10 @@
       color: var(--text-faint);
     }
     .waiting-recap .pillset { justify-content: center; margin-bottom: 0; }
-    /* the chips here report, they do not toggle -- no hover, no pointer */
+    /* the chips here report, they do not toggle -- no hover, no pointer.
+       Used elsewhere too (the match reveal, profile_view's stated
+       preferences) so it stays the inert default; the waiting screen's own
+       chips opt into .pill-chip below instead of this. */
     .pill.is-static {
       cursor: default;
       color: var(--text);
@@ -991,6 +994,27 @@
       border-color: var(--ink-hairline);
       background: none;
     }
+
+    /* the waiting screen's own chips: .is-static's look, but tappable --
+       each one opens the sheet below with what it could change to. */
+    .pill-chip {
+      color: var(--text);
+      border-color: rgba(168, 85, 247, 0.4);
+      background: rgba(138, 43, 226, 0.14);
+    }
+    .pill-chip:hover {
+      border-color: rgba(168, 85, 247, 0.7);
+      background: rgba(138, 43, 226, 0.22);
+    }
+    /* a filter the searcher has switched off -- the same faint reading
+       "Any age" already had, still tappable so it can be switched back on */
+    .pill-chip.is-off {
+      color: var(--text-muted);
+      border-color: var(--ink-hairline);
+      background: none;
+    }
+    .pill-chip.is-off:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
+
     .waiting-none {
       margin: 1.1rem 0 0;
       text-align: center;
@@ -999,6 +1023,56 @@
       color: var(--text-muted);
     }
     .wiz-stop { width: auto; padding-inline: 1.4rem; }
+
+    /* "Search wider" -- withheld until SEARCH_WIDER_SECONDS, so it arrives
+       mid-screen rather than being present from first paint. Reuses the
+       wizard's own entrance rather than a bespoke one. */
+    .waiting-wider { margin-top: 1.1rem; }
+    .waiting-wider.wiz-in { animation: wiz-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    @media (prefers-reduced-motion: reduce) {
+      .waiting-wider.wiz-in { animation: none; }
+    }
+
+    /* ---------- filter sheet: one row per alternative, priced -----------
+       Same raised ground and radius an .opt row uses, restated as a list
+       row instead of a big tappable tile -- this list can run to a dozen
+       rows (every relationship type, every body type) where .opt's card
+       shape would be too tall to scan. */
+    .sheet-opt-list { display: flex; flex-direction: column; gap: 0.4rem; padding-bottom: 0.4rem; }
+    .sheet-opt {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      width: 100%;
+      padding: 0.7rem 0.9rem;
+      border: 1px solid var(--ink-hairline);
+      border-radius: 0.9rem;
+      background: var(--ink-raised);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 0.88rem;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.16s ease, background 0.16s ease;
+    }
+    .sheet-opt:hover { border-color: rgba(168, 85, 247, 0.42); }
+    .sheet-opt.is-current {
+      border-color: rgba(168, 85, 247, 0.55);
+      background-image: linear-gradient(150deg, rgba(138, 43, 226, 0.32), rgba(59, 11, 102, 0.4));
+    }
+    .sheet-opt-label { flex: 1; min-width: 0; }
+    .sheet-opt-count {
+      flex: none;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.78rem;
+      color: var(--teal-crest);
+    }
+    /* a row that would admit nobody is still worth showing -- it is what
+       "no" looks like for that alternative -- but not worth reading in the
+       same colour as one that would */
+    .sheet-opt-count.is-zero { color: var(--text-faint); }
+    .sheet-opt.is-current .sheet-opt-count { color: var(--champagne); }
 
     /* the waiting screen carries an animation the wizard steps do not, so
        it needs its own trim to clear a short screen without scrolling */

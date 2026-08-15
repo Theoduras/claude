@@ -60,13 +60,24 @@ Tables: `users` (+`is_bot`), `profiles`, `matches` (+`status`/`paired_at`/`decis
 Starting a search is **two screens**: `/search` picks the connection type and the location
 + radius (carried to screen 2 in `session["search_draft"]`), `/search/criteria` asks which
 filters matter as a list of switches. Each switch writes a `searches.use_*` column —
-`use_gender`/`use_age`/`use_distance`/`use_physical` — read by `searches_compatible()` via
-`.get(key, True)`; a switch that is off leaves its panel's inputs `disabled`, so those
-fields never reach the server at all. `use_relationship` is always TRUE: it *is* the tile
-choice. Interests has no `use_*` column of its own — the stored text *is* the switch: "off"
-stores `''`, which `searches_compatible()` reads as "no preference". When it's non-empty it's
-a real filter (requires the other side to share at least one stemmed keyword), and it still
-breaks ties in `try_pair()`'s ranking among whoever's left.
+`use_gender`/`use_age`/`use_distance`/`use_physical`/`use_relationship` — read by
+`searches_compatible()` via `.get(key, True)`; a switch that is off leaves its panel's inputs
+`disabled`, so those fields never reach the server at all. The wizard's own POST always
+saves `use_relationship=TRUE` (it *is* the tile choice there), but `/search/waiting`'s pills
+can switch it off afterward like any other filter. Interests has no `use_*` column of its
+own — the stored text *is* the switch: "off" stores `''`, which `searches_compatible()`
+reads as "no preference". When it's non-empty it's a real filter (requires the other side to
+share at least one stemmed keyword), and it still breaks ties in `try_pair()`'s ranking among
+whoever's left.
+
+`/search/waiting` restates those filters as chips you can edit in place — tap one for a
+sheet of alternatives, each priced with a real `searches_compatible()` count
+(`search_chips()`/`chip_options()`, `app.py:~2538`). Applying one is a targeted `UPDATE`
+(`/search/chips` POST), never `save_search()` — that resets `created_at`, which would
+restart both `MIN_SEARCH_SECONDS` (pairing eligibility) and `SEARCH_WIDER_SECONDS` (below)
+on every tap. A zero-fit search that's been running `SEARCH_WIDER_SECONDS` (45s) is also
+offered a one-tap "Search wider", which drops every optional filter but keeps the
+connection type.
 
 `matches.status` is `'active'` by default — pairing now only happens through live search
 (`try_pair()`), but the default keeps pre-existing rows a permanent chat, unchanged.
@@ -90,8 +101,8 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 | misc | `/lab`, `/` |
 | auth | `/register`, `/login`, `/logout` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
-| search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/status`, `/search/cancel`, `/search/filters/toggle`, `/search/filters/apply` |
-| match lifecycle | `/match/<id>/state`, `/match/<id>/decide` |
+| search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/chips` (GET+POST), `/search/status`, `/search/cancel` |
+| match lifecycle | `/match/<id>/state`, `/match/<id>/decide`, `/match/<id>/skip-reveal` |
 | chat | `/chats`, `/chat/<id>`, `…/messages`, `…/send` |
 
 `/find`, `/find/results`, `/matches` and `/browse` were removed — pairing happens only
