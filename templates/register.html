@@ -1,32 +1,35 @@
 {% extends "base.html" %}
 {% block title %}Create account — Velvet{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <p class="eyebrow">Join Velvet</p>
-  <h1 style="margin-top: 0.5rem;">Make your entrance.</h1>
-  <p class="subtitle" style="margin-bottom: 1.6rem;">
-    Pick a name and a password. Your profile comes next.
-  </p>
+{# Sign-in's twin -- same column, same slots -- so the pair reads as two
+   steps of one flow rather than two different pages. #}
+<form method="post" action="{{ url_for('register') }}" class="wiz auth-screen wiz-fit">
+  <div class="wiz-body">
+    <p class="wiz-count">Join Velvet</p>
+    <h1 class="wiz-q">Make your<br>entrance.</h1>
+    <p class="wiz-hint">Pick a name and a password. Your profile comes next.</p>
 
-  <form method="post" action="{{ url_for('register') }}">
-    <label for="username">Username</label>
-    <input id="username" name="username" type="text" autocomplete="username"
-           minlength="3" required autofocus>
+    <div class="wiz-field">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username"
+             minlength="3" required autofocus>
 
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" autocomplete="new-password"
-           minlength="8" required>
-    <p class="hint">At least 8 characters.</p>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="new-password"
+             minlength="8" required>
+      <p class="hint">At least 8 characters.</p>
 
-    <label for="confirm">Confirm password</label>
-    <input id="confirm" name="confirm" type="password" autocomplete="new-password"
-           minlength="8" required>
+      <label for="confirm">Confirm password</label>
+      <input id="confirm" name="confirm" type="password" autocomplete="new-password"
+             minlength="8" required>
+    </div>
+  </div>
 
+  <div class="wiz-nav wiz-nav-block">
     <button class="btn btn-block" type="submit">Create account</button>
-  </form>
-
-  <p class="hint" style="margin: 1.1rem 0 0; text-align: center;">
-    Already a member? <a href="{{ url_for('login') }}">Sign in</a>
-  </p>
-</div>
+    <p class="auth-alt">
+      Already a member? <a href="{{ url_for('login') }}">Sign in</a>
+    </p>
+  </div>
+</form>
 {% endblock %}

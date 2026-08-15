@@ -1,25 +1,30 @@
 {% extends "base.html" %}
 {% block title %}Sign in — Velvet{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <p class="eyebrow">Velvet</p>
-  <h1 style="margin-top: 0.5rem;">Something softer<br>than swiping.</h1>
-  <p class="subtitle" style="margin-bottom: 1.6rem;">
-    Sign in and search — we pair you the moment someone is looking for you too.
-  </p>
+{# A step, not a panel: the form itself is the column, so the fields sit
+   under the question and the submit lands where Next does. #}
+<form method="post" action="{{ url_for('login') }}" class="wiz auth-screen wiz-fit">
+  <div class="wiz-body">
+    <p class="wiz-count">Velvet</p>
+    <h1 class="wiz-q">Something softer<br>than swiping.</h1>
+    <p class="wiz-hint">
+      Sign in and search — we pair you the moment someone is looking for you too.
+    </p>
 
-  <form method="post" action="{{ url_for('login') }}">
-    <label for="username">Username</label>
-    <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+    <div class="wiz-field">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username" required autofocus>
 
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+  </div>
 
+  <div class="wiz-nav wiz-nav-block">
     <button class="btn btn-block" type="submit">Sign in</button>
-  </form>
-
-  <p class="hint" style="margin: 1.1rem 0 0; text-align: center;">
-    New to Velvet? <a href="{{ url_for('register') }}">Create an account</a>
-  </p>
-</div>
+    <p class="auth-alt">
+      New to Velvet? <a href="{{ url_for('register') }}">Create an account</a>
+    </p>
+  </div>
+</form>
 {% endblock %}

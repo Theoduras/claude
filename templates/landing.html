@@ -1,15 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Velvet{% endblock %}
 {% block content %}
-<div class="landing">
-  <p class="landing-brand"><span class="mark"></span>Velvet</p>
+{# The same column every other screen uses. The hero is the wizard's body,
+   the two buttons are its nav -- and .wiz-fit keeps the pair inside the
+   fold instead of letting the page scroll past the promise. #}
+<div class="wiz landing wiz-fit">
+  <div class="wiz-body">
+    <p class="landing-brand"><span class="mark"></span>Velvet</p>
 
-  <h1>Something<br>softer than<br>swiping.</h1>
-  <p class="landing-lede">
-    Sign in and search — we pair you the moment someone is looking for you too.
-  </p>
+    <h1>Something<br>softer than<br>swiping.</h1>
+    <p class="landing-lede">
+      Sign in and search — we pair you the moment someone is looking for you too.
+    </p>
+  </div>
 
-  <div class="landing-actions">
+  <div class="wiz-nav wiz-nav-block landing-actions">
     {# the count is the whole promise of the product: people are waiting now #}
     <p class="landing-live">
       <span class="live-dot"></span>

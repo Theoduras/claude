@@ -630,6 +630,32 @@
        shrink, which is right for a step and wrong here: the part that
        scrolls can only give way if its parent can. */
     .wiz-fit .wiz-body { flex: 1 1 auto; min-height: 0; }
+    /* The body as a scroll box rather than a centred block, for the screens
+       whose middle is a document: the chat list, the two profile forms. The
+       padding keeps the scrollbar off the content and the negative margin
+       gives the width back, so the column stays the same width as a step's. */
+    .wiz-scroll {
+      justify-content: flex-start;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 0.4rem;
+      margin-right: -0.4rem;
+      /* Fades at both ends for the reason the transcript fades at one: the
+         row scrolled half out is otherwise cut mid-line. The block padding
+         is what makes the fade behave -- it is inside the scroll box, so at
+         either end the band sits over empty space and only content that has
+         really scrolled away is dimmed. The margins give the gaps back. */
+      padding-block: 1rem;
+      margin-block: -1rem;
+      -webkit-mask-image: linear-gradient(to bottom,
+        transparent 0, #000 1rem, #000 calc(100% - 1rem), transparent 100%);
+      mask-image: linear-gradient(to bottom,
+        transparent 0, #000 1rem, #000 calc(100% - 1rem), transparent 100%);
+    }
+    /* .wiz-body is a flex column, so its children default to flex-shrink: 1
+       -- they would squeeze themselves to fit the box rather than overflow
+       it, and a scroll box with nothing overflowing never scrolls. */
+    .wiz-scroll > * { flex: none; }
 
     .wiz-progress {
       height: 4px;
@@ -815,6 +841,17 @@
       margin-left: auto;
     }
     .is-hidden { visibility: hidden; }
+    /* Back/Next is a row; a screen whose action is one full-width button --
+       with a link or a second choice under it -- wants the same slot as a
+       stack instead. It has to come after .wiz-nav, not before: same
+       specificity, and .wiz-nav's `align-items: center` would otherwise win
+       and collapse .btn-block back to its text width. */
+    .wiz-nav-block {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.7rem;
+    }
+    .wiz-nav-block .btn { width: 100%; }
     .wiz-back, .wiz-next {
       display: grid;
       place-items: center;
@@ -1774,6 +1811,46 @@
     .profile-screen .wiz-nav { justify-content: center; }
     .profile-screen .wiz-nav .btn { width: 100%; }
 
+    /* ---------- the rest of the app, in the wizard's shape -------------
+       Landing, the two auth screens, the chat list and the two profile
+       forms were the last pages still built as a scrolling .card on a page
+       of their own. They use the wizard's column and the wizard's parts --
+       eyebrow, question, hint, action pinned at the foot -- and they are
+       .wiz-fit, so the frame is the viewport and the only thing that ever
+       scrolls is the part that is genuinely a document. */
+
+    /* auth: the question is the pitch, the fields sit under it, and the
+       submit plus its "or the other one" link take the nav's slot */
+    .auth-screen .wiz-field { margin-bottom: 0; }
+    .auth-alt {
+      margin: 0;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* the chat list: head pinned, rows scrolling under it */
+    .chats-screen .wiz-q { margin-bottom: 1rem; }
+    .chats-screen .chat-rows { padding-bottom: 0.25rem; }
+    /* the empty state, on the same raised ground an .opt row uses rather
+       than as a panel of its own */
+    .chats-empty {
+      margin: 0;
+      padding: 1.1rem;
+      border-radius: 1.15rem;
+      background: var(--ink-raised);
+      text-align: center;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    /* the profile forms: long enough that the body is always the scroller,
+       so Save is pinned where Next sits on a step and never scrolls away */
+    .edit-screen .wiz-body > form { margin: 0; }
+    /* the compact bar is the pinned head, so it must not be squeezed by a
+       body that wants the slack -- and its own bottom rule is the gap */
+    .edit-screen .edit-head { flex: none; margin-bottom: 0.9rem; }
+
     /* offscreen but still focusable — the file inputs are driven by their
        labels (the + tile), not by showing the browser's own control */
     .visually-hidden {
@@ -1806,18 +1883,6 @@
       font-weight: 500;
       font-size: 1.25rem;
     }
-    /* a text button, not a pill — the full-width Save sits at the bottom */
-    .edit-head-save {
-      padding: 0;
-      font-family: var(--sans);
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--violet-crest);
-      background: none;
-      border: none;
-      cursor: pointer;
-    }
-    .edit-head-save:hover { color: var(--champagne); }
 
     /* character counter under a textarea */
     .char-count {
@@ -2166,12 +2231,10 @@
 
     /* ---------- landing: the logged-out hero -------------------------
        The hero sits high and the actions sink to the bottom of the fold,
-       so the fabric shows through the gap between them at any height. */
-    .landing {
-      min-height: calc(100vh - 9rem);
-      display: flex;
-      flex-direction: column;
-    }
+       so the fabric shows through the gap between them at any height.
+       The column, the height and the sinking are .wiz/.wiz-fit's now -- a
+       min-height of its own would only fight the frame. */
+    .landing .wiz-body { justify-content: flex-start; }
     .landing-brand {
       display: flex;
       align-items: baseline;
@@ -2196,11 +2259,10 @@
       color: var(--text-muted);
       max-width: 22ch;
     }
+    /* .wiz-nav's own margin-top is a fixed 1.5rem; here the gap is whatever
+       the fold has left over, which is the point of the screen. */
     .landing-actions {
       margin-top: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 0.7rem;
       padding-top: 2.5rem;
     }
     .landing-live {
