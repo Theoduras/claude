@@ -1034,45 +1034,127 @@
     }
 
     /* ---------- filter sheet: one row per alternative, priced -----------
-       Same raised ground and radius an .opt row uses, restated as a list
-       row instead of a big tappable tile -- this list can run to a dozen
-       rows (every relationship type, every body type) where .opt's card
-       shape would be too tall to scan. */
-    .sheet-opt-list { display: flex; flex-direction: column; gap: 0.4rem; padding-bottom: 0.4rem; }
+       The panel is a piece of the same cloth as .card -- velvet ground,
+       sheen off the top-left crest, nap over it -- rather than the flat
+       grey box a default sheet would be. It scrolls as ONE piece: the
+       title travels with the rows, so it reads as a card pulled up from
+       the foot of the screen and not as a window with fixed chrome. */
+    .sheet-outer .sheet-panel {
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      /* The nap rides in the panel's own background stack rather than in an
+         ::after overlay the way .card does it: an absolutely-positioned
+         overlay is sized to the panel's box, so once the panel is the thing
+         that scrolls it would stop short of the content below the fold.
+         A background layer tiles the whole scrollable length instead, and
+         background-blend-mode buys the same texture without the extra box. */
+      background-image:
+        var(--nap),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0) 22%),
+        linear-gradient(158deg, rgba(75, 20, 124, 0.52), rgba(11, 7, 19, 0.97) 60%);
+      background-size: 180px 180px, auto, auto;
+      background-blend-mode: overlay, normal, normal;
+      border-top-color: rgba(168, 85, 247, 0.3);
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
+    .sheet-outer .sheet-body { overflow: visible; }
+    /* the question, in the same serif voice the wizard asks in */
+    .sheet-outer .sheet-head { padding-bottom: 0.2rem; }
+    .sheet-outer .sheet-head h2 {
+      font-family: var(--serif);
+      font-size: 1.32rem;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    .sheet-eyebrow {
+      margin: 0 0 0.15rem;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .sheet-opt-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      padding-bottom: 0.5rem;
+    }
+    /* the .opt row's ground and radius, at list scale: this can run to a
+       dozen rows where .opt's tile shape would be too tall to scan. */
     .sheet-opt {
+      position: relative;
       display: flex;
       align-items: center;
       gap: 0.7rem;
       width: 100%;
-      padding: 0.7rem 0.9rem;
-      border: 1px solid var(--ink-hairline);
-      border-radius: 0.9rem;
+      padding: 0.78rem 1rem;
+      border: 1.5px solid transparent;
+      border-radius: 1.05rem;
       background: var(--ink-raised);
       color: var(--text);
       font-family: var(--sans);
-      font-size: 0.88rem;
+      font-size: 0.94rem;
       text-align: left;
       cursor: pointer;
-      transition: border-color 0.16s ease, background 0.16s ease;
+      transition: border-color 0.16s ease, background 0.16s ease,
+                  transform 0.16s ease;
     }
-    .sheet-opt:hover { border-color: rgba(168, 85, 247, 0.42); }
+    .sheet-opt:hover {
+      transform: translateY(-1px);
+      background: rgba(59, 11, 102, 0.5);
+    }
+    .sheet-opt:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
+    /* the one in effect: lit like a checked .opt, with the crest rail down
+       its left edge so the eye finds it without reading a word */
     .sheet-opt.is-current {
       border-color: rgba(168, 85, 247, 0.55);
-      background-image: linear-gradient(150deg, rgba(138, 43, 226, 0.32), rgba(59, 11, 102, 0.4));
+      background-image: linear-gradient(150deg, rgba(138, 43, 226, 0.38), rgba(59, 11, 102, 0.5));
+    }
+    .sheet-opt.is-current::before {
+      content: "";
+      position: absolute;
+      left: 0.5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 1.4rem;
+      border-radius: 999px;
+      background: linear-gradient(180deg, var(--violet-crest), var(--violet));
     }
     .sheet-opt-label { flex: 1; min-width: 0; }
+    .sheet-opt.is-current .sheet-opt-label { color: #F0E2FF; font-weight: 600; }
+    /* the count reads as a tag, not as loose text -- it is a quantity the
+       row is promising, so it gets the same pill .tag uses elsewhere */
     .sheet-opt-count {
       flex: none;
+      padding: 0.24rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid rgba(29, 166, 162, 0.45);
+      background: linear-gradient(150deg, rgba(18, 128, 127, 0.42), rgba(6, 56, 59, 0.6));
+      color: #D8F5F2;
       font-family: var(--mono);
       font-variant-numeric: tabular-nums;
-      font-size: 0.78rem;
-      color: var(--teal-crest);
+      font-size: 0.72rem;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
     }
     /* a row that would admit nobody is still worth showing -- it is what
-       "no" looks like for that alternative -- but not worth reading in the
-       same colour as one that would */
-    .sheet-opt-count.is-zero { color: var(--text-faint); }
-    .sheet-opt.is-current .sheet-opt-count { color: var(--champagne); }
+       "no" looks like for that alternative -- but it should not glow like
+       one that would */
+    .sheet-opt-count.is-zero {
+      border-color: var(--ink-hairline);
+      background: none;
+      color: var(--text-faint);
+    }
+    .sheet-opt.is-current .sheet-opt-count {
+      border-color: rgba(232, 211, 169, 0.42);
+      background: linear-gradient(150deg, rgba(232, 211, 169, 0.22), rgba(59, 11, 102, 0.4));
+      color: var(--champagne);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .sheet-opt:hover { transform: none; }
+    }
 
     /* the waiting screen carries an animation the wizard steps do not, so
        it needs its own trim to clear a short screen without scrolling */

@@ -63,11 +63,14 @@
 
 {# One sheet, repopulated on every tap rather than one per chip -- the same
    overlay the wizard's interest picker uses (see search_start.html). #}
-<div class="sheet" id="filter-sheet" hidden>
+<div class="sheet sheet-outer" id="filter-sheet" hidden>
   <div class="sheet-backdrop" data-close></div>
   <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="filter-sheet-title">
     <div class="sheet-head">
-      <h2 id="filter-sheet-title">Filter</h2>
+      <div>
+        <p class="sheet-eyebrow">Change what you're after</p>
+        <h2 id="filter-sheet-title">Filter</h2>
+      </div>
       <button type="button" class="sheet-x" data-close aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2"
