@@ -617,17 +617,35 @@
       justify-content: center;
       min-height: 0;
     }
+    /* A stepped wizard opts out of that centring. Centring is right for a
+       screen that is one fixed thing -- the match, the landing, sign-in --
+       but the search wizard swaps six steps of different heights through the
+       same box, and centring each of them lands the question somewhere
+       different every time: measured up to 102px apart between steps, which
+       reads as the page jumping under your thumb rather than the answers
+       changing. Anchoring the top makes the question the fixed point and
+       lets only what is below it move. */
+    .wiz-steady .wiz-body { justify-content: flex-start; }
     /* main reserves 7rem at the bottom on phones, which is more than the tab
        bar actually occupies -- fine for a scrolling page, but it leaves the
        wizard's back/next row floating short of the bottom. Reclaim the
        difference so the row sits just above the bar, keeping a few px so a
        device with a home indicator (safe-area inset) cannot overlap it. */
     @media (max-width: 720px) {
-      .wiz { margin-bottom: -1.25rem; }
+      html:not([data-viewport="desktop"]) .wiz { margin-bottom: -1.25rem; }
     }
-    /* past phone widths the bleed stops earning its keep: cap it and centre */
+    /* The opt-in twin every other phone rule has (see the pair at the foot of
+       this sheet): without it the forced-mobile preview on a wide monitor
+       loses the reclaim and the nav row sits short of the bar, so the frame
+       stops telling the truth about the phone it is previewing. */
+    html[data-viewport="mobile"] .wiz { margin-bottom: -1.25rem; }
+    /* past phone widths the bleed stops earning its keep: cap it and centre.
+       Guarded on the preview too: the media query matches the real window, so
+       inside the 375px frame on a desktop this would otherwise cap the column
+       at 27rem (432px -- wider than the frame) and drop the 5% side padding,
+       making the preview wider-looking than the phone it stands for. */
     @media (min-width: 600px) {
-      .wiz {
+      html:not([data-viewport="mobile"]) .wiz {
         margin-inline: auto;
         padding-inline: 0;
         /* explicit, for the same reason main needs it: inside a flex column
@@ -967,6 +985,10 @@
        rather than editable -- the filters were set on the previous screen. */
     .waiting .wiz-body { justify-content: flex-start; padding-top: 0.5rem; }
     .waiting .wiz-q { margin-bottom: 0.7rem; }
+    /* Four phrases of different lengths cycle through here every 2.6s and
+       the longest wraps to two lines. Reserving both means the swap is a
+       word change rather than the rest of the screen moving up and down. */
+    .waiting #status-line { min-height: 2.9em; }
     .waiting .search-anim { margin-bottom: 0.2rem; }
     /* smaller than the wizard's, so the summary below it clears the fold */
     .waiting .search-anim dotlottie-wc { width: min(210px, 58%); }
@@ -984,6 +1006,15 @@
       color: var(--text-muted);
     }
     .waiting-fits { color: var(--teal-crest); }
+    /* `hidden` would take the row's height with it when the count drops to
+       zero; this keeps the line the same height whether or not anyone fits.
+       The `· N fit` segment is genuinely absent from the reading order when
+       off -- visibility: hidden is not announced -- so nothing is implied
+       that isn't true. */
+    #waiting-fits-wrap[hidden] {
+      display: inline;
+      visibility: hidden;
+    }
 
     /* the label over a stated block -- the waiting recap, the reveal's
        shared interests, a profile section. Same eyebrow the steps use for
@@ -998,7 +1029,70 @@
       text-transform: uppercase;
       color: var(--text-faint);
     }
-    .waiting-recap .pillset { justify-content: center; margin-bottom: 0; }
+    .waiting-recap .pillset,
+    .filters-fold .pillset { justify-content: center; margin-bottom: 0; }
+
+    /* ---------- the filter fold -------------------------------------
+       Sixteen pills is five rows on a phone. Folded, the same information
+       costs one line, and what it buys is the whole point: "Stop
+       searching" stays above the tab bar on a 375x667 screen instead of
+       117px under it. Styled like the FAQ's disclosure rows so the two
+       read as the same control. */
+    .filters-fold { margin-bottom: 0.9rem; }
+    .filters-fold > summary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.2rem;
+      list-style: none;
+      cursor: pointer;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      transition: color 0.18s ease;
+    }
+    .filters-fold > summary::-webkit-details-marker { display: none; }
+    .filters-fold > summary:hover { color: var(--text-muted); }
+    .filters-fold > summary:focus-visible {
+      outline: 2px solid var(--champagne);
+      outline-offset: 3px;
+      border-radius: 0.6rem;
+    }
+    .filters-fold-count {
+      display: inline-grid;
+      place-items: center;
+      min-width: 1.35rem;
+      height: 1.35rem;
+      padding: 0 0.35rem;
+      border-radius: 999px;
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      background: rgba(138, 43, 226, 0.14);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0;
+    }
+    /* the chevron, rotating on open -- the only thing that says this opens */
+    .filters-fold > summary::after {
+      content: "";
+      width: 0.5rem;
+      height: 0.5rem;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg) translate(-0.1rem, -0.1rem);
+      transition: transform 0.2s ease;
+    }
+    .filters-fold[open] > summary::after {
+      transform: rotate(-135deg) translate(-0.15rem, -0.15rem);
+    }
+    .filters-fold[open] > .pillset { padding-top: 0.35rem; }
+    @media (prefers-reduced-motion: reduce) {
+      .filters-fold > summary::after { transition: none; }
+    }
     /* the chips here report, they do not toggle -- no hover, no pointer.
        Used elsewhere too (the match reveal, profile_view's stated
        preferences) so it stays the inert default; the waiting screen's own
@@ -1018,25 +1112,36 @@
     }
 
     /* the waiting screen's own chips: .is-static's look, but tappable --
-       each one opens the sheet below with what it could change to. */
-    .pill-chip {
+       each one opens the sheet below with what it could change to.
+       Qualified with .pill, like .pill.is-static above, and for the same
+       reason: base .pill is defined further down this sheet, so a bare
+       .pill-chip ties on specificity and loses on source order. It was
+       losing -- every filter rendered with .pill's transparent background,
+       which made a live filter and a switched-off one identical. */
+    .pill.pill-chip {
       color: var(--text);
       border-color: rgba(168, 85, 247, 0.4);
       background: rgba(138, 43, 226, 0.14);
     }
-    .pill-chip:hover {
+    .pill.pill-chip:hover {
       border-color: rgba(168, 85, 247, 0.7);
       background: rgba(138, 43, 226, 0.22);
     }
     /* a filter the searcher has switched off -- the same faint reading
        "Any age" already had, still tappable so it can be switched back on */
-    .pill-chip.is-off {
+    .pill.pill-chip.is-off {
       color: var(--text-muted);
       border-color: var(--ink-hairline);
       background: none;
     }
-    .pill-chip.is-off:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
+    .pill.pill-chip.is-off:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
 
+    /* Both children only ever appear together (nothing fits), and both used
+       to arrive out of nowhere and shove the nav row down -- the wider
+       button after 45s especially. One reserved slot for the pair, sized to
+       the taller state, so they fade in against a space already held for
+       them. */
+    .waiting-fix { min-height: 7.2rem; }
     .waiting-none {
       margin: 1.1rem 0 0;
       text-align: center;
@@ -1215,7 +1320,13 @@
     /* ---------- bottom sheet (the wizard's "More" overlay) ------------
        Anchored to the bottom of the screen and scrollable inside, so the
        long list lives here instead of making the step behind it scroll. */
-    .sheet { position: absolute; inset: 0; z-index: 40; }
+    /* Fixed, not absolute. Absolute resolved against .app-shell, which on a
+       page without .wiz-fit is as tall as the document -- so `bottom: 0` put
+       the panel at the foot of the *page* rather than the screen, and on a
+       waiting screen that scrolled at all it opened partly below the fold
+       (measured 24px, and up to ~123px with a full filter set). The frame
+       preview overrides this back to absolute; see the phone-frame block. */
+    .sheet { position: fixed; inset: 0; z-index: 40; }
     .sheet-backdrop {
       position: absolute;
       inset: 0;
@@ -1328,6 +1439,11 @@
       .opt-label { font-size: 0.92rem; }
       .wiz-nav { margin-top: 1rem; }
       .wiz-next { width: 3rem; height: 3rem; }
+      /* .is-final pins itself to the chevron's height so the row doesn't
+         shift on the last step -- which only holds if it follows the
+         chevron down here too. Without this the nav sat 6px higher on
+         step 6 of the search wizard on a short screen. */
+      .wiz-next.is-final { height: 3rem; }
       .wiz-readout { margin-bottom: 1rem; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -3397,6 +3513,11 @@
         box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.85);
         background-color: var(--ink);
       }
+      /* Same reason the tab bar below needs it: the sheet is fixed to the
+         browser viewport, which inside a 375px frame on a wide monitor means
+         a sheet spanning the whole desktop. Back to absolute so it stays
+         within the frame it is previewing. */
+      html[data-viewport="mobile"] .app-shell .sheet { position: absolute; }
       /* .tabbar is normally fixed to the browser viewport; inside the
          frame it needs to stick to the frame's own scroll box instead. */
       html[data-viewport="mobile"] .app-shell .tabbar {

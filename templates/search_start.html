@@ -6,7 +6,7 @@
    page load; the whole thing posts once at the end. Without JS all six steps
    stay visible and the form still submits -- the flow degrades to a long
    single page rather than breaking. #}
-<form method="post" action="{{ url_for('live_search') }}" id="wiz-form" class="wiz">
+<form method="post" action="{{ url_for('live_search') }}" id="wiz-form" class="wiz wiz-steady">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <div class="wiz-progress" aria-hidden="true"><span id="wiz-bar"></span></div>

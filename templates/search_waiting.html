@@ -32,25 +32,40 @@
       </span>
     </p>
 
-    <div class="waiting-recap">
-      <p class="waiting-recap-label">Looking for</p>
+    {# Folded shut. A full filter set is sixteen pills -- five rows on a
+       phone, taller than the animation and the question together -- and it
+       pushed "Stop searching" under the tab bar. It is reference material
+       once the search is running, so it earns a line, not a third of the
+       screen. A real <details> so it works without JS and keyboard and
+       screen readers get the disclosure semantics for free. #}
+    <details class="filters-fold" id="filters-fold">
+      <summary>
+        <span class="filters-fold-label">Your filters</span>
+        <span class="filters-fold-count" id="chip-count">{{ state.chips | length }}</span>
+      </summary>
       <div class="pillset" id="chip-row">
         {% for chip in state.chips %}
           <button type="button" class="pill pill-chip{% if chip.off %} is-off{% endif %}"
                   data-key="{{ chip.key }}">{{ chip.label }}</button>
         {% endfor %}
       </div>
+    </details>
+
+    {# One slot for both, not two. They are mutually correlated -- the wider
+       offer only ever appears when nothing fits, which is exactly when the
+       "nobody fits" line is up -- so reserving their shared height means
+       neither can shove the nav row down when it arrives. #}
+    <div class="waiting-fix">
+      <p class="waiting-none" id="waiting-none"{% if state.fits %} hidden{% endif %}>
+        Nobody searching right now fits all of this. You'll be paired the
+        moment someone does — or open your filters above to change one.
+      </p>
+
+      <button type="button" class="btn btn-secondary btn-block waiting-wider"
+              id="wider-btn"{% if not state.relax_all.offer %} hidden{% endif %}>
+        Search wider — {{ state.relax_all.count }} fit
+      </button>
     </div>
-
-    <p class="waiting-none" id="waiting-none"{% if state.fits %} hidden{% endif %}>
-      Nobody searching right now fits all of this. You'll be paired the
-      moment someone does — or tap a filter above to change it.
-    </p>
-
-    <button type="button" class="btn btn-secondary btn-block waiting-wider"
-            id="wider-btn"{% if not state.relax_all.offer %} hidden{% endif %}>
-      Search wider — {{ state.relax_all.count }} fit
-    </button>
   </div>
 
   <div class="wiz-nav">
@@ -154,6 +169,7 @@
 
   // ---- filter chips: tap one, see (and apply) verified alternatives ----
   var chipRow = document.getElementById("chip-row");
+  var chipCountEl = document.getElementById("chip-count");
   var waitingCountEl = document.getElementById("waiting-count");
   var waitingFitsWrap = document.getElementById("waiting-fits-wrap");
   var waitingFitsEl = document.getElementById("waiting-fits");
@@ -187,6 +203,9 @@
   function renderState(data) {
     state = data;
 
+    // Only the pills are rebuilt -- never the <details> around them. Whether
+    // the fold is open is the reader's choice, and a refresh landing every
+    // few seconds must not close it under them.
     chipRow.innerHTML = "";
     data.chips.forEach(function (chip) {
       var btn = document.createElement("button");
@@ -197,6 +216,7 @@
       chipRow.appendChild(btn);
     });
 
+    chipCountEl.textContent = data.chips.length;
     waitingCountEl.textContent = data.waiting + " searching";
     if (data.fits) {
       waitingFitsWrap.hidden = false;
