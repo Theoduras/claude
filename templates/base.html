@@ -448,6 +448,46 @@
       cursor: pointer;
     }
 
+    /* A single tickable row: "keep me signed in", the two consent boxes on
+       registration, the report screen's reason list. Same opt-out as
+       .checkgroup above and for the same reason -- the global `label` rule
+       would render the sentence as an uppercase eyebrow, and the global
+       `input` rule stretches the box itself to width: 100% with padding.
+       Both were happening: the control was unreadable on every screen that
+       used it, and the .hint below it (negative top margin, tuned to tuck
+       under an input's bottom margin) landed 5px inside the row. */
+    .switch-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      margin: 0 0 0.7rem;
+      font-size: 0.9rem;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: normal;
+      line-height: 1.45;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .switch-row input[type="checkbox"],
+    .switch-row input[type="radio"] {
+      flex: none;
+      width: 1.05rem;
+      height: 1.05rem;
+      /* the shared input rule's 1.15rem bottom margin would push the box
+         off its own line; the small top margin sits it on the first line
+         of a label that wraps to two */
+      margin: 0.16rem 0 0;
+      padding: 0;
+      accent-color: var(--violet-crest);
+      cursor: pointer;
+    }
+    .switch-row span { min-width: 0; }
+    .switch-row a { text-decoration: underline; }
+    /* .hint is pulled up by -0.75rem to sit under an input; after a switch
+       row there is no bottom margin to reclaim, so it has to start clear. */
+    .switch-row + .hint { margin-top: 0; }
+
     /* ---------- buttons: sheen sweeps as the pile is brushed ---------- */
     .btn {
       position: relative;
@@ -1119,6 +1159,13 @@
        losing -- every filter rendered with .pill's transparent background,
        which made a live filter and a switched-off one identical. */
     .pill.pill-chip {
+      /* "Amsterdam, North Holland, Netherlands" is one chip. Let it take a
+         line at most and end in an ellipsis; the full string stays in the
+         title attribute rather than being lost. */
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       color: var(--text);
       border-color: rgba(168, 85, 247, 0.4);
       background: rgba(138, 43, 226, 0.14);
@@ -1392,6 +1439,11 @@
       padding: 0.85rem 1.25rem calc(1.1rem + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid var(--ink-hairline);
     }
+    /* The waiting screen's sheet keeps a Done button for the filters you
+       pick several of, and hides it for the ones a single tap answers --
+       those close themselves, so a Done there would be a button that never
+       does anything. */
+    #filter-sheet:not(.is-multi) .sheet-foot { display: none; }
     .sheet-count {
       font-size: 0.78rem;
       color: var(--text-faint);

@@ -46,7 +46,8 @@
       <div class="pillset" id="chip-row">
         {% for chip in state.chips %}
           <button type="button" class="pill pill-chip{% if chip.off %} is-off{% endif %}"
-                  data-key="{{ chip.key }}">{{ chip.label }}</button>
+                  data-key="{{ chip.key }}"
+                  title="{{ chip.label }}">{{ chip.label }}</button>
         {% endfor %}
       </div>
     </details>
@@ -96,6 +97,12 @@
     </div>
     <div class="sheet-body">
       <div class="sheet-opt-list" id="filter-sheet-options"></div>
+    </div>
+    {# Only meaningful for the multi-value filters, which stay open while you
+       pick: a single-value one closes itself on the tap that answers it.
+       Same foot/button pattern as the wizard's interest picker. #}
+    <div class="sheet-foot">
+      <button type="button" class="btn btn-block" data-close>Done</button>
     </div>
   </div>
 </div>
@@ -185,17 +192,28 @@
   // scoping the overlay to the app frame on a wide screen.
   (document.querySelector(".app-shell") || document.body).appendChild(sheet);
 
+  // A chip key is either a plain filter ("age") or "<group>:<value>" for the
+  // three that hold a CSV. Those three are multiple-choice questions, so the
+  // sheet belongs to the group, not to the one pill you happened to tap --
+  // keying it to the pill meant toggling that pill deleted the thing the
+  // sheet was keyed to, and it shut after a single change.
+  var MULTI = { relationship: 1, interest: 1, body: 1 };
+  function groupOf(key) {
+    var i = key.indexOf(":");
+    return i === -1 ? key : key.slice(0, i);
+  }
+  function isMulti(key) { return !!MULTI[groupOf(key)]; }
+
   var TITLES = {
     gender: "Who are you looking for?",
     age: "What age range?",
-    location: "Location"
+    location: "Location",
+    relationship: "What kind of connection?",
+    interest: "Interests",
+    body: "Body type"
   };
   function titleFor(key) {
-    if (TITLES[key]) return TITLES[key];
-    if (key.indexOf("relationship:") === 0) return "What kind of connection?";
-    if (key.indexOf("interest:") === 0) return "Interest: " + key.slice(9);
-    if (key.indexOf("body:") === 0) return "Body type";
-    return "Filter";
+    return TITLES[groupOf(key)] || "Filter";
   }
 
   var state = null;  // last state payload, so a tap can render without a round-trip
@@ -212,6 +230,7 @@
       btn.type = "button";
       btn.className = "pill pill-chip" + (chip.off ? " is-off" : "");
       btn.dataset.key = chip.key;
+      btn.title = chip.label;   // the full text, for a chip cut to one line
       btn.textContent = chip.label;
       chipRow.appendChild(btn);
     });
@@ -240,17 +259,25 @@
       widerBtn.hidden = true;
     }
 
-    // If the sheet is open on a chip that no longer exists (its filter was
-    // just switched off elsewhere) or whose options changed, refresh it in
-    // place rather than leaving stale counts up.
-    if (!sheet.hidden && sheet.dataset.key) {
-      var chip = data.chips.find(function (c) { return c.key === sheet.dataset.key; });
+    // Refresh an open sheet in place rather than leaving stale counts up.
+    // Resolved by group: for a multi-value filter the pill you opened it
+    // from may have just been toggled away, and any other pill in the same
+    // group carries the same option list, so the sheet survives the change
+    // that made it. Only a group with nothing left at all -- every
+    // connection type switched off, say -- has no options to show, and
+    // that is the end of the question rather than a state to sit in.
+    if (!sheet.hidden && sheet.dataset.group) {
+      var g = sheet.dataset.group;
+      var chip = data.chips.find(function (c) { return c.key === sheet.dataset.key; })
+              || data.chips.find(function (c) { return groupOf(c.key) === g; });
       if (chip) openSheetFor(chip); else closeSheet();
     }
   }
 
   function openSheetFor(chip) {
     sheet.dataset.key = chip.key;
+    sheet.dataset.group = groupOf(chip.key);
+    sheet.classList.toggle("is-multi", isMulti(chip.key));
     sheetTitle.textContent = titleFor(chip.key);
     sheetOptions.innerHTML = "";
     chip.options.forEach(function (opt) {
@@ -275,13 +302,22 @@
     openSheet();
   }
 
+  // The sheet rises from the bottom over the pill row it edits, leaving it
+  // half-covered and a long chip cut mid-word. Fold the pills away while the
+  // sheet is up -- it states the same thing, in more detail -- and give the
+  // fold back exactly as it was found when the sheet closes.
+  var fold = document.getElementById("filters-fold");
+  var foldWasOpen = false;
   function openSheet() {
+    if (fold) { foldWasOpen = fold.open; fold.open = false; }
     sheet.hidden = false;
     requestAnimationFrame(function () { sheet.classList.add("is-open"); });
   }
   function closeSheet() {
     sheet.classList.remove("is-open");
     delete sheet.dataset.key;
+    delete sheet.dataset.group;
+    if (fold && foldWasOpen) fold.open = true;
     setTimeout(function () { sheet.hidden = true; }, 200);
   }
 
@@ -315,7 +351,13 @@
       })
       .then(function (data) {
         if (data.error) throw new Error(data.error);
-        closeSheet();
+        // A single-value filter is answered by one tap, so the sheet has
+        // done its job and gets out of the way. A multi-value one is a
+        // list you are still working through -- closing it after each
+        // toggle is what made picking three connection types take three
+        // visits. renderState() below re-renders its rows in place with
+        // fresh counts, which is the feedback a multi-select wants.
+        if (!isMulti(key)) closeSheet();
 
         // The server already re-ran the pairing attempt with the new
         // filters, so a match is known now -- go, rather than idling here
