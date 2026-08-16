@@ -199,6 +199,31 @@ AGE_MIN_YEARS, AGE_MAX_YEARS = 18, 39
 # attempt and the waiting screen never actually shows.
 MIN_SEARCH_SECONDS = 7
 
+# A waiting search is only real while a browser is actually polling for it.
+# /search/status bumps searches.last_seen on every tick (the page polls every
+# 1.5s), so anything older than this has had its tab closed, its phone locked,
+# or its network drop -- pairing with it would hand someone a partner who is
+# not there, and counting it would inflate the landing page's live number.
+# Generous next to the 1.5s poll so a slow network or a brief background tab
+# does not drop a searcher who is still present.
+SEARCH_ALIVE_SECONDS = 60
+
+# Demo members (is_bot) never poll, so they are exempt from the liveness check
+# above -- they are always "present" by construction. This is the reusable
+# predicate for "this waiting row is worth pairing with"; every pool query
+# applies it so the waiting screen, the preview count and the pairing pass
+# can never disagree about who is actually available.
+LIVE_SEARCH_CLAUSE = (
+    "(u.is_bot OR s.last_seen > NOW() - (? * INTERVAL '1 second'))"
+)
+
+# Real people first. Seeded demo members are the oldest rows in the pool by
+# construction (they are inserted once at deploy time), so a plain
+# "longest wait wins" ranking hands every new signup a bot instead of the
+# other real person who is searching right now. Bots stay in the pool as a
+# fallback -- but only after a searcher has genuinely waited for a human.
+BOT_FALLBACK_SECONDS = 25
+
 # --- match lifecycle (live-search pairings only; /find stays instant) -----
 REVEAL_SECONDS = 20          # "it's a match" card before the chat opens
 TIMED_CHAT_SECONDS = 300     # 5 minutes to talk before a decision is forced
@@ -554,8 +579,32 @@ ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_tattoos TEXT NOT NULL DEFAULT
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
 
--- The pairing pass scans waiting searchers.
+-- Heartbeat from the waiting page's poll. A row whose browser has gone away
+-- stops being pairable (see SEARCH_ALIVE_SECONDS) instead of lingering as a
+-- ghost partner forever. DEFAULT NOW() so pre-existing rows start out live
+-- rather than all vanishing the moment this ships.
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- The pairing pass scans waiting searchers, and now filters them on liveness.
 CREATE INDEX IF NOT EXISTS searches_status_idx ON searches (status);
+CREATE INDEX IF NOT EXISTS searches_status_last_seen_idx ON searches (status, last_seen);
+
+-- Failed sign-in / sign-up attempts, for rate limiting. Both routes run a
+-- deliberately expensive password hash (scrypt, ~100ms and ~32MB of RAM per
+-- call), so an unthrottled attacker exhausts CPU and memory long before they
+-- guess anything. Kept in the database rather than in-process because Cloud
+-- Run spreads requests across instances, and a per-instance counter would let
+-- an attacker multiply their budget by the instance count.
+CREATE TABLE IF NOT EXISTS auth_attempts (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'login',
+    ip TEXT NOT NULL DEFAULT '',
+    username TEXT NOT NULL DEFAULT '',
+    attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS auth_attempts_ip_idx ON auth_attempts (ip, attempted_at);
+CREATE INDEX IF NOT EXISTS auth_attempts_user_idx ON auth_attempts (LOWER(username), attempted_at);
 
 CREATE TABLE IF NOT EXISTS messages (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -715,8 +764,16 @@ def design_lab():
 def index():
     if session.get("user_id"):
         return redirect(url_for("live_search"))
+    # Only people whose browser is still polling (plus the always-present demo
+    # members). Counting every 'waiting' row would advertise a number that
+    # only ever grows, since a closed tab never cancels its own search.
     searching_now = get_db().execute(
-        "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
+        f"""
+        SELECT COUNT(*) AS n FROM searches s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.status = 'waiting' AND {LIVE_SEARCH_CLAUSE}
+        """,
+        (SEARCH_ALIVE_SECONDS,),
     ).fetchone()["n"]
     return render_template("landing.html", searching_now=searching_now)
 
@@ -726,6 +783,94 @@ def help_page():
     """Static help/legal hub. No auth -- reachable logged out from the
     landing footer and logged in from the tab bar's 4th icon."""
     return render_template("help.html")
+
+
+# --- sign-in / sign-up throttling ------------------------------------
+#
+# Werkzeug hashes with scrypt (N=32768), which costs ~100ms of CPU and ~32MB
+# of RAM per call *by design* -- that is what makes a stolen hash expensive to
+# crack. It also means every unauthenticated request that reaches the hash is
+# an expensive request, so the throttle has to refuse *before* hashing, not
+# after. Two windows: one per account (someone guessing one person's password)
+# and a looser one per IP (someone spraying many accounts, or just burning CPU).
+AUTH_WINDOW_SECONDS = 900        # 15 minutes
+AUTH_MAX_PER_USERNAME = 10
+AUTH_MAX_PER_IP = 40
+
+
+def client_ip():
+    """The caller's address as seen in front of Cloud Run's proxy.
+
+    X-Forwarded-For is appended to by each hop, so the *first* entry is the
+    original client. It is client-supplied and therefore spoofable, which is
+    fine here: a spoofed value only ever splits an attacker's own budget into
+    smaller buckets, and the per-username limit does not depend on it at all.
+    """
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:100]
+    return (request.remote_addr or "")[:100]
+
+
+def auth_throttled(kind, username):
+    """True when this caller has spent their failed-attempt budget.
+
+    Checked before the password hash runs, so a blocked attempt costs a
+    single indexed COUNT rather than a scrypt call.
+    """
+    db = get_db()
+    row = db.execute(
+        """
+        SELECT
+            COUNT(*) FILTER (WHERE LOWER(username) = LOWER(?)) AS by_user,
+            COUNT(*) FILTER (WHERE ip = ?) AS by_ip
+        FROM auth_attempts
+        WHERE kind = ? AND attempted_at > NOW() - (? * INTERVAL '1 second')
+        """,
+        (username, client_ip(), kind, AUTH_WINDOW_SECONDS),
+    ).fetchone()
+    return row["by_user"] >= AUTH_MAX_PER_USERNAME or row["by_ip"] >= AUTH_MAX_PER_IP
+
+
+def record_auth_failure(kind, username):
+    """Log one failed attempt, and opportunistically reap expired rows.
+
+    The reap is inlined rather than scheduled because there is no background
+    worker: the table would otherwise grow forever on a route anyone can hit.
+    """
+    db = get_db()
+    db.execute(
+        "INSERT INTO auth_attempts (kind, ip, username) VALUES (?, ?, ?)",
+        (kind, client_ip(), username[:100]),
+    )
+    db.execute(
+        "DELETE FROM auth_attempts WHERE attempted_at < NOW() - (? * INTERVAL '1 second')",
+        (AUTH_WINDOW_SECONDS * 4,),
+    )
+    db.commit()
+
+
+def clear_auth_failures(username):
+    """A correct password clears that account's budget, so a user who simply
+    mistyped a few times is not locked out by their own successful sign-in.
+
+    Only the account's rows, deliberately not the IP's: clearing by IP would
+    let anyone holding one valid account reset their own per-IP budget at
+    will and spray the remaining accounts indefinitely. The handful of
+    failures a genuine typo leaves behind age out on their own, well inside
+    the far looser per-IP allowance.
+    """
+    db = get_db()
+    db.execute(
+        "DELETE FROM auth_attempts WHERE LOWER(username) = LOWER(?)",
+        (username,),
+    )
+    db.commit()
+
+
+THROTTLE_MESSAGE = (
+    "Too many attempts. Wait a few minutes before trying again."
+)
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -739,7 +884,11 @@ def register():
         confirm = request.form.get("confirm", "")
 
         error = None
-        if not username or len(username) < 3:
+        # Registration hashes a password too, so it is the same CPU/memory
+        # amplifier as login and needs the same gate ahead of the hash.
+        if auth_throttled("register", username):
+            error = THROTTLE_MESSAGE
+        elif not username or len(username) < 3:
             error = "Username must be at least 3 characters."
         elif len(password) < 8:
             error = "Password must be at least 8 characters."
@@ -757,6 +906,9 @@ def register():
                 db.commit()
             except psycopg.errors.UniqueViolation:
                 db.rollback()
+                # Counted: repeatedly probing which usernames are taken is
+                # the cheap half of an account-enumeration sweep.
+                record_auth_failure("register", username)
                 error = "That username is already taken."
             else:
                 session.clear()
@@ -778,15 +930,26 @@ def login():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
+        # Ahead of the lookup and, crucially, ahead of check_password_hash --
+        # a throttled attempt has to be cheap, or the throttle is itself the
+        # denial of service it was added to prevent.
+        if auth_throttled("login", username):
+            flash(THROTTLE_MESSAGE)
+            return render_template("login.html"), 429
+
         user = get_db().execute(
             "SELECT * FROM users WHERE LOWER(username) = LOWER(?)", (username,)
         ).fetchone()
 
         if user and check_password_hash(user["password_hash"], password):
+            clear_auth_failures(username)
             session.clear()
             session["user_id"] = user["id"]
             return redirect(url_for("live_search"))
 
+        record_auth_failure("login", username)
+        # Deliberately identical for "no such user" and "wrong password", so
+        # the response never reveals which accounts exist.
         flash("Invalid username or password.")
 
     return render_template("login.html")
@@ -1812,6 +1975,17 @@ def try_pair(user_id):
     applies to both sides (this searcher and the candidates), so being the
     second one to arrive does not skip the wait either.
 
+    Candidates must also still be *present*: a waiting row whose browser
+    stopped polling (SEARCH_ALIVE_SECONDS) is someone who closed the tab, and
+    pairing with them spends a real person's match on an empty room. Demo
+    members never poll, so they are exempt -- see LIVE_SEARCH_CLAUSE.
+
+    Real people outrank demo members, and demo members are not considered at
+    all until the searcher has waited BOT_FALLBACK_SECONDS for a human. Seeded
+    members are the oldest rows in the pool by construction, so without this a
+    plain "longest wait wins" ranking would hand every new signup a bot while
+    another real person sat in the same pool unmatched.
+
     Pairing is serialized with a Postgres advisory lock rather than an
     in-process one, so two searchers cannot claim the same partner even
     when they are being served by different instances. The lock is held
@@ -1824,12 +1998,13 @@ def try_pair(user_id):
         mine = db.execute(
             """
             SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos,
-                   s.created_at <= NOW() - (? * INTERVAL '1 second') AS ripe
+                   s.created_at <= NOW() - (? * INTERVAL '1 second') AS ripe,
+                   s.created_at <= NOW() - (? * INTERVAL '1 second') AS bots_ok
             FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
             WHERE s.user_id = ?
             """,
-            (MIN_SEARCH_SECONDS, user_id),
+            (MIN_SEARCH_SECONDS, BOT_FALLBACK_SECONDS, user_id),
         ).fetchone()
 
         if mine is None:
@@ -1846,25 +2021,38 @@ def try_pair(user_id):
             return None
 
         others = db.execute(
-            """
-            SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
+            f"""
+            SELECT s.*, u.is_bot,
+                   p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos
+            FROM searches s
             JOIN profiles p ON p.user_id = s.user_id
+            JOIN users u ON u.id = s.user_id
             WHERE s.status = 'waiting' AND s.user_id != ?
               AND s.created_at <= NOW() - (? * INTERVAL '1 second')
-            ORDER BY s.created_at
+              AND {LIVE_SEARCH_CLAUSE}
+            ORDER BY u.is_bot, s.created_at
             """,
-            (user_id, MIN_SEARCH_SECONDS),
+            (user_id, MIN_SEARCH_SECONDS, SEARCH_ALIVE_SECONDS),
         ).fetchall()
 
         best = None
         my_words = _tokens(mine["interests"])
         for other in others:
+            # Hold the bots back until the searcher has actually waited for a
+            # human. Ordered bots-last, so once one appears the humans are
+            # already spent.
+            if other["is_bot"] and not mine["bots_ok"]:
+                continue
             if not searches_compatible(mine, other):
                 continue
-            # Tie-break on shared interests, then longest wait (query order).
+            # Humans before bots, then most shared interests, then longest
+            # wait (query order, via the stable index below). Ranked as one
+            # key rather than "first match wins unless overlap is greater",
+            # so a bot can never displace a human on interests alone.
             overlap = len(my_words & _tokens(other["interests"]))
-            if best is None or overlap > best[0]:
-                best = (overlap, other)
+            rank = (bool(other["is_bot"]), -overlap)
+            if best is None or rank < best[0]:
+                best = (rank, other)
 
         if best is None:
             db.commit()
@@ -1928,9 +2116,9 @@ def save_search(
              pref_height_min, pref_height_max, pref_body_types,
              pref_fitness_level, pref_hair_color, pref_eye_color,
              pref_tattoos, use_gender, use_age, use_distance,
-             use_physical, status, match_id, created_at)
+             use_physical, status, match_id, created_at, last_seen)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                'waiting', NULL, NOW())
+                'waiting', NULL, NOW(), NOW())
         ON CONFLICT(user_id) DO UPDATE SET
             seeking = excluded.seeking,
             age_min = excluded.age_min,
@@ -1960,7 +2148,11 @@ def save_search(
             use_physical = excluded.use_physical,
             status = 'waiting',
             match_id = NULL,
-            created_at = NOW()
+            created_at = NOW(),
+            -- Starting a search is itself proof of presence; without this a
+            -- restarted search would inherit the stale last_seen of the one
+            -- before it and read as abandoned until the first poll lands.
+            last_seen = NOW()
         """,
         (
             user_id, seeking, age_min, age_max, relationship_type, interests,
@@ -2383,12 +2575,16 @@ def search_preview():
     }
 
     others = get_db().execute(
-        """
-        SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
+        f"""
+        SELECT s.*, u.is_bot,
+               p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos
+        FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
+        JOIN users u ON u.id = s.user_id
         WHERE s.status = 'waiting' AND s.user_id != ?
+          AND {LIVE_SEARCH_CLAUSE}
         """,
-        (session["user_id"],),
+        (session["user_id"], SEARCH_ALIVE_SECONDS),
     ).fetchall()
     others = [dict(o) for o in others]
 
@@ -2524,12 +2720,16 @@ def _search_pool(user_id):
         return None, []
 
     others = db.execute(
-        """
-        SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos FROM searches s
+        f"""
+        SELECT s.*, u.is_bot,
+               p.gender, p.age, p.height_cm, p.body_type, p.fitness_level, p.hair_color, p.eye_color, p.tattoos
+        FROM searches s
         JOIN profiles p ON p.user_id = s.user_id
+        JOIN users u ON u.id = s.user_id
         WHERE s.status = 'waiting' AND s.user_id != ?
+          AND {LIVE_SEARCH_CLAUSE}
         """,
-        (user_id,),
+        (user_id, SEARCH_ALIVE_SECONDS),
     ).fetchall()
     return dict(mine), [dict(o) for o in others]
 
@@ -2608,6 +2808,16 @@ def search_summary_chips(search):
 @login_required
 def search_waiting():
     user_id = session["user_id"]
+    # Loading the waiting screen is presence too, not just the poll that
+    # follows it -- otherwise the first pairing pass could see the person
+    # who just opened this page as already gone.
+    db = get_db()
+    db.execute(
+        "UPDATE searches SET last_seen = NOW() WHERE user_id = ? AND status = 'waiting'",
+        (user_id,),
+    )
+    db.commit()
+
     mine, others = _search_pool(user_id)
 
     if mine is None or mine["status"] == "cancelled":
@@ -2637,6 +2847,16 @@ def search_status():
     instead (see templates/search_waiting.html).
     """
     user_id = session["user_id"]
+
+    # This poll *is* the heartbeat: it is the one signal that says a browser
+    # is still open on the waiting screen. Bumped before try_pair() so this
+    # searcher counts as present to anyone else pairing in the same instant.
+    db = get_db()
+    db.execute(
+        "UPDATE searches SET last_seen = NOW() WHERE user_id = ? AND status = 'waiting'",
+        (user_id,),
+    )
+    db.commit()
 
     # Retry pairing on each poll so a searcher who arrived since the last
     # tick still gets picked up.
