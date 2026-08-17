@@ -1,7 +1,5 @@
 <!doctype html>
-{# lang drives screen-reader pronunciation and the browser's own
-   translate-this-page prompt, so it has to track the chosen language. #}
-<html lang="{{ lang }}">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -240,47 +238,6 @@
       background: rgba(138, 43, 226, 0.16);
     }
     nav form { margin: 0; }
-
-    /* ---------- language switcher --------------------------------------
-       A segmented pill of two-letter codes, one per registered language.
-       Sized off the nav's own type rather than a fixed width, so a third
-       or fourth language just makes the pill longer instead of needing new
-       rules. Codes rather than flags on purpose: a flag names a country,
-       not a language, and Dutch is not only the Netherlands. */
-    .lang-switch {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.1rem;
-      padding: 0.15rem;
-      margin-left: 0.35rem;
-      border: 1px solid var(--ink-hairline);
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.03);
-    }
-    .lang-opt {
-      display: inline-block;
-      padding: 0.28rem 0.55rem;
-      border-radius: 999px;
-      font-family: var(--sans);
-      font-size: 0.7rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      line-height: 1;
-      color: var(--text-faint);
-      text-decoration: none;
-      white-space: nowrap;
-      transition: color 120ms ease, background-color 120ms ease;
-    }
-    .lang-opt:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
-    .lang-opt.is-on {
-      color: var(--ink);
-      background: var(--violet-crest);
-    }
-    /* The pill is small and sits in a nav that scrolls horizontally on a
-       phone; keep it from being the thing that gets squeezed. */
-    @media (max-width: 720px) {
-      .lang-switch { flex: none; }
-    }
 
     /* A column the full height of the screen, so a page that wants to fill
        it (the search wizard) can, instead of floating in the top third.
@@ -1239,6 +1196,8 @@
     @media (max-width: 480px) {
       .toggle-panel, .help-pop { margin-left: 0; }
     }
+    html[data-viewport="mobile"] .toggle-panel,
+    html[data-viewport="mobile"] .help-pop { margin-left: 0; }
 
     /* ---------- inline help ------------------------------------------- */
     .help-dot {
@@ -2276,7 +2235,7 @@
        so the headline no longer needs to start a seventh of the way down. */
     .landing-head h1 { margin-top: clamp(0.5rem, 2.5vh, 1.5rem); }
     @media (min-width: 721px) {
-      .landing-head h1 {
+      html:not([data-viewport="mobile"]) .landing-head h1 {
         margin-top: clamp(2.5rem, 13vh, 7.5rem);
       }
     }
@@ -2290,9 +2249,9 @@
          and undistorted inside whatever box survives both limits. */
       max-height: 22vh;
       /* Centered, this box's right edge lands under the fixed mobile-/-desktop
-         mobile preview toggle that used to be pinned there. That control is
-         gone; the margin stays because the spacing above the mark reads well
-         on a phone regardless. */
+         preview toggle (top: 5.5rem, see .viewport-toggle) once it's this wide.
+         Enough top clearance to fully pass under that pill, rather than fighting
+         it horizontally by uncentering the logo. */
       margin: 3.6rem auto clamp(0.5rem, 2.5vh, 1.25rem);
       /* Three stops, not two, and a background wider than the box: sliding it
          sideways sweeps a sheen across the letters. Masking means the gradient
@@ -2330,7 +2289,7 @@
       padding-top: 1.25rem;
     }
     @media (min-width: 721px) {
-      .landing-actions { padding-top: 2.5rem; }
+      html:not([data-viewport="mobile"]) .landing-actions { padding-top: 2.5rem; }
     }
     /* Short screens: the wordmark is decoration and yields first. */
     @media (max-height: 700px) {
@@ -2360,9 +2319,10 @@
       letter-spacing: 0.13em;
     }
     /* Wide screens have room beside the headline, so the wordmark moves there
-       and grows. */
+       and grows. Gated on :not([data-viewport="mobile"]) like the rest of the
+       shell, or the phone preview would go two-column inside its own frame. */
     @media (min-width: 721px) {
-      .landing-head {
+      html:not([data-viewport="mobile"]) .landing-head {
         flex-direction: row;
         align-items: center;
         /* .landing-copy is fixed to its own content width, so centering the
@@ -2371,11 +2331,11 @@
         justify-content: center;
         gap: clamp(1.5rem, 5vw, 4rem);
       }
-      .landing-copy {
+      html:not([data-viewport="mobile"]) .landing-copy {
         flex: 0 1 auto;
         min-width: 0;
       }
-      .landing-logo {
+      html:not([data-viewport="mobile"]) .landing-logo {
         /* Row layout: back to its natural place after the copy, undoing the
            mobile-only `order: -1` that puts it above the text when stacked. */
         order: 0;
@@ -2485,65 +2445,152 @@
       box-shadow: 0 0 8px rgba(168, 85, 247, 0.9);
     }
 
-    /* The phone layout: tab bar in, duplicated nav links out, nav scrolls
-       horizontally rather than wrapping. Driven purely by the real viewport
-       — this used to be written twice, once more with a forced-preview
-       attribute, so a debug toggle could pin the phone layout onto a wide
-       screen. The toggle is gone, so one copy is all it takes. */
+    /* The phone layout normally comes from a media query, but a manual
+       preview override needs to force it on regardless of the real
+       viewport (or suppress it on an actually-narrow one) — a media query
+       alone can't be overridden by a class, so :not([data-viewport="desktop"])
+       lets it opt out and the second, query-free block below lets a forced
+       "mobile" preference opt in on a wide screen. Same rules, twice. */
     @media (max-width: 720px) {
-      .tabbar { display: flex; }
-      nav .tab-dup { display: none; }
-      nav {
+      html:not([data-viewport="desktop"]) .tabbar { display: flex; }
+      html:not([data-viewport="desktop"]) nav .tab-dup { display: none; }
+      html:not([data-viewport="desktop"]) nav {
         flex-wrap: nowrap;
         overflow-x: auto;
         scrollbar-width: none;
         gap: 0.15rem;
         padding-inline: 1.25rem;
       }
-      nav::-webkit-scrollbar { display: none; }
-      .brand { margin-right: 0.6rem; }
-      nav a:not(.brand) { white-space: nowrap; }
-      main {
+      html:not([data-viewport="desktop"]) nav::-webkit-scrollbar { display: none; }
+      html:not([data-viewport="desktop"]) .brand { margin-right: 0.6rem; }
+      html:not([data-viewport="desktop"]) nav a:not(.brand) { white-space: nowrap; }
+      html:not([data-viewport="desktop"]) main {
         padding: 1.5rem 1.5rem 7rem;
         gap: 1rem;
       }
     }
+    html[data-viewport="mobile"] .tabbar { display: flex; }
+    html[data-viewport="mobile"] nav .tab-dup { display: none; }
+    html[data-viewport="mobile"] nav {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      gap: 0.15rem;
+      padding-inline: 1.25rem;
+    }
+    html[data-viewport="mobile"] nav::-webkit-scrollbar { display: none; }
+    html[data-viewport="mobile"] .brand { margin-right: 0.6rem; }
+    html[data-viewport="mobile"] nav a:not(.brand) { white-space: nowrap; }
+    html[data-viewport="mobile"] main {
+      padding: 1.5rem 1.5rem 7rem;
+      gap: 1rem;
+    }
 
+    /* ---------- viewport preview toggle (debug only) -------------------
+       Fixed and outside every layout container, so it floats over the
+       page — nav, main and the tab bar all lay out as if it isn't there. */
+    .viewport-toggle {
+      position: fixed;
+      right: 1rem;
+      bottom: 1rem;
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.55rem 0.9rem;
+      font-family: var(--sans);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text);
+      background: rgba(21, 12, 34, 0.92);
+      border: 1px solid var(--ink-hairline);
+      border-radius: 999px;
+      box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.85);
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+    }
+    .viewport-toggle:hover { border-color: rgba(168, 85, 247, 0.42); }
+    /* sits above the tab bar rather than behind it on a forced-mobile preview */
+    /* Top-right on phones: at bottom: 5.5rem this sat exactly on the
+       wizard's back/next row and swallowed taps on Next, which is the one
+       control the flow cannot do without. */
+    html[data-viewport="mobile"] .viewport-toggle {
+      bottom: auto;
+      top: 5.5rem;
+    }
+
+    /* Forcing mobile on a wide screen: sink the app into an actual
+       phone-sized frame instead of just re-flowing the full-width page,
+       so the preview looks like a phone, not a squeezed desktop layout. */
+    @media (min-width: 721px) {
+      html[data-viewport="mobile"] body {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 3rem 1rem;
+        min-height: 100vh;
+        box-sizing: border-box;
+      }
+      html[data-viewport="mobile"] .app-shell {
+        min-height: 0;
+        /* iPhone X's 375×812 — the narrowest phone still in real use — is the
+           floor the mobile layout is built to, so the debug preview frame
+           should show exactly that rather than a newer, wider phone. */
+        width: 375px;
+        height: 812px;
+        max-height: calc(100vh - 6rem);
+        overflow-y: auto;
+        overflow-x: hidden;
+        position: relative;
+        border-radius: 2.5rem;
+        border: 1px solid var(--ink-hairline);
+        box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.85);
+        background-color: var(--ink);
+      }
+      /* .tabbar is normally fixed to the browser viewport; inside the
+         frame it needs to stick to the frame's own scroll box instead. */
+      html[data-viewport="mobile"] .app-shell .tabbar {
+        position: sticky;
+        /* joining the flow the same way nav does -- without this it would
+           be the other bar a fixed-height .wiz-fit screen squashes rather
+           than let main give up the space. */
+        flex: none;
+      }
+      /* ...and being in flow it occupies its own space, so main's 7rem
+         reserve -- sized for the fixed bar on a real phone -- would sit on
+         top of it as a second gap and float the wizard's buttons well
+         short of the bottom. */
+      html[data-viewport="mobile"] main { padding-bottom: 1.5rem; }
+    }
   </style>
+  {# Runs before body paint so the forced layout never flashes the wrong
+       one first. Falls back to the real viewport on the very first visit,
+       then a click pins it either way until cleared. #}
+    <script>
+      (function () {
+        var v = localStorage.getItem("velvet-viewport-preview");
+        if (v !== "mobile" && v !== "desktop") {
+          v = window.matchMedia("(max-width: 720px)").matches ? "mobile" : "desktop";
+        }
+        document.documentElement.setAttribute("data-viewport", v);
+      })();
+    </script>
 </head>
 <body>
   <div class="app-shell">
   <nav>
     <a class="brand" href="{{ url_for('index') }}"><span class="brand-logo"></span><span class="brand-word">Velvt</span></a>
     {% if current_user %}
-      {% if current_user['is_admin'] %}<span class="tag">{{ t('nav.admin') }}</span>{% endif %}
-      <a class="tab-dup" href="{{ url_for('live_search') }}">{{ t('nav.live_search') }}</a>
-      <a class="tab-dup" href="{{ url_for('chats') }}">{{ t('nav.chats') }}</a>
-      <a class="tab-dup" href="{{ url_for('view_profile', user_id=current_user['id']) }}">{{ t('nav.profile') }}</a>
-      <a class="tab-dup" href="{{ url_for('help_page') }}">{{ t('nav.help') }}</a>
+      {% if current_user['is_admin'] %}<span class="tag">Admin</span>{% endif %}
+      <a class="tab-dup" href="{{ url_for('live_search') }}">Live search</a>
+      <a class="tab-dup" href="{{ url_for('chats') }}">Chats</a>
+      <a class="tab-dup" href="{{ url_for('view_profile', user_id=current_user['id']) }}">Profile</a>
+      <a class="tab-dup" href="{{ url_for('help_page') }}">Help</a>
       {% if current_user['is_admin'] %}
-        <a href="{{ url_for('admin_new_profile') }}">{{ t('nav.new_profile') }}</a>
+        <a href="{{ url_for('admin_new_profile') }}">New profile</a>
       {% endif %}
-    {% endif %}
-
-    {# Language switcher. Plain links, one per registered language, so it works
-       with JS off and needs no state of its own -- `next` sends you back to
-       the page you were reading. Pushed to the right of whatever precedes it,
-       and present logged out too, since the landing and sign-in pages are
-       exactly where a first-time Dutch visitor arrives. #}
-    <div class="lang-switch" role="group" aria-label="{{ t('lang.choose') }}">
-      {% for code, name in languages %}
-        <a href="{{ url_for('set_language', code=code) }}?next={{ request.full_path if request.query_string else request.path | urlencode }}"
-           class="lang-opt{% if code == lang %} is-on{% endif %}"
-           hreflang="{{ code }}"
-           title="{{ name }}"
-           {% if code == lang %}aria-current="true"{% endif %}>{{ language_short.get(code, code|upper) }}</a>
-      {% endfor %}
-    </div>
-
-    {% if current_user %}
       <form method="post" action="{{ url_for('logout') }}">
-        <button class="btn btn-secondary" type="submit">{{ t('nav.log_out') }}</button>
+        <button class="btn btn-secondary" type="submit">Log out</button>
       </form>
     {% endif %}
   </nav>
@@ -2569,7 +2616,7 @@
           <circle cx="9" cy="9" r="6.2" stroke="currentColor" stroke-width="1.6"/>
           <path d="M13.6 13.6L18.5 18.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
         </svg>
-        <span class="tab-label">{{ t('tab.search') }}</span>
+        <span class="tab-label">Search</span>
         <span class="tab-dot"></span>
       </a>
       <a href="{{ url_for('chats') }}"
@@ -2579,7 +2626,7 @@
           <rect x="2" y="3.5" width="14" height="10.5" rx="3.4" stroke="currentColor" stroke-width="1.6"/>
           <path d="M6.5 17.5v-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
         </svg>
-        <span class="tab-label">{{ t('tab.chats') }}</span>
+        <span class="tab-label">Chats</span>
         <span class="tab-dot"></span>
       </a>
       <a href="{{ url_for('view_profile', user_id=current_user['id']) }}"
@@ -2589,7 +2636,7 @@
           <circle cx="10.5" cy="7" r="3.6" stroke="currentColor" stroke-width="1.6"/>
           <path d="M3.8 18c0-3.4 3-5.4 6.7-5.4s6.7 2 6.7 5.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
         </svg>
-        <span class="tab-label">{{ t('tab.you') }}</span>
+        <span class="tab-label">You</span>
         <span class="tab-dot"></span>
       </a>
       <a href="{{ url_for('help_page') }}"
@@ -2601,11 +2648,40 @@
                 stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
           <circle cx="10.6" cy="14.6" r="0.95" fill="currentColor"/>
         </svg>
-        <span class="tab-label">{{ t('tab.help') }}</span>
+        <span class="tab-label">Help</span>
         <span class="tab-dot"></span>
       </a>
     </nav>
   {% endif %}
   </div>
+  {# Previews the mobile layout on a wide monitor (or vice
+       versa) without resizing the window. Sits outside <nav>/<main>/the
+       tab bar, so it never participates in their layout. #}
+    <button type="button" class="viewport-toggle" id="viewport-toggle" aria-label="Toggle mobile/desktop preview">
+      <span id="viewport-toggle-label"></span>
+    </button>
+    <script>
+      (function () {
+        var KEY = "velvet-viewport-preview";
+        var btn = document.getElementById("viewport-toggle");
+        var label = document.getElementById("viewport-toggle-label");
+
+        function render() {
+          var current = document.documentElement.getAttribute("data-viewport");
+          // shows the mode a click switches TO, so the label reads as an action
+          label.textContent = current === "mobile" ? "🖥️ Desktop" : "📱 Mobile";
+        }
+
+        btn.addEventListener("click", function () {
+          var next = document.documentElement.getAttribute("data-viewport") === "mobile"
+            ? "desktop" : "mobile";
+          document.documentElement.setAttribute("data-viewport", next);
+          localStorage.setItem(KEY, next);
+          render();
+        });
+
+        render();
+      })();
+    </script>
 </body>
 </html>

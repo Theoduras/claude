@@ -1,23 +1,25 @@
 {% extends "base.html" %}
-{% block title %}{{ t('login.title') }}{% endblock %}
+{% block title %}Sign in — Velvt{% endblock %}
 {% block content %}
 <div class="card narrow">
-  <p class="eyebrow">{{ t('login.eyebrow') }}</p>
-  <h1 style="margin-top: 0.5rem;">{% for line in t('login.heading').split('\n') %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</h1>
-  <p class="subtitle" style="margin-bottom: 1.6rem;">{{ t('login.subtitle') }}</p>
+  <p class="eyebrow">Velvt</p>
+  <h1 style="margin-top: 0.5rem;">Something softer<br>than swiping.</h1>
+  <p class="subtitle" style="margin-bottom: 1.6rem;">
+    Sign in and search — we pair you the moment someone is looking for you too.
+  </p>
 
   <form method="post" action="{{ url_for('login') }}">
-    <label for="username">{{ t('login.username') }}</label>
+    <label for="username">Username</label>
     <input id="username" name="username" type="text" autocomplete="username" required autofocus>
 
-    <label for="password">{{ t('login.password') }}</label>
+    <label for="password">Password</label>
     <input id="password" name="password" type="password" autocomplete="current-password" required>
 
-    <button class="btn btn-block" type="submit">{{ t('login.submit') }}</button>
+    <button class="btn btn-block" type="submit">Sign in</button>
   </form>
 
   <p class="hint" style="margin: 1.1rem 0 0; text-align: center;">
-    {{ t('login.no_account') }} <a href="{{ url_for('register') }}">{{ t('login.create') }}</a>
+    New to Velvt? <a href="{{ url_for('register') }}">Create an account</a>
   </p>
 </div>
 {% endblock %}

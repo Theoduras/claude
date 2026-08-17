@@ -1,47 +1,66 @@
 {% extends "base.html" %}
-{% block title %}{{ t('help.title') }}{% endblock %}
+{% block title %}Help — Velvt{% endblock %}
 {% block content %}
 <div class="card help-page">
-  <p class="eyebrow">{{ t('help.eyebrow') }}</p>
-  <h1 style="margin-top: 0.5rem;">{{ t('help.heading') }}</h1>
+  <p class="eyebrow">Velvt</p>
+  <h1 style="margin-top: 0.5rem;">Questions, answered.</h1>
 
   <section id="how-matching-works">
-    <h2>{{ t('footer.how') }}</h2>
-    <p>{{ t('help.how_body') }}</p>
+    <h2>How matching works</h2>
+    <p>
+      Start a live search and we look for someone searching for you at the same
+      time. When we find a match, you both get a short reveal, then a timed chat
+      to see if it's worth continuing. Nobody is shown to anyone unless the
+      interest goes both ways.
+    </p>
   </section>
 
   <section id="questions">
-    <h2>{{ t('footer.questions') }}</h2>
-    {# the link text is its own key so the sentence can be reordered around it #}
-    <p>{{ t('help.questions_body', contact='<a href="#contact">' ~ t('footer.contact') ~ '</a>') | safe }}</p>
+    <h2>Questions</h2>
+    <p>
+      Something not covered here? Reach us any time — see
+      <a href="#contact">Contact</a> below.
+    </p>
   </section>
 
   <section id="safety">
-    <h2>{{ t('footer.safety') }}</h2>
-    <p>{{ t('help.safety_body') }}</p>
+    <h2>Safety</h2>
+    <p>
+      Meet new people the way you'd want a friend to: in public, on your own
+      terms, and never with money or personal documents involved. Block or
+      report anyone from their profile or a chat, any time.
+    </p>
   </section>
 
   <section id="terms">
-    <h2>{{ t('footer.terms') }}</h2>
-    <p>{{ t('help.terms_body') }}</p>
+    <h2>Terms</h2>
+    <p>
+      Use Velvt to meet people in good faith. Don't impersonate anyone, run
+      bots or scripts against the app, or use it to harass or scam other
+      members. Accounts that do can be removed without notice.
+    </p>
   </section>
 
   <section id="privacy">
-    <h2>{{ t('footer.privacy') }}</h2>
-    <p>{{ t('help.privacy_body') }}</p>
+    <h2>Privacy</h2>
+    <p>
+      Your profile and photos are visible only to people you've matched with,
+      or while a match is active. We don't sell your data. You can edit or
+      remove your profile information at any time.
+    </p>
   </section>
 
   <section id="imprint">
-    <h2>{{ t('footer.imprint') }}</h2>
+    <h2>Imprint</h2>
     <p>Velvt &middot; velvt.nl</p>
   </section>
 
   <section id="contact">
-    <h2>{{ t('footer.contact') }}</h2>
+    <h2>Contact</h2>
     <p>
-      {{ t('help.contact_body',
-            homepage='<a href="' ~ url_for('index') ~ '">' ~ t('help.contact_homepage') ~ '</a>',
-            settings='<a href="' ~ url_for('edit_profile') ~ '">' ~ t('help.contact_settings') ~ '</a>') | safe }}
+      Get in touch through the details on our
+      <a href="{{ url_for('index') }}">homepage</a>, or, if you're signed in, from
+      your <a href="{{ url_for('edit_profile') }}">account settings</a>.
     </p>
   </section>
 </div>

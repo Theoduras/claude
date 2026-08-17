@@ -33,8 +33,6 @@ Keep replies concise; prefer the smallest diff that does the job.
 
 - `app.py` — **~3,000 lines**, single module: all routes, DB access, and helpers
 - `templates/` — 16 Jinja templates, all extending `base.html`
-- `translations.py` — all user-facing copy, `en` + `nl` (see **Copy and languages**)
-- `tools/check_translations.py` — reports missing/unused keys; exits non-zero on a gap
 - `docs/style-guide.html` — velvet-textured design system; `docs/deploy-gcp.md` — Cloud Run
 - `seed_demo.py` — 40 demo members, `is_bot=TRUE` so they reply in chat. Their `searches`
   rows are `waiting` but they have no browser, so they are **not pairable** unless
@@ -109,43 +107,13 @@ window lapses). No background job — phases are derived from `paired_at` on eac
 (`is_bot=TRUE`) auto-reply in chat via a canned engine (no LLM) and auto-continue past the
 decision phase — see `maybe_bot_reply()`.
 
-## Copy and languages
-
-**No hardcoded user-facing strings.** Every one lives in `translations.py` and is reached
-through `t('some.key')` — the Jinja helper comes from the context processor, the Python
-twin sits next to it in `app.py` for flash messages and generated copy. 315 keys, `en` +
-`nl` at full parity. `python tools/check_translations.py` lists gaps and dead keys.
-
-`translate()` falls back **requested language → English → the key itself**, so a partial
-language ships safely: missing strings read English, a missing key reads as the key.
-Adding a language is: append to `LANGUAGES`, copy the `en` block, translate the values.
-
-Headlines are one key containing `\n`; the template splits on it, so each language picks
-its own line breaks (English landing is 3 lines, Dutch is 2).
-
-**The option lists are canonical English and must stay that way.** `GENDERS`,
-`SEEKING_OPTIONS`, `RELATIONSHIP_TYPES`, `BODY_TYPES`, `FITNESS_LEVELS`, `HAIR_COLORS`,
-`EYE_COLORS`, `TATTOO_LEVELS` and the interest keywords are stored in the database and
-compared as strings by `searches_compatible()` / `SEEKING_MATCHES`. Translating a stored
-value would stop a Dutch member matching an English one. Only *labels* are translated —
-`opt_label()` in templates, `opt_label_for()` server-side, `interest_text()` for chips —
-and they leave `value="…"` alone. A cross-language pairing test covers this.
-
-Language lives in `session['lang']`, falling back to `Accept-Language`. `/lang/<code>`
-sets it and returns to `?next=` (same-site paths only — it is reachable logged out).
-`reset_session_keeping_language()` is used instead of `session.clear()` on sign-in and
-sign-out, or picking Dutch and then registering would drop you back to English.
-
-There is no mobile/desktop preview toggle any more; the phone layout comes from the real
-viewport via one `@media (max-width: 720px)` block.
-
 ## Route map (`app.py`)
 
 Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on every edit.
 
 | Area | Routes |
 |---|---|
-| misc | `/lab`, `/`, `/lang/<code>` |
+| misc | `/lab`, `/` |
 | auth | `/register`, `/login`, `/logout` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
 | search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/status`, `/search/cancel`, `/search/filters/toggle`, `/search/filters/apply` |

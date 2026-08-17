@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ t('waiting.title') }}{% endblock %}
+{% block title %}Searching… — Velvt{% endblock %}
 {% block content %}
 {# Same column shape as the wizard this screen follows on from: a fixed
    header, the content centred in the space between, and the action pinned
@@ -15,36 +15,41 @@
       <div class="pulse-heart"></div>
     </div>
 
-    <p class="wiz-count">{{ t('waiting.eyebrow') }}</p>
-    <h1 class="wiz-q">{{ t('waiting.heading_1') }}<br>{{ t('waiting.heading_2') }}</h1>
-    <p class="wiz-hint" id="status-line">{{ t('waiting.phrase_1') }}</p>
+    <p class="wiz-count">Searching</p>
+    <h1 class="wiz-q">Feeling for<br>a match</h1>
+    <p class="wiz-hint" id="status-line">
+      Looking for someone who fits — and who's looking for you.
+    </p>
 
     <p class="waiting-meta">
       <span id="elapsed">0:00</span>
       <span aria-hidden="true">·</span>
-      <span>{{ t('waiting.searching_n', n=waiting) }}</span>
+      <span>{{ waiting }} searching</span>
       {% if fits %}
         <span aria-hidden="true">·</span>
-        <span class="waiting-fits">{{ t('waiting.fits_n', n=fits) }}</span>
+        <span class="waiting-fits">{{ fits }} fit</span>
       {% endif %}
     </p>
 
     <div class="waiting-recap">
-      <p class="waiting-recap-label">{{ t('waiting.recap_label') }}</p>
+      <p class="waiting-recap-label">Looking for</p>
       <div class="pillset">
         {% for chip in chips %}<span class="pill is-static">{{ chip }}</span>{% endfor %}
       </div>
     </div>
 
     {% if not fits %}
-      <p class="waiting-none">{{ t('waiting.none') }}</p>
+      <p class="waiting-none">
+        Nobody searching right now fits all of this. You'll be paired the
+        moment someone does — or change what you're after.
+      </p>
     {% endif %}
   </div>
 
   <div class="wiz-nav">
-    <a class="wiz-skip" href="{{ url_for('live_search') }}">{{ t('waiting.change') }}</a>
+    <a class="wiz-skip" href="{{ url_for('live_search') }}">Change</a>
     <form method="post" action="{{ url_for('search_cancel') }}" class="wiz-nav-end">
-      <button class="btn btn-secondary wiz-stop" type="submit">{{ t('waiting.stop') }}</button>
+      <button class="btn btn-secondary wiz-stop" type="submit">Stop searching</button>
     </form>
   </div>
 </div>
@@ -93,13 +98,11 @@
   // The pairing attempt below only starts returning a match once the search
   // has run for a few seconds (MIN_SEARCH_SECONDS server-side). Cycling the
   // line gives that wait something to show rather than one frozen sentence.
-  // Server-rendered so they translate with the rest of the page; tojson
-  // handles the quoting and the non-ASCII safely.
   var PHRASES = [
-    {{ t('waiting.phrase_1') | tojson }},
-    {{ t('waiting.phrase_2') | tojson }},
-    {{ t('waiting.phrase_3') | tojson }},
-    {{ t('waiting.phrase_4') | tojson }}
+    "Looking for someone who fits — and who's looking for you.",
+    "Checking who's searching right now…",
+    "Matching your filters against theirs…",
+    "Both sides have to fit — holding out for that…"
   ];
   var phrase = 0;
   var connected = true;  // paused while reconnecting, so it can say so
@@ -125,7 +128,7 @@
         if (data.status === "matched" && data.chat_url) {
           clearInterval(cycle);
           clearInterval(elapsedTimer);
-          statusLine.textContent = {{ t('waiting.matched') | tojson }};
+          statusLine.textContent = "It's a match! Opening your chat…";
           window.location.href = data.chat_url;
           return;
         }
@@ -140,7 +143,7 @@
       })
       .catch(function () {
         connected = false;
-        statusLine.textContent = {{ t('waiting.reconnecting') | tojson }};
+        statusLine.textContent = "Reconnecting…";
         setTimeout(listen, RETRY_MS);
       });
   }

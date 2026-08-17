@@ -1,14 +1,13 @@
 {% extends "base.html" %}
-{% block title %}{{ t('landing.title') }}{% endblock %}
+{% block title %}Velvt{% endblock %}
 {% block content %}
 <div class="landing">
   <div class="landing-head">
     <div class="landing-copy">
-      {# One string with newlines in it, split here: how many lines there are
-         and where they fall is a typographic choice each language makes for
-         itself, and Dutch does not break where English does. #}
-      <h1>{% for line in t('landing.headline').split('\n') %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</h1>
-      <p class="landing-lede">{{ t('landing.lede') }}</p>
+      <h1>Something<br>softer than<br>swiping.</h1>
+      <p class="landing-lede">
+        Sign in and search — we pair you the moment someone is looking for you too.
+      </p>
     </div>
     {# decorative: the nav already carries the name, so this is hidden from
        screen readers rather than read out a second time #}
@@ -16,30 +15,30 @@
   </div>
 
   <div class="landing-actions">
-    {# the count is the whole promise of the product: people are waiting now.
-       Always literally true -- the pulsing dot appears only when people really
-       are searching this second, and otherwise the copy steps down to a
-       weaker-but-honest signal rather than inventing a crowd. See
-       landing_pulse(). #}
+    {# The whole promise of the product is that someone is there now, so this
+       line carries a lot of weight. It is always literally true: the pulsing
+       dot appears only when people really are searching this second, and
+       otherwise the copy steps down to a weaker-but-honest signal rather than
+       inventing a crowd. See landing_pulse(). #}
     <p class="landing-live{% if not pulse.live %} is-quiet{% endif %}">
       {% if pulse.live %}<span class="live-dot"></span>{% endif %}
       {{ pulse.text }}
     </p>
-    <a class="btn btn-block" href="{{ url_for('register') }}">{{ t('landing.cta_start') }}</a>
-    <a class="btn btn-secondary btn-block" href="{{ url_for('login') }}">{{ t('landing.cta_signin') }}</a>
-    <p class="landing-fine">{{ t('landing.fine') }}</p>
+    <a class="btn btn-block" href="{{ url_for('register') }}">Start searching</a>
+    <a class="btn btn-secondary btn-block" href="{{ url_for('login') }}">I already have an account</a>
+    <p class="landing-fine">Nobody matches you unless you match them back.</p>
   </div>
 
   {# Homepage-only: everywhere else this collapses to the tab bar's Help
      icon instead of repeating the same links on every screen. #}
   <footer class="site-footer">
-    <a href="{{ url_for('help_page') }}#how-matching-works">{{ t('footer.how') }}</a>
-    <a href="{{ url_for('help_page') }}#questions">{{ t('footer.questions') }}</a>
-    <a href="{{ url_for('help_page') }}#safety">{{ t('footer.safety') }}</a>
-    <a href="{{ url_for('help_page') }}#terms">{{ t('footer.terms') }}</a>
-    <a href="{{ url_for('help_page') }}#privacy">{{ t('footer.privacy') }}</a>
-    <a href="{{ url_for('help_page') }}#imprint">{{ t('footer.imprint') }}</a>
-    <a href="{{ url_for('help_page') }}#contact">{{ t('footer.contact') }}</a>
+    <a href="{{ url_for('help_page') }}#how-matching-works">How matching works</a>
+    <a href="{{ url_for('help_page') }}#questions">Questions</a>
+    <a href="{{ url_for('help_page') }}#safety">Safety</a>
+    <a href="{{ url_for('help_page') }}#terms">Terms</a>
+    <a href="{{ url_for('help_page') }}#privacy">Privacy</a>
+    <a href="{{ url_for('help_page') }}#imprint">Imprint</a>
+    <a href="{{ url_for('help_page') }}#contact">Contact</a>
   </footer>
 </div>
 {% endblock %}
