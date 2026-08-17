@@ -111,6 +111,11 @@
   </section>
 
   {# ---- 4. location -------------------------------------------------- #}
+  {# Skipped entirely while there is only one city: asking would be a step
+     with one possible answer, and the server pins it anyway. The stepper
+     walks .wiz-step in DOM order and sizes its progress bar from the count,
+     so omitting this section renumbers the wizard on its own. #}
+  {% if not single_city %}
   <section class="wiz-step" data-step="4">
     <h1 class="wiz-q">Where are you<br>searching?</h1>
     <p class="wiz-hint">
@@ -127,6 +132,7 @@
       {% endwith %}
     </div>
   </section>
+  {% endif %}
 
   {# ---- 5. interests ------------------------------------------------- #}
   {# The value the server reads is this hidden CSV; the chips below (and the

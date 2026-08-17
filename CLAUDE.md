@@ -58,9 +58,18 @@ in query strings are rewritten, so **write `?`, not `%s`**, in `db.execute(...)`
 Tables: `users` (+`is_bot`), `profiles`, `matches` (+`status`/`paired_at`/`decision_a`/
 `decision_b`/`ended_at`), `searches` (+`lat`/`lng`/`use_*`), `messages`, `photos`.
 
-Starting a search is **two screens**: `/search` picks the connection type and the location
-+ radius (carried to screen 2 in `session["search_draft"]`), `/search/criteria` asks which
-filters matter as a list of switches. Each switch writes a `searches.use_*` column —
+**One city for now.** `SINGLE_CITY = "Maastricht"` (`app.py`) pins every profile and every
+search: `pinned_place()` overrides whatever a form posts, so the location control is not
+rendered anywhere — not in `_profile_fields.html`, not as the wizard's location step (the
+wizard is 5 steps, not 6), and the criteria screen's Distance switch is hidden too, since
+one shared set of coordinates means it can never change who fits. `_location_field.html`
+and `/api/places` are intact but unreached; set `SINGLE_CITY = None` to bring all of it
+back. Whatever it names must exist in `CITY_COORDS` (asserted at import).
+
+Starting a search is **two screens**: `/search` picks the connection type (and the location
++ radius when multi-city, carried to screen 2 in `session["search_draft"]`),
+`/search/criteria` asks which filters matter as a list of switches. Each switch writes a
+`searches.use_*` column —
 `use_gender`/`use_age`/`use_distance`/`use_physical` — read by `searches_compatible()` via
 `.get(key, True)`; a switch that is off leaves its panel's inputs `disabled`, so those
 fields never reach the server at all. `use_relationship` is always TRUE: it *is* the tile

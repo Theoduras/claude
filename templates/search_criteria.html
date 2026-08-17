@@ -11,8 +11,15 @@
 
   <p class="recap">
     <span>{{ wanted }}</span>
-    <span aria-hidden="true">·</span>
-    <span>{% if place.location %}{{ place.location }}{% else %}anywhere{% endif %}{% if place.location and place.radius_km < radius_max %} · within {{ place.radius_km }} km{% endif %}</span>
+    {# With one city the place is not a choice that was made on screen 1, so it
+       is stated plainly instead of being offered up next to a "change" link. #}
+    {% if single_city %}
+      <span aria-hidden="true">·</span>
+      <span>{{ single_city }}</span>
+    {% else %}
+      <span aria-hidden="true">·</span>
+      <span>{% if place.location %}{{ place.location }}{% else %}anywhere{% endif %}{% if place.location and place.radius_km < radius_max %} · within {{ place.radius_km }} km{% endif %}</span>
+    {% endif %}
     <a href="{{ url_for('live_search') }}">change</a>
   </p>
 
@@ -84,6 +91,12 @@
     </div>
 
     {# ---- 3. distance — the value itself is set on screen 1 ---- #}
+    {# Hidden while there is one city: everyone shares the same coordinates, so
+       this switch cannot change who fits, and its help text used to link to a
+       location step that no longer exists. Omitting the checkbox posts nothing,
+       which stores use_distance=false -- accurate, since no distance filtering
+       is happening. #}
+    {% if not single_city %}
     <div class="toggle-row">
       <div class="toggle-head">
         <label class="switch">
@@ -107,6 +120,7 @@
         <a href="{{ url_for('live_search') }}">Change the location or radius</a>.
       </p>
     </div>
+    {% endif %}
 
     {# ---- 4. physical ---- #}
     <div class="toggle-row">
@@ -414,9 +428,16 @@
               // The radius lives on screen 1; relaxing it here means dropping
               // the filter, which is the one thing this screen can do to it.
               var sw = form.querySelector('input[name="use_distance"]');
-              sw.checked = false;
-              syncPanels();
-              row = sw.closest(".toggle-row");
+              // Absent while the app is pinned to one city. The server should
+              // not be offering this suggestion then either, but a profile
+              // saved before the pin can still carry another city, so don't
+              // take the switch's presence on faith and break every other
+              // suggestion with a TypeError.
+              if (sw) {
+                sw.checked = false;
+                syncPanels();
+                row = sw.closest(".toggle-row");
+              }
             }
             if (row) {
               row.classList.remove("flash");

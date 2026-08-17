@@ -1503,6 +1503,25 @@
     }
     .field-fill .btn-small { padding: 0.2rem 0.65rem; font-size: 0.72rem; }
 
+    /* A value the form states rather than asks for -- currently just the
+       Maastricht-only location. Sits where an input would, and borrows the
+       input's metrics so the column doesn't jump, but is flat and unbordered
+       so it never invites a click the way a disabled input does. */
+    .field-fixed {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.25rem 0.6rem;
+      margin: 0 0 1rem;
+      padding: 0.7rem 0.05rem;
+      font-size: 1rem;
+      color: var(--text-strong, #fff);
+    }
+    .field-fixed-note {
+      font-size: 0.78rem;
+      color: var(--text-faint);
+    }
+
     /* ---------- searching state -------------------------------------- */
     /* The lottie and the pulse-heart share one grid cell so the animation
        fades in over the fallback instead of the card jumping when it
