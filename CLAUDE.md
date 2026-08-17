@@ -113,7 +113,7 @@ decision phase — see `maybe_bot_reply()`.
 
 **No hardcoded user-facing strings.** Every one lives in `translations.py` and is reached
 through `t('some.key')` — the Jinja helper comes from the context processor, the Python
-twin sits next to it in `app.py` for flash messages and generated copy. 318 keys, `en` +
+twin sits next to it in `app.py` for flash messages and generated copy. 315 keys, `en` +
 `nl` at full parity. `python tools/check_translations.py` lists gaps and dead keys.
 
 `translate()` falls back **requested language → English → the key itself**, so a partial
