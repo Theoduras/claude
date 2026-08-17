@@ -3384,7 +3384,7 @@
       background: rgba(8, 5, 14, 0.86);
       backdrop-filter: blur(14px);
     }
-    .tabbar a {
+    nav.tabbar a {
       flex: 1;
       display: flex;
       flex-direction: column;
@@ -3394,7 +3394,7 @@
       color: var(--text-faint);
       transition: color 0.18s ease;
     }
-    .tabbar a:hover { color: var(--text-muted); }
+    nav.tabbar a:hover { color: var(--text-muted); }
     /* The trigger is a <button>, not an <a> -- everything else about it
        matches a tab exactly, including sharing its hover. */
     .tabbar-more {
@@ -3415,6 +3415,13 @@
     .more-sheet-links {
       display: flex;
       flex-direction: column;
+      /* Explicit: the header's `nav` rule sets align-items: center, and this
+         is a <nav> too, so without this every row centred itself and shrank
+         to its own text width -- a ragged column instead of a list. Its
+         padding-inline leaks the same way, which inset the links 20px past
+         the logout row below them. */
+      align-items: stretch;
+      text-align: left;
       padding-bottom: calc(0.6rem + env(safe-area-inset-bottom, 0px));
     }
     /* Overrides the site header's bare `nav a` pill styling, which this
@@ -3439,6 +3446,46 @@
       text-decoration: none;
     }
     nav.more-sheet-links a:last-child { border-bottom: none; }
+    /* The phone-layout rule `... nav { padding-inline: 1.25rem }` is (0,1,2)
+       and applies to this <nav> too, insetting the links 20px past the logout
+       row below them. Scoped through .sheet to outrank it rather than fought
+       with !important. */
+    .sheet nav.more-sheet-links { padding-inline: 0; }
+    /* The links list keeps its own bottom padding for the safe-area inset;
+       with a logout row after it, that padding belongs to the row instead so
+       the two are not separated by a gap the size of a home indicator. */
+    .more-sheet-links:has(+ .more-sheet-logout) { padding-bottom: 0; }
+    .more-sheet-logout {
+      margin: 0;
+      padding-bottom: calc(0.6rem + env(safe-area-inset-bottom, 0px));
+      /* the one state-changing item here, so it sits below a real divider
+         rather than reading as another page to open */
+      border-top: 1px solid var(--ink-hairline);
+    }
+    .more-sheet-logout button {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      width: 100%;
+      /* matches nav.more-sheet-links a exactly, so the row lines up with the
+         links above it rather than sitting in its own slightly different box */
+      padding: 0.85rem 0.1rem;
+      border: none;
+      border-radius: 0;
+      background: none;
+      font: inherit;
+      font-size: 0.95rem;
+      /* --text-dim is not defined on this branch (the links above use it and
+         quietly fall back to inherit); naming a variable that exists keeps the
+         resting state predictable instead of whatever it inherits. */
+      color: var(--text-muted);
+      text-align: left;
+      cursor: pointer;
+      transition: color 0.18s ease;
+    }
+    .more-sheet-logout button svg { width: 1.15rem; height: 1.15rem; flex: none; }
+    .more-sheet-logout button:hover,
+    .more-sheet-logout button:focus-visible { color: var(--danger); }
     nav.more-sheet-links a:hover,
     nav.more-sheet-links a:active {
       color: var(--velvet-crest, var(--text));
@@ -3725,9 +3772,17 @@
     <button type="button" class="tabbar-more" id="more-trigger"
             aria-haspopup="dialog" aria-expanded="false" aria-controls="more-sheet">
       <svg width="21" height="21" viewBox="0 0 21 21" fill="none" aria-hidden="true">
-        <path d="M3 6h15M3 10.5h15M3 15h15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="10.5" cy="10.5" r="8" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M10.5 9.4v5.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <circle cx="10.5" cy="6.6" r="0.95" fill="currentColor"/>
       </svg>
-      <span class="tab-label">More</span>
+      <span class="tab-label">Info</span>
+      {# The tabs are icon + label + dot; this one has no page to be "current"
+         on, so its dot never lights. It is still here because without it the
+         button's content is one child and one gap shorter than a tab's, and
+         .tabbar centres each item -- which sat this icon and label lower than
+         the rest. A spacer, not a decoration. #}
+      <span class="tab-dot"></span>
     </button>
   </nav>
   {# The same links again, reached from the tab bar instead of the foot of
@@ -3736,7 +3791,7 @@
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-panel">
       <div class="sheet-head">
-        <h2>More</h2>
+        <h2>Info</h2>
         <button type="button" class="sheet-x" data-close aria-label="Close">
           <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
@@ -3744,9 +3799,26 @@
         </button>
       </div>
       <div class="sheet-body">
-        <nav class="more-sheet-links" aria-label="More">
+        <nav class="more-sheet-links" aria-label="Info">
           {{ more_links() }}
         </nav>
+        {% if current_user %}
+          {# Signing out is a POST, so it cannot be one of the links above --
+             and it wants separating from them anyway: it is the one item here
+             that changes state rather than opening a page. #}
+          <form method="post" action="{{ url_for('logout') }}" class="more-sheet-logout">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M8 17H4.5A1.5 1.5 0 0 1 3 15.5v-11A1.5 1.5 0 0 1 4.5 3H8"
+                      stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                <path d="M12.5 13.5 16.5 10l-4-3.5M16 10H7.5"
+                      stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Log out
+            </button>
+          </form>
+        {% endif %}
       </div>
     </div>
   </div>
