@@ -45,6 +45,42 @@
       --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
       --measure: 62rem;
+
+      /* ---- fluid scale -------------------------------------------------
+         Sizes that used to step down at `@media (max-height: 740px)` and
+         again at 700px. Two cliffs meant a 741-tall window and a 739-tall
+         one looked different for one pixel of difference, and below 700
+         nothing shrank any further -- so a genuinely short window (a laptop
+         with browser chrome, a phone in landscape, a resized desktop pane)
+         overflowed and the flow's "a step never scrolls" promise broke.
+
+         These interpolate continuously against viewport height instead, so
+         there is no jump anywhere and no floor: the layout keeps giving up
+         type scale and padding for as long as the screen keeps shrinking.
+         Each is clamp(floor, preferred, ceiling) where the preferred term
+         carries a vh component, and the floor is the smallest size still
+         comfortably legible/tappable. */
+      --fs-eyebrow: clamp(0.6rem,  0.46rem + 0.34vh, 0.72rem);
+      --fs-hint:    clamp(0.74rem, 0.62rem + 0.32vh, 0.88rem);
+      --fs-label:   clamp(0.86rem, 0.74rem + 0.32vh, 1rem);
+      --fs-q:       clamp(1.08rem, 0.42rem + 2.35vh, 2.1rem);
+      --fs-q-sm:    clamp(1.05rem, 0.5rem  + 1.9vh,  1.6rem);
+      --fs-pill:    clamp(0.72rem, 0.62rem + 0.28vh, 0.85rem);
+      --gap-step:   clamp(0.26rem, 0.02rem + 0.66vh, 0.8rem);
+      --pad-opt:    clamp(0.36rem, 0.02rem + 0.95vh, 0.95rem);
+      --sz-icon:    clamp(1.55rem, 0.85rem + 2.2vh,  2.4rem);
+      --sz-next:    clamp(2.5rem,  1.75rem + 2.3vh,  3.4rem);
+      --sz-ring:    clamp(3.6rem,  1.6rem  + 6.2vh,  6.4rem);
+      --sz-avatar:  clamp(3.2rem,  1.4rem  + 5.6vh,  5.6rem);
+      --stack:      clamp(0.3rem,  0.02rem + 0.8vh,  1.1rem);
+      /* The tab bar is fixed, so main has to reserve room for it. Deriving
+         both from one expression is the point: reserving less than the bar
+         actually occupies slides the wizard's Next button underneath it. */
+      --tabbar-pad-t: clamp(0.34rem, 0.08rem + 0.66vh, 0.7rem);
+      --tabbar-pad-b: clamp(0.42rem, 0.12rem + 0.95vh, 1rem);
+      --tabbar-icon:  clamp(1.05rem, 0.72rem + 1vh,    1.32rem);
+      --tabbar-h:     calc(var(--tabbar-pad-t) + var(--tabbar-pad-b)
+                           + var(--tabbar-icon) + var(--fs-eyebrow) + 0.95rem);
       --radius: 18px;
       --radius-sm: 11px;
       /* named so full-bleed children can cancel it with a negative margin
@@ -61,7 +97,10 @@
 
     body {
       margin: 0;
+      /* dvh, not vh: on mobile Safari/Chrome the URL bar is inside 100vh,
+         so a vh-sized column is always taller than what you can see. */
       min-height: 100vh;
+      min-height: 100dvh;
       font-family: var(--sans);
       font-size: 1rem;
       line-height: 1.6;
@@ -184,7 +223,8 @@
          a nav with no flex-basis would rather shrink its own padding than
          let main give up the space, squashing the bar down to a sliver. */
       flex: none;
-      padding: 0.85rem clamp(1rem, 4vw, 2.5rem);
+      /* vertical padding yields on short screens like everything else */
+      padding: clamp(0.45rem, 0.12rem + 0.85vh, 0.85rem) clamp(1rem, 4vw, 2.5rem);
       background: linear-gradient(180deg, rgba(21, 12, 34, 0.92), rgba(11, 7, 19, 0.72));
       border-bottom: 1px solid var(--ink-hairline);
       backdrop-filter: blur(14px);
@@ -665,29 +705,30 @@
       transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .wiz-count {
-      margin: 1.1rem 0 0;
+      margin: var(--stack) 0 0;
       text-align: center;
-      font-size: 0.72rem;
+      font-size: var(--fs-eyebrow);
       font-weight: 700;
       letter-spacing: 0.13em;
       text-transform: uppercase;
       color: var(--text-faint);
     }
     .wiz-q {
-      margin: 0.4rem 0 1.2rem;
+      margin: calc(var(--stack) * 0.4) 0 var(--stack);
       text-align: center;
-      font-size: clamp(1.6rem, 6vw, 2.1rem);
+      /* the vw term keeps it from being tiny on a short-but-wide window */
+      font-size: min(var(--fs-q), 6vw + 0.4rem);
       line-height: 1.18;
     }
     .wiz-hint {
-      margin: -0.8rem 0 1.1rem;
+      margin: calc(var(--stack) * -0.6) 0 var(--stack);
       text-align: center;
-      font-size: 0.85rem;
+      font-size: var(--fs-hint);
       color: var(--text-muted);
     }
     .wiz-field { margin-bottom: 0.5rem; }
     .wiz-readout {
-      margin: 0 0 1.4rem;
+      margin: 0 0 calc(var(--stack) * 1.2);
       text-align: center;
       font-family: var(--mono);
       font-variant-numeric: tabular-nums;
@@ -728,7 +769,7 @@
       60% { transform: translateX(5px); }
     }
 
-    .opt-list { display: flex; flex-direction: column; gap: 0.6rem; }
+    .opt-list { display: flex; flex-direction: column; gap: var(--gap-step); }
     /* six short labels stack too tall for a phone screen in one column, so
        the multi-select step pairs them up instead of scrolling */
     .opt-list-2col {
@@ -769,8 +810,8 @@
       flex: none;
       display: grid;
       place-items: center;
-      width: 2.4rem;
-      height: 2.4rem;
+      width: var(--sz-icon);
+      height: var(--sz-icon);
       border-radius: 50%;
       color: #FFF;
       background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
@@ -782,10 +823,10 @@
     .opt-4 .opt-icon { background-image: linear-gradient(150deg, #FF9DAA, var(--danger)); }
     .opt-5 .opt-icon { background-image: linear-gradient(150deg, #8FA6FF, #4356C4); }
     .opt-6 .opt-icon { background-image: linear-gradient(150deg, #6FE3C4, #169B7C); }
-    .opt-icon svg { width: 1.25rem; height: 1.25rem; }
+    .opt-icon svg { width: calc(var(--sz-icon) * 0.52); height: calc(var(--sz-icon) * 0.52); }
     .opt-label {
       flex: 1;
-      font-size: 0.98rem;
+      font-size: var(--fs-label);
       color: var(--text);
       transition: color 0.16s ease;
     }
@@ -861,15 +902,15 @@
     }
     .wiz-skip:hover { color: var(--text); background: rgba(168, 133, 247, 0.12); }
     .wiz-next {
-      width: 3.4rem;
-      height: 3.4rem;
+      width: var(--sz-next);
+      height: var(--sz-next);
       border: none;
       color: #FFF;
       background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
       box-shadow: 0 10px 26px -12px rgba(138, 43, 226, 0.9);
     }
     .wiz-next:hover { transform: translateX(2px); }
-    .wiz-back svg, .wiz-next svg { width: 1.35rem; height: 1.35rem; }
+    .wiz-back svg, .wiz-next svg { width: calc(var(--sz-next) * 0.4); height: calc(var(--sz-next) * 0.4); }
     /* the last step commits, so it stops being a chevron and says so */
     .wiz-next.is-final {
       width: auto;
@@ -982,18 +1023,17 @@
     }
     .wiz-stop { width: auto; padding-inline: 1.4rem; }
 
-    /* the waiting screen carries an animation the wizard steps do not, so
-       it needs its own trim to clear a short screen without scrolling */
-    @media (max-height: 740px) {
-      .waiting .search-anim dotlottie-wc { width: min(150px, 44%); }
-      .waiting .pulse-heart { width: 2.6rem; height: 2.6rem; }
-      .waiting .wiz-q { margin-bottom: 0.5rem; }
-      .waiting-meta { margin-bottom: 0.7rem; }
-      .waiting-recap-label { margin-bottom: 0.4rem; }
-      .waiting-none { margin-top: 0.7rem; font-size: 0.78rem; }
-      .waiting .pillset { gap: 0.35rem; }
-      .waiting .pill { padding: 0.35rem 0.7rem; font-size: 0.78rem; }
-    }
+    /* The waiting screen carries an animation the wizard steps do not, so it
+       trims harder than they do. Was a 740px media-query cliff; fluid now, so
+       it keeps giving way below 700 instead of stopping there. */
+    .waiting .search-anim dotlottie-wc { width: min(clamp(96px, 4rem + 12vh, 190px), 44%); }
+    .waiting .pulse-heart { width: var(--sz-icon); height: var(--sz-icon); }
+    .waiting .wiz-q { margin-bottom: var(--stack); }
+    .waiting-meta { margin-bottom: var(--stack); }
+    .waiting-recap-label { margin-bottom: calc(var(--stack) * 0.5); }
+    .waiting-none { margin-top: var(--stack); font-size: var(--fs-hint); }
+    .waiting .pillset { gap: calc(var(--gap-step) * 0.7); }
+    .waiting .pill { padding: calc(var(--gap-step) * 0.6) calc(var(--gap-step) * 1.3); font-size: var(--fs-pill); }
 
     /* ---------- bottom sheet (the wizard's "More" overlay) ------------
        Anchored to the bottom of the screen and scrollable inside, so the
@@ -1098,21 +1138,9 @@
       .sheet-backdrop, .sheet-panel { transition: none; }
     }
 
-    /* short screens: the flow's promise is that a step never scrolls, so
-       trade type scale and padding for height rather than let it spill. */
-    @media (max-height: 740px) {
-      .wiz-count { margin-top: 0.7rem; font-size: 0.68rem; }
-      .wiz-q { font-size: clamp(1.35rem, 5.4vw, 1.7rem); margin-bottom: 0.9rem; }
-      .wiz-hint { margin: -0.6rem 0 0.85rem; font-size: 0.8rem; }
-      .opt-list { gap: 0.45rem; }
-      .opt { padding: 0.62rem 0.9rem; }
-      .opt-icon { width: 2.1rem; height: 2.1rem; }
-      .opt-icon svg { width: 1.1rem; height: 1.1rem; }
-      .opt-label { font-size: 0.92rem; }
-      .wiz-nav { margin-top: 1rem; }
-      .wiz-next { width: 3rem; height: 3rem; }
-      .wiz-readout { margin-bottom: 1rem; }
-    }
+    /* The stepped short-screen trim that used to live here (a 740px cliff)
+       is gone: the --fs-*/--sz-*/--stack tokens interpolate against vh, so
+       a step gives up scale continuously and keeps doing so past 700px. */
     @media (prefers-reduced-motion: reduce) {
       .wiz-in .wiz-q, .wiz-in .wiz-hint, .wiz-in .wiz-field, .wiz-in .opt {
         animation: none;
@@ -1196,8 +1224,6 @@
     @media (max-width: 480px) {
       .toggle-panel, .help-pop { margin-left: 0; }
     }
-    html[data-viewport="mobile"] .toggle-panel,
-    html[data-viewport="mobile"] .help-pop { margin-left: 0; }
 
     /* ---------- inline help ------------------------------------------- */
     .help-dot {
@@ -1430,35 +1456,29 @@
       max-height: none;
       margin: 1rem 0 0;
     }
-    @media (max-height: 740px) {
-      .match .pair > * { width: 4.2rem; height: 4.2rem; }
-      .match .pair { margin-bottom: 0.8rem; }
-      .match .ring { width: 4.6rem; height: 4.6rem; }
-      .match .ring .ring-num { font-size: 1.25rem; }
-      .match-note { margin-top: 0.7rem; font-size: 0.78rem; }
-    }
-    /* the reveal carries more than a step does -- two portraits, chips, a
-       countdown -- so a 640-tall screen needs a second, harder trim to
-       clear the fold without scrolling */
+    /* The reveal carries more than a step does -- two portraits, chips, a
+       countdown -- and used to trim at 740px and again at 700px, then stop.
+       Fluid instead, so it keeps fitting on anything shorter as well. */
+    .match .pair > * { width: var(--sz-avatar); height: var(--sz-avatar); }
+    .match .pair { margin-bottom: var(--stack); }
+    .match .wiz-q { font-size: var(--fs-q-sm); margin-bottom: var(--stack); }
+    .match .wiz-hint { margin-bottom: var(--stack); font-size: var(--fs-hint); }
+    .match-line { margin-bottom: var(--stack); }
+    .match .ring { width: var(--sz-ring); height: var(--sz-ring); }
+    .match .ring .ring-num { font-size: calc(var(--sz-ring) * 0.27); }
+    .match .ring-unit { font-size: calc(var(--sz-ring) * 0.1); }
+    .match .pillset { gap: calc(var(--gap-step) * 0.7); }
+    .match .pill { padding: calc(var(--gap-step) * 0.55) calc(var(--gap-step) * 1.2); font-size: var(--fs-pill); }
+    .match-note { margin-top: var(--stack); font-size: var(--fs-hint); }
+    .match .section-label { margin-bottom: calc(var(--stack) * 0.5); }
+    .match .wiz-count { margin-top: calc(var(--stack) * 0.5); }
+    .match .wiz-nav { margin-top: var(--stack); }
+    /* the ring and the two buttons already say this, so it is the first
+       thing to go when the screen is genuinely tight */
     @media (max-height: 700px) {
-      .match .pair > * { width: 3.4rem; height: 3.4rem; }
-      .match .pair { margin-bottom: 0.55rem; }
-      .match .wiz-q { font-size: clamp(1.2rem, 5vw, 1.45rem); margin-bottom: 0.7rem; }
-      .match .wiz-hint { margin-bottom: 0.7rem; font-size: 0.78rem; }
-      .match-line { margin-bottom: 0.7rem; }
-      .match .ring { width: 3.9rem; height: 3.9rem; }
-      .match .ring::after { inset: 0.3rem; }
-      .match .ring .ring-num { font-size: 1rem; }
-      .match .ring-unit { font-size: 0.44rem; }
-      .match .pillset { gap: 0.35rem; }
-      .match .pill { padding: 0.32rem 0.65rem; font-size: 0.76rem; }
-      .match-note { margin-top: 0.5rem; font-size: 0.75rem; }
-      .match .section-label { margin-bottom: 0.4rem; }
-      .match .wiz-count { margin-top: 0.4rem; }
-      .match .wiz-nav { margin-top: 0.7rem; }
-      /* the ring and the two buttons already say this */
       .match-note.is-aside { display: none; }
     }
+
     .tag-ended {
       color: var(--text-faint);
       border-color: var(--ink-hairline);
@@ -2191,12 +2211,11 @@
       border-radius: 1.15rem;
       background: rgba(59, 11, 102, 0.42);
     }
-    @media (max-height: 740px) {
-      .room .room-timer { padding: 0.55rem 0.8rem; }
-      .room .ring-sm { width: 3.6rem; height: 3.6rem; }
-      .room .ring-sm .ring-num { font-size: 1rem; }
-      .room .room-timer p { font-size: 0.78rem; }
-    }
+    /* was a 740px cliff -- fluid, so the room's timer keeps shrinking */
+    .room .room-timer { padding: calc(var(--gap-step) * 0.9) calc(var(--gap-step) * 1.4); }
+    .room .ring-sm { width: calc(var(--sz-ring) * 0.62); height: calc(var(--sz-ring) * 0.62); }
+    .room .ring-sm .ring-num { font-size: calc(var(--sz-ring) * 0.17); }
+    .room .room-timer p { font-size: var(--fs-hint); }
 
     /* live telemetry: counts that tick while you watch. Monospace and
        tabular so a changing digit never reflows the line. */
@@ -2206,12 +2225,12 @@
        The hero sits high and the actions sink to the bottom of the fold,
        so the fabric shows through the gap between them at any height. */
     .landing {
-      min-height: calc(100vh - 9rem);
+      min-height: calc(100dvh - 9rem);
       display: flex;
       flex-direction: column;
     }
     .landing h1 {
-      margin: clamp(2.5rem, 13vh, 7.5rem) 0 0;
+      margin: clamp(1rem, 13vh, 7.5rem) 0 0;
       font-size: clamp(2.6rem, 11vw, 3.6rem);
       line-height: 1.04;
       letter-spacing: -0.02em;
@@ -2235,7 +2254,7 @@
        so the headline no longer needs to start a seventh of the way down. */
     .landing-head h1 { margin-top: clamp(0.5rem, 2.5vh, 1.5rem); }
     @media (min-width: 721px) {
-      html:not([data-viewport="mobile"]) .landing-head h1 {
+      .landing-head h1 {
         margin-top: clamp(2.5rem, 13vh, 7.5rem);
       }
     }
@@ -2247,12 +2266,11 @@
          (753:391 is wide), so this needs enough room for 80% to be real
          rather than an unreachable ceiling. `contain` keeps the mask centred
          and undistorted inside whatever box survives both limits. */
-      max-height: 22vh;
+      max-height: clamp(4.5rem, 22vh, 16rem);
       /* Centered, this box's right edge lands under the fixed mobile-/-desktop
-         preview toggle (top: 5.5rem, see .viewport-toggle) once it's this wide.
-         Enough top clearance to fully pass under that pill, rather than fighting
-         it horizontally by uncentering the logo. */
-      margin: 3.6rem auto clamp(0.5rem, 2.5vh, 1.25rem);
+         preview toggle that used to be pinned there. That control is gone; the
+         spacing above the mark still reads well on a phone. */
+      margin: clamp(0.75rem, 4vh, 3.2rem) auto clamp(0.5rem, 2.5vh, 1.25rem);
       /* Three stops, not two, and a background wider than the box: sliding it
          sideways sweeps a sheen across the letters. Masking means the gradient
          is the ink, so the sheen needs no extra element on top. */
@@ -2289,14 +2307,10 @@
       padding-top: 1.25rem;
     }
     @media (min-width: 721px) {
-      html:not([data-viewport="mobile"]) .landing-actions { padding-top: 2.5rem; }
+      .landing-actions { padding-top: 2.5rem; }
     }
-    /* Short screens: the wordmark is decoration and yields first. */
-    @media (max-height: 700px) {
-      /* Still clearing the fixed toggle pill (see above) -- short screens
-         can't give up that top margin the way they give up logo height. */
-      .landing-logo { max-height: 11vh; margin-top: 3.6rem; margin-bottom: 0.5rem; }
-    }
+    /* The wordmark is decoration, so it yields first and continuously --
+       this used to be a hard step at 700px and nothing below it. */
     .landing-live {
       display: flex;
       align-items: center;
@@ -2319,10 +2333,9 @@
       letter-spacing: 0.13em;
     }
     /* Wide screens have room beside the headline, so the wordmark moves there
-       and grows. Gated on :not([data-viewport="mobile"]) like the rest of the
-       shell, or the phone preview would go two-column inside its own frame. */
+       and grows. */
     @media (min-width: 721px) {
-      html:not([data-viewport="mobile"]) .landing-head {
+      .landing-head {
         flex-direction: row;
         align-items: center;
         /* .landing-copy is fixed to its own content width, so centering the
@@ -2331,11 +2344,11 @@
         justify-content: center;
         gap: clamp(1.5rem, 5vw, 4rem);
       }
-      html:not([data-viewport="mobile"]) .landing-copy {
+      .landing-copy {
         flex: 0 1 auto;
         min-width: 0;
       }
-      html:not([data-viewport="mobile"]) .landing-logo {
+      .landing-logo {
         /* Row layout: back to its natural place after the copy, undoing the
            mobile-only `order: -1` that puts it above the text when stacked. */
         order: 0;
@@ -2410,7 +2423,8 @@
       z-index: 3;
       display: none;
       align-items: center;
-      padding: 0.7rem 0.9rem calc(1rem + env(safe-area-inset-bottom, 0px));
+      padding: var(--tabbar-pad-t) 0.9rem
+               calc(var(--tabbar-pad-b) + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid var(--ink-hairline);
       background: rgba(8, 5, 14, 0.86);
       backdrop-filter: blur(14px);
@@ -2420,15 +2434,17 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 0.32rem;
-      padding: 0.15rem 0;
+      gap: clamp(0.16rem, 0.04rem + 0.3vh, 0.32rem);
+      padding: 0.1rem 0;
       color: var(--text-faint);
       transition: color 0.18s ease;
     }
     .tabbar a:hover { color: var(--text-muted); }
     /* the icons are drawn with stroke="currentColor" so one rule tints both
        the glyph and its label as the tab lights up */
-    .tabbar svg { display: block; }
+    /* the markup sets width/height attrs; override so the glyph tracks
+       --tabbar-icon and the bar actually gets shorter on a short screen */
+    .tabbar svg { display: block; width: var(--tabbar-icon); height: var(--tabbar-icon); }
     .tabbar .tab-label {
       font-weight: 700;
       font-size: 0.5625rem;
@@ -2445,136 +2461,33 @@
       box-shadow: 0 0 8px rgba(168, 85, 247, 0.9);
     }
 
-    /* The phone layout normally comes from a media query, but a manual
-       preview override needs to force it on regardless of the real
-       viewport (or suppress it on an actually-narrow one) — a media query
-       alone can't be overridden by a class, so :not([data-viewport="desktop"])
-       lets it opt out and the second, query-free block below lets a forced
-       "mobile" preference opt in on a wide screen. Same rules, twice. */
+    /* The phone layout: tab bar in, duplicated nav links out, nav scrolls
+       rather than wrapping. Driven purely by the real viewport now that the
+       forced-preview attribute is gone, so it is written once, not twice. */
     @media (max-width: 720px) {
-      html:not([data-viewport="desktop"]) .tabbar { display: flex; }
-      html:not([data-viewport="desktop"]) nav .tab-dup { display: none; }
-      html:not([data-viewport="desktop"]) nav {
+      .tabbar { display: flex; }
+      nav .tab-dup { display: none; }
+      nav {
         flex-wrap: nowrap;
         overflow-x: auto;
         scrollbar-width: none;
         gap: 0.15rem;
         padding-inline: 1.25rem;
       }
-      html:not([data-viewport="desktop"]) nav::-webkit-scrollbar { display: none; }
-      html:not([data-viewport="desktop"]) .brand { margin-right: 0.6rem; }
-      html:not([data-viewport="desktop"]) nav a:not(.brand) { white-space: nowrap; }
-      html:not([data-viewport="desktop"]) main {
-        padding: 1.5rem 1.5rem 7rem;
-        gap: 1rem;
+      nav::-webkit-scrollbar { display: none; }
+      .brand { margin-right: 0.6rem; }
+      nav a:not(.brand) { white-space: nowrap; }
+      main {
+        /* the 7rem bottom reserve is sized for the tab bar; both yield on a
+           short screen, or chrome eats the content's whole budget */
+        padding: clamp(0.7rem, 0.15rem + 1.5vh, 1.5rem) 1.5rem
+                 /* the bar, plus the 1.25rem .wiz reclaims, plus a gap */
+                 calc(var(--tabbar-h) + 2.85rem);
+        gap: clamp(0.5rem, 0.15rem + 1vh, 1rem);
       }
-    }
-    html[data-viewport="mobile"] .tabbar { display: flex; }
-    html[data-viewport="mobile"] nav .tab-dup { display: none; }
-    html[data-viewport="mobile"] nav {
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      scrollbar-width: none;
-      gap: 0.15rem;
-      padding-inline: 1.25rem;
-    }
-    html[data-viewport="mobile"] nav::-webkit-scrollbar { display: none; }
-    html[data-viewport="mobile"] .brand { margin-right: 0.6rem; }
-    html[data-viewport="mobile"] nav a:not(.brand) { white-space: nowrap; }
-    html[data-viewport="mobile"] main {
-      padding: 1.5rem 1.5rem 7rem;
-      gap: 1rem;
     }
 
-    /* ---------- viewport preview toggle (debug only) -------------------
-       Fixed and outside every layout container, so it floats over the
-       page — nav, main and the tab bar all lay out as if it isn't there. */
-    .viewport-toggle {
-      position: fixed;
-      right: 1rem;
-      bottom: 1rem;
-      z-index: 999;
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.55rem 0.9rem;
-      font-family: var(--sans);
-      font-size: 0.78rem;
-      font-weight: 600;
-      color: var(--text);
-      background: rgba(21, 12, 34, 0.92);
-      border: 1px solid var(--ink-hairline);
-      border-radius: 999px;
-      box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.85);
-      cursor: pointer;
-      backdrop-filter: blur(10px);
-    }
-    .viewport-toggle:hover { border-color: rgba(168, 85, 247, 0.42); }
-    /* sits above the tab bar rather than behind it on a forced-mobile preview */
-    /* Top-right on phones: at bottom: 5.5rem this sat exactly on the
-       wizard's back/next row and swallowed taps on Next, which is the one
-       control the flow cannot do without. */
-    html[data-viewport="mobile"] .viewport-toggle {
-      bottom: auto;
-      top: 5.5rem;
-    }
-
-    /* Forcing mobile on a wide screen: sink the app into an actual
-       phone-sized frame instead of just re-flowing the full-width page,
-       so the preview looks like a phone, not a squeezed desktop layout. */
-    @media (min-width: 721px) {
-      html[data-viewport="mobile"] body {
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-        padding: 3rem 1rem;
-        min-height: 100vh;
-        box-sizing: border-box;
-      }
-      html[data-viewport="mobile"] .app-shell {
-        min-height: 0;
-        /* iPhone X's 375×812 — the narrowest phone still in real use — is the
-           floor the mobile layout is built to, so the debug preview frame
-           should show exactly that rather than a newer, wider phone. */
-        width: 375px;
-        height: 812px;
-        max-height: calc(100vh - 6rem);
-        overflow-y: auto;
-        overflow-x: hidden;
-        position: relative;
-        border-radius: 2.5rem;
-        border: 1px solid var(--ink-hairline);
-        box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.85);
-        background-color: var(--ink);
-      }
-      /* .tabbar is normally fixed to the browser viewport; inside the
-         frame it needs to stick to the frame's own scroll box instead. */
-      html[data-viewport="mobile"] .app-shell .tabbar {
-        position: sticky;
-        /* joining the flow the same way nav does -- without this it would
-           be the other bar a fixed-height .wiz-fit screen squashes rather
-           than let main give up the space. */
-        flex: none;
-      }
-      /* ...and being in flow it occupies its own space, so main's 7rem
-         reserve -- sized for the fixed bar on a real phone -- would sit on
-         top of it as a second gap and float the wizard's buttons well
-         short of the bottom. */
-      html[data-viewport="mobile"] main { padding-bottom: 1.5rem; }
-    }
   </style>
-  {# Runs before body paint so the forced layout never flashes the wrong
-       one first. Falls back to the real viewport on the very first visit,
-       then a click pins it either way until cleared. #}
-    <script>
-      (function () {
-        var v = localStorage.getItem("velvet-viewport-preview");
-        if (v !== "mobile" && v !== "desktop") {
-          v = window.matchMedia("(max-width: 720px)").matches ? "mobile" : "desktop";
-        }
-        document.documentElement.setAttribute("data-viewport", v);
-      })();
-    </script>
 </head>
 <body>
   <div class="app-shell">
@@ -2654,34 +2567,5 @@
     </nav>
   {% endif %}
   </div>
-  {# Previews the mobile layout on a wide monitor (or vice
-       versa) without resizing the window. Sits outside <nav>/<main>/the
-       tab bar, so it never participates in their layout. #}
-    <button type="button" class="viewport-toggle" id="viewport-toggle" aria-label="Toggle mobile/desktop preview">
-      <span id="viewport-toggle-label"></span>
-    </button>
-    <script>
-      (function () {
-        var KEY = "velvet-viewport-preview";
-        var btn = document.getElementById("viewport-toggle");
-        var label = document.getElementById("viewport-toggle-label");
-
-        function render() {
-          var current = document.documentElement.getAttribute("data-viewport");
-          // shows the mode a click switches TO, so the label reads as an action
-          label.textContent = current === "mobile" ? "🖥️ Desktop" : "📱 Mobile";
-        }
-
-        btn.addEventListener("click", function () {
-          var next = document.documentElement.getAttribute("data-viewport") === "mobile"
-            ? "desktop" : "mobile";
-          document.documentElement.setAttribute("data-viewport", next);
-          localStorage.setItem(KEY, next);
-          render();
-        });
-
-        render();
-      })();
-    </script>
 </body>
 </html>
