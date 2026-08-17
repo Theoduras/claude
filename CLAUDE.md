@@ -34,8 +34,9 @@ Keep replies concise; prefer the smallest diff that does the job.
 - `app.py` — **~3,000 lines**, single module: all routes, DB access, and helpers
 - `templates/` — 16 Jinja templates, all extending `base.html`
 - `docs/style-guide.html` — velvet-textured design system; `docs/deploy-gcp.md` — Cloud Run
-- `seed_demo.py` — 40 demo members, all live-searching and `is_bot=TRUE` so they reply in
-  chat. Idempotent; `--reset` to rebuild
+- `seed_demo.py` — 40 demo members, `is_bot=TRUE` so they reply in chat. Their `searches`
+  rows are `waiting` but they have no browser, so they are **not pairable** unless
+  `DEMO_BOTS_ALWAYS_ONLINE=1` (local only — see below). Idempotent; `--reset` to rebuild
 - `smoke.py`, `dev.ps1`, `docker-compose.yml` — local dev only, not deployed
 - `vastai_client.py` — standalone Vast.ai GPU-rental CLI, **not imported by the app**
 - `make_search_avatars.py` — regenerates the four placeholder-avatar PNGs inside
@@ -67,6 +68,22 @@ choice. Interests has no `use_*` column of its own — the stored text *is* the 
 stores `''`, which `searches_compatible()` reads as "no preference". When it's non-empty it's
 a real filter (requires the other side to share at least one stemmed keyword), and it still
 breaks ties in `try_pair()`'s ranking among whoever's left.
+
+**You can only be paired with someone who is online and searching at the same moment.**
+`searches.last_seen` is a heartbeat bumped by `/search/status` (the waiting page polls it
+every 1.5s) and by loading `/search/waiting`. Every pool query — `try_pair()`,
+`_search_pool()`, `search_preview()` and the landing page's "N searching right now" —
+filters on `LIVE_SEARCH_CLAUSE`, so a row that hasn't beaten within
+`SEARCH_ALIVE_SECONDS` (60s) is treated as gone: not pairable, not counted. Nothing reaps
+those rows; they simply stop qualifying, and a returning user is revived by their own next
+poll. Seeded demo members have no browser and so are never online — set
+`DEMO_BOTS_ALWAYS_ONLINE=1` **locally** to exempt them and test the match lifecycle solo.
+With it on, `try_pair()` ranks humans ahead of bots and withholds bots entirely until the
+searcher has waited `BOT_FALLBACK_SECONDS`.
+
+Sign-in and sign-up are rate limited via `auth_attempts` (`auth_throttled()`), checked
+*before* `check_password_hash` — scrypt costs ~110ms and ~32MB per call, so a refused
+attempt has to be cheap or the throttle is itself a DoS.
 
 `matches.status` is `'active'` by default — pairing now only happens through live search
 (`try_pair()`), but the default keeps pre-existing rows a permanent chat, unchanged.

@@ -208,20 +208,33 @@ MIN_SEARCH_SECONDS = 7
 # does not drop a searcher who is still present.
 SEARCH_ALIVE_SECONDS = 60
 
-# Demo members (is_bot) never poll, so they are exempt from the liveness check
-# above -- they are always "present" by construction. This is the reusable
-# predicate for "this waiting row is worth pairing with"; every pool query
-# applies it so the waiting screen, the preview count and the pairing pass
-# can never disagree about who is actually available.
+# Local-development escape hatch, off everywhere else. Seeded demo members
+# (is_bot) have no browser and therefore no heartbeat, so under the rule above
+# they are never online and can never be paired with -- which is the intended
+# production behaviour: you only ever match a real person who is searching at
+# the same moment as you. Turning this on exempts them from the liveness check
+# so the match -> reveal -> timed-chat -> decision flow can still be exercised
+# solo against `seed_demo.py`, without needing a second real browser.
+DEMO_BOTS_ALWAYS_ONLINE = os.environ.get(
+    "DEMO_BOTS_ALWAYS_ONLINE", "0"
+) not in ("0", "false", "no")
+
+# The reusable predicate for "this waiting row belongs to someone who is
+# actually here right now". Every pool query applies it -- the pairing pass,
+# the waiting screen, the criteria preview and the landing count -- so they can
+# never disagree about who is available. Exactly one `?` either way, so all
+# the call sites bind the same single parameter.
 LIVE_SEARCH_CLAUSE = (
     "(u.is_bot OR s.last_seen > NOW() - (? * INTERVAL '1 second'))"
+    if DEMO_BOTS_ALWAYS_ONLINE
+    else "(s.last_seen > NOW() - (? * INTERVAL '1 second'))"
 )
 
-# Real people first. Seeded demo members are the oldest rows in the pool by
-# construction (they are inserted once at deploy time), so a plain
-# "longest wait wins" ranking hands every new signup a bot instead of the
-# other real person who is searching right now. Bots stay in the pool as a
-# fallback -- but only after a searcher has genuinely waited for a human.
+# Real people before demo members, and only once a searcher has genuinely
+# waited this long for a human. Inert while DEMO_BOTS_ALWAYS_ONLINE is off
+# (no bot is ever a candidate then); it is what keeps the ranking sane when
+# the flag is on, since seeded members are the oldest rows in the pool by
+# construction and would otherwise win every tie on "longest wait".
 BOT_FALLBACK_SECONDS = 25
 
 # --- match lifecycle (live-search pairings only; /find stays instant) -----
@@ -1975,16 +1988,18 @@ def try_pair(user_id):
     applies to both sides (this searcher and the candidates), so being the
     second one to arrive does not skip the wait either.
 
-    Candidates must also still be *present*: a waiting row whose browser
-    stopped polling (SEARCH_ALIVE_SECONDS) is someone who closed the tab, and
-    pairing with them spends a real person's match on an empty room. Demo
-    members never poll, so they are exempt -- see LIVE_SEARCH_CLAUSE.
+    You can only be paired with someone who is online and searching at the
+    same moment. A candidate needs a heartbeat inside SEARCH_ALIVE_SECONDS
+    (see LIVE_SEARCH_CLAUSE) -- meaning a browser open on the waiting screen
+    and still polling right now. Anything older is a closed tab, and pairing
+    with it spends a real person's match on a room nobody walks into. Seeded
+    demo members have no browser and so are never online either, unless
+    DEMO_BOTS_ALWAYS_ONLINE is set for local testing.
 
-    Real people outrank demo members, and demo members are not considered at
-    all until the searcher has waited BOT_FALLBACK_SECONDS for a human. Seeded
-    members are the oldest rows in the pool by construction, so without this a
-    plain "longest wait wins" ranking would hand every new signup a bot while
-    another real person sat in the same pool unmatched.
+    Among whoever is left, real people outrank demo members and demo members
+    are held back until the searcher has waited BOT_FALLBACK_SECONDS -- both
+    only reachable with that flag on, since otherwise no bot is ever a
+    candidate to begin with.
 
     Pairing is serialized with a Postgres advisory lock rather than an
     in-process one, so two searchers cannot claim the same partner even
