@@ -15,10 +15,14 @@
   </div>
 
   <div class="landing-actions">
-    {# the count is the whole promise of the product: people are waiting now #}
-    <p class="landing-live">
-      <span class="live-dot"></span>
-      {{ searching_now }} searching right now
+    {# The whole promise of the product is that someone is there now, so this
+       line carries a lot of weight. It is always literally true: the pulsing
+       dot appears only when people really are searching this second, and
+       otherwise the copy steps down to a weaker-but-honest signal rather than
+       inventing a crowd. See landing_pulse(). #}
+    <p class="landing-live{% if not pulse.live %} is-quiet{% endif %}">
+      {% if pulse.live %}<span class="live-dot"></span>{% endif %}
+      {{ pulse.text }}
     </p>
     <a class="btn btn-block" href="{{ url_for('register') }}">Start searching</a>
     <a class="btn btn-secondary btn-block" href="{{ url_for('login') }}">I already have an account</a>

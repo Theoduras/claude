@@ -773,22 +773,69 @@ def design_lab():
     return send_from_directory(MOCKUPS_DIR, "velvet-lab.html")
 
 
+# Below this, the landing page stops quoting the member count and invites the
+# visitor instead. Not a fudge factor on the number itself -- the number shown
+# is always the real one -- just the point below which a true figure reads as
+# discouraging rather than reassuring.
+MEMBER_COUNT_FLOOR = 25
+
+
+def landing_pulse():
+    """The strongest *true* thing we can say about activity, for the landing.
+
+    An empty room reads as a dead product, so this never settles for "0
+    searching" -- but it also never claims presence that isn't there. Instead
+    it falls back through progressively weaker but still factual signals, and
+    when there is genuinely nothing to report it stops describing the crowd and
+    asks for the visitor instead.
+
+    Padding the live number with a floor was considered and rejected: it is a
+    plain false statement to every visitor about who is available to talk to
+    them right now, and the whole product promise ("we pair you the moment
+    someone is looking for you too") collapses the first time someone searches
+    against a crowd that does not exist.
+
+    Demo members are excluded from every count here, exactly as they are
+    excluded from pairing -- a number that includes them would describe people
+    a visitor can never actually meet.
+    """
+    row = get_db().execute(
+        f"""
+        SELECT
+            (SELECT COUNT(*) FROM searches s
+               JOIN users u ON u.id = s.user_id
+              WHERE s.status = 'waiting' AND {LIVE_SEARCH_CLAUSE}) AS live,
+            (SELECT COUNT(*) FROM searches s
+               JOIN users u ON u.id = s.user_id
+              WHERE NOT u.is_bot
+                AND s.created_at > NOW() - INTERVAL '24 hours')      AS today,
+            (SELECT COUNT(*) FROM users WHERE NOT is_bot)            AS members
+        """,
+        (SEARCH_ALIVE_SECONDS,),
+    ).fetchone()
+
+    if row["live"]:
+        n = row["live"]
+        return {"live": True, "text": f"{n} searching right now"}
+    if row["today"]:
+        # Even one is worth saying: it is recency, which is the thing a visitor
+        # is actually judging.
+        n = row["today"]
+        word = "search" if n == 1 else "searches"
+        return {"live": False, "text": f"{n} {word} started today"}
+    if row["members"] >= MEMBER_COUNT_FLOOR:
+        return {"live": False, "text": f"{row['members']} members"}
+    # Below the floor the true number is weaker than no number at all --
+    # "3 members" actively puts someone off, where an invitation does not.
+    # Choosing which true thing to say is fair game; inventing one is not.
+    return {"live": False, "text": "Be the first one searching tonight"}
+
+
 @app.route("/")
 def index():
     if session.get("user_id"):
         return redirect(url_for("live_search"))
-    # Only people whose browser is still polling (plus the always-present demo
-    # members). Counting every 'waiting' row would advertise a number that
-    # only ever grows, since a closed tab never cancels its own search.
-    searching_now = get_db().execute(
-        f"""
-        SELECT COUNT(*) AS n FROM searches s
-        JOIN users u ON u.id = s.user_id
-        WHERE s.status = 'waiting' AND {LIVE_SEARCH_CLAUSE}
-        """,
-        (SEARCH_ALIVE_SECONDS,),
-    ).fetchone()["n"]
-    return render_template("landing.html", searching_now=searching_now)
+    return render_template("landing.html", pulse=landing_pulse())
 
 
 @app.route("/help")

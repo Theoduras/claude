@@ -2289,6 +2289,16 @@
       text-transform: uppercase;
       color: var(--text-faint);
     }
+    /* Nobody is searching this second. The line still says something true
+       (see landing_pulse()), but it must not borrow the live indicator's
+       urgency -- no dot, no glow, and dimmer, so the pulsing version reads as
+       genuinely different when it does appear. */
+    .landing-live.is-quiet {
+      color: var(--text-faint);
+      opacity: 0.72;
+      font-weight: 600;
+      letter-spacing: 0.13em;
+    }
     /* Wide screens have room beside the headline, so the wordmark moves there
        and grows. Gated on :not([data-viewport="mobile"]) like the rest of the
        shell, or the phone preview would go two-column inside its own frame. */
