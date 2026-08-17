@@ -13,7 +13,7 @@
   <div class="profile-hero">
     {% if show_photos %}
       <img src="{{ url_for('photo', photo_id=show_photos[0]['id']) }}"
-           alt="{{ 'Your photo' if is_own else 'Photo of ' ~ profile['name'] }}">
+           alt="{{ t('profile.your_photo') if is_own else t('profile.photo_of', name=profile['name']) }}">
     {% else %}
       <span class="ph"></span>
     {% endif %}
@@ -21,7 +21,7 @@
       <h1>{{ profile['name'] or profile['username'] }}{% if profile['age'] %}, {{ profile['age'] }}{% endif %}</h1>
       <p class="profile-hero-meta">
         @{{ profile['username'] }}
-        {% if profile['gender'] %} &middot; {{ profile['gender'] }}{% endif %}
+        {% if profile['gender'] %} &middot; {{ opt_label(profile['gender']) }}{% endif %}
         {% if profile['location'] %} &middot; {{ profile['location'] }}{% endif %}
       </p>
     </div>
@@ -30,10 +30,10 @@
   {% if profile['seeking'] or profile['relationship_type'] %}
     <div class="pillset">
       {% if profile['relationship_type'] %}
-        <span class="pill is-static">{{ profile['relationship_type'] }}</span>
+        <span class="pill is-static">{{ opt_label(profile['relationship_type']) }}</span>
       {% endif %}
       {% if profile['seeking'] %}
-        <span class="pill is-static is-faint">Looking for {{ profile['seeking'] }}</span>
+        <span class="pill is-static is-faint">{{ t('profile.looking_for', seeking=opt_label(profile['seeking'])) }}</span>
       {% endif %}
     </div>
   {% endif %}
@@ -43,28 +43,28 @@
   {% endif %}
 
   {% if not is_own and not can_view_photos %}
-    <div class="photo-locked">Photos unlock once you both continue the match.</div>
+    <div class="photo-locked">{{ t('profile.photos_locked') }}</div>
   {% elif show_photos | length > 1 %}
     <div class="photo-grid">
       {% for photo in show_photos[1:] %}
         <img src="{{ url_for('photo', photo_id=photo['id']) }}"
-             alt="{{ 'Your photo' if is_own else 'Photo of ' ~ profile['name'] }}" loading="lazy">
+             alt="{{ t('profile.your_photo') if is_own else t('profile.photo_of', name=profile['name']) }}" loading="lazy">
       {% endfor %}
     </div>
   {% endif %}
 
   <dl class="facts">
-    {% if profile['interests'] %}<div><dt>Interests</dt><dd>{{ profile['interests'] }}</dd></div>{% endif %}
-    {% if profile['hobbies'] %}<div><dt>Hobbies</dt><dd>{{ profile['hobbies'] }}</dd></div>{% endif %}
-    {% if profile['wants'] %}<div><dt>What I want</dt><dd>{{ profile['wants'] }}</dd></div>{% endif %}
-    {% if profile['needs'] %}<div><dt>What I need</dt><dd>{{ profile['needs'] }}</dd></div>{% endif %}
+    {% if profile['interests'] %}<div><dt>{{ t('profile.interests') }}</dt><dd>{{ profile['interests'] }}</dd></div>{% endif %}
+    {% if profile['hobbies'] %}<div><dt>{{ t('profile.hobbies') }}</dt><dd>{{ profile['hobbies'] }}</dd></div>{% endif %}
+    {% if profile['wants'] %}<div><dt>{{ t('profile.wants') }}</dt><dd>{{ profile['wants'] }}</dd></div>{% endif %}
+    {% if profile['needs'] %}<div><dt>{{ t('profile.needs') }}</dt><dd>{{ profile['needs'] }}</dd></div>{% endif %}
 
-    {% if profile['height_cm'] %}<div><dt>Height</dt><dd>{{ profile['height_cm'] }} cm</dd></div>{% endif %}
-    {% if profile['body_type'] %}<div><dt>Body type</dt><dd>{{ profile['body_type'] }}</dd></div>{% endif %}
-    {% if profile['fitness_level'] %}<div><dt>Fitness</dt><dd>{{ profile['fitness_level'] }}</dd></div>{% endif %}
-    {% if profile['hair_color'] %}<div><dt>Hair</dt><dd>{{ profile['hair_color'] }}</dd></div>{% endif %}
-    {% if profile['eye_color'] %}<div><dt>Eyes</dt><dd>{{ profile['eye_color'] }}</dd></div>{% endif %}
-    {% if profile['tattoos'] %}<div><dt>Tattoos</dt><dd>{{ profile['tattoos'] }}</dd></div>{% endif %}
+    {% if profile['height_cm'] %}<div><dt>{{ t('profile.height') }}</dt><dd>{{ profile['height_cm'] }} cm</dd></div>{% endif %}
+    {% if profile['body_type'] %}<div><dt>{{ t('profile.body_type') }}</dt><dd>{{ opt_label(profile['body_type']) }}</dd></div>{% endif %}
+    {% if profile['fitness_level'] %}<div><dt>{{ t('profile.fitness') }}</dt><dd>{{ opt_label(profile['fitness_level']) }}</dd></div>{% endif %}
+    {% if profile['hair_color'] %}<div><dt>{{ t('profile.hair') }}</dt><dd>{{ opt_label(profile['hair_color']) }}</dd></div>{% endif %}
+    {% if profile['eye_color'] %}<div><dt>{{ t('profile.eyes') }}</dt><dd>{{ opt_label(profile['eye_color']) }}</dd></div>{% endif %}
+    {% if profile['tattoos'] %}<div><dt>{{ t('profile.tattoos') }}</dt><dd>{{ opt_label(profile['tattoos']) }}</dd></div>{% endif %}
   </dl>
 
   {# Only the owner sees their own stated preferences -- these drive ranking,
@@ -74,27 +74,27 @@
        or profile['pref_fitness_level'] or profile['pref_hair_color']
        or profile['pref_eye_color'] or profile['pref_tattoos'] %}
     {% if has_prefs %}
-      <p class="section-label" style="margin-top: 1.6rem;">Looking for (physical)</p>
-      <p class="section-note">Only you can see this. It counts both ways when ranking matches.</p>
+      <p class="section-label" style="margin-top: 1.6rem;">{{ t('profile.prefs_label') }}</p>
+      <p class="section-note">{{ t('profile.prefs_note') }}</p>
       <dl class="facts">
         {% if profile['pref_height_min'] and profile['pref_height_max'] %}
-          <div><dt>Height</dt>
+          <div><dt>{{ t('profile.height') }}</dt>
           <dd>{{ profile['pref_height_min'] }}–{{ profile['pref_height_max'] }} cm</dd></div>
         {% endif %}
         {% if profile['pref_body_types'] %}
-          <div><dt>Body types</dt><dd>{{ profile['pref_body_types'].replace(',', ', ') }}</dd></div>
+          <div><dt>{{ t('profile.body_types') }}</dt><dd>{{ profile['pref_body_types'].split(',') | map('trim') | map(opt_label) | join(', ') }}</dd></div>
         {% endif %}
         {% if profile['pref_fitness_level'] %}
-          <div><dt>Fitness</dt><dd>{{ profile['pref_fitness_level'] }}</dd></div>
+          <div><dt>{{ t('profile.fitness') }}</dt><dd>{{ opt_label(profile['pref_fitness_level']) }}</dd></div>
         {% endif %}
         {% if profile['pref_hair_color'] %}
-          <div><dt>Hair</dt><dd>{{ profile['pref_hair_color'] }}</dd></div>
+          <div><dt>{{ t('profile.hair') }}</dt><dd>{{ opt_label(profile['pref_hair_color']) }}</dd></div>
         {% endif %}
         {% if profile['pref_eye_color'] %}
-          <div><dt>Eyes</dt><dd>{{ profile['pref_eye_color'] }}</dd></div>
+          <div><dt>{{ t('profile.eyes') }}</dt><dd>{{ opt_label(profile['pref_eye_color']) }}</dd></div>
         {% endif %}
         {% if profile['pref_tattoos'] %}
-          <div><dt>Tattoos</dt><dd>{{ profile['pref_tattoos'] }}</dd></div>
+          <div><dt>{{ t('profile.tattoos') }}</dt><dd>{{ opt_label(profile['pref_tattoos']) }}</dd></div>
         {% endif %}
       </dl>
     {% endif %}
@@ -104,7 +104,7 @@
 
   {% if is_own %}
     <div class="wiz-nav">
-      <a class="btn btn-secondary" href="{{ url_for('edit_profile') }}">Edit profile</a>
+      <a class="btn btn-secondary" href="{{ url_for('edit_profile') }}">{{ t('profile.edit') }}</a>
     </div>
   {% endif %}
 </div>

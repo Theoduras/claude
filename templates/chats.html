@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Chats — Velvt{% endblock %}
+{% block title %}{{ t('chats.title') }}{% endblock %}
 {% block content %}
-<h1>Chats</h1>
-<p class="subtitle">Your matches and their conversations.</p>
+<h1>{{ t('chats.heading') }}</h1>
+<p class="subtitle">{{ t('chats.subtitle') }}</p>
 
 {% if rooms %}
   <div class="chat-rows">
@@ -23,19 +23,19 @@
               {% else %}{{ room['other_name'] }}{% endif %}
             </strong>
             {% if room['phase'] == 'reveal' %}
-              <span class="tag">It's a match</span>
+              <span class="tag">{{ t('chats.tag_match') }}</span>
             {% elif room['phase'] == 'timed' %}
-              <span class="tag tag-timed">Timed chat</span>
+              <span class="tag tag-timed">{{ t('chats.tag_timed') }}</span>
             {% elif room['phase'] == 'deciding' %}
-              <span class="tag tag-timed">Awaiting decision</span>
+              <span class="tag tag-timed">{{ t('chats.tag_deciding') }}</span>
             {% elif room['phase'] == 'ended' %}
-              <span class="tag tag-ended">Ended</span>
+              <span class="tag tag-ended">{{ t('chats.tag_ended') }}</span>
             {% endif %}
           </div>
           <div class="chat-row-bottom">
             <span class="chat-row-preview">
               {% if room['last_message'] %}{{ room['last_message'] | truncate(70) }}
-              {% else %}No messages yet — say hi!{% endif %}
+              {% else %}{{ t('chats.no_messages') }}{% endif %}
             </span>
             {% if room['when'] %}<span class="chat-row-time">{{ room['when'] }}</span>{% endif %}
           </div>
@@ -46,8 +46,7 @@
 {% else %}
   <div class="card">
     <p class="muted" style="margin: 0;">
-      No chats yet. Start a <a href="{{ url_for('live_search') }}">live search</a>
-      and we'll pair you the moment someone is looking for you too.
+      {{ t('chats.empty', link='<a href="' ~ url_for('live_search') ~ '">' ~ t('chats.empty_link') ~ '</a>') | safe }}
     </p>
   </div>
 {% endif %}

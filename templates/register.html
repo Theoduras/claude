@@ -1,32 +1,30 @@
 {% extends "base.html" %}
-{% block title %}Create account — Velvt{% endblock %}
+{% block title %}{{ t('register.title') }}{% endblock %}
 {% block content %}
 <div class="card narrow">
-  <p class="eyebrow">Join Velvt</p>
-  <h1 style="margin-top: 0.5rem;">Make your entrance.</h1>
-  <p class="subtitle" style="margin-bottom: 1.6rem;">
-    Pick a name and a password. Your profile comes next.
-  </p>
+  <p class="eyebrow">{{ t('register.eyebrow') }}</p>
+  <h1 style="margin-top: 0.5rem;">{{ t('register.heading') }}</h1>
+  <p class="subtitle" style="margin-bottom: 1.6rem;">{{ t('register.subtitle') }}</p>
 
   <form method="post" action="{{ url_for('register') }}">
-    <label for="username">Username</label>
+    <label for="username">{{ t('register.username') }}</label>
     <input id="username" name="username" type="text" autocomplete="username"
            minlength="3" required autofocus>
 
-    <label for="password">Password</label>
+    <label for="password">{{ t('register.password') }}</label>
     <input id="password" name="password" type="password" autocomplete="new-password"
            minlength="8" required>
-    <p class="hint">At least 8 characters.</p>
+    <p class="hint">{{ t('register.password_hint') }}</p>
 
-    <label for="confirm">Confirm password</label>
+    <label for="confirm">{{ t('register.confirm') }}</label>
     <input id="confirm" name="confirm" type="password" autocomplete="new-password"
            minlength="8" required>
 
-    <button class="btn btn-block" type="submit">Create account</button>
+    <button class="btn btn-block" type="submit">{{ t('register.submit') }}</button>
   </form>
 
   <p class="hint" style="margin: 1.1rem 0 0; text-align: center;">
-    Already a member? <a href="{{ url_for('login') }}">Sign in</a>
+    {{ t('register.have_account') }} <a href="{{ url_for('login') }}">{{ t('register.signin') }}</a>
   </p>
 </div>
 {% endblock %}

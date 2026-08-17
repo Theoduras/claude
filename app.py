@@ -49,6 +49,18 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from translations import (
+    DEFAULT_LANGUAGE,
+    INTEREST_LABELS,
+    LANGUAGES,
+    LANGUAGE_CODES,
+    LANGUAGE_SHORT,
+    interest_label,
+    normalize_language,
+    option_label,
+    translate,
+)
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET_KEY") or secrets.token_hex(32)
 
@@ -721,7 +733,7 @@ def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if session.get("user_id") is None:
-            flash("Please sign in first.")
+            flash(t("msg.sign_in_first"))
             return redirect(url_for("login"))
         return view(*args, **kwargs)
 
@@ -735,11 +747,67 @@ def admin_required(view):
     def wrapped(*args, **kwargs):
         user = current_user()
         if user is None or not user["is_admin"]:
-            flash("Only the admin can do that.")
+            flash(t("msg.admin_only"))
             return redirect(url_for("live_search"))
         return view(*args, **kwargs)
 
     return wrapped
+
+
+LANG_SESSION_KEY = "lang"
+
+
+def current_language():
+    """The language to render this request in.
+
+    An explicit choice wins and is remembered in the session. Failing that,
+    the browser's own Accept-Language is honoured, so a Dutch speaker's first
+    visit is already Dutch without touching the switcher. Failing that,
+    English.
+    """
+    chosen = normalize_language(session.get(LANG_SESSION_KEY))
+    if chosen:
+        return chosen
+    # Werkzeug does the quality-value parsing; we only offer what we have.
+    guessed = request.accept_languages.best_match(LANGUAGE_CODES)
+    return normalize_language(guessed) or DEFAULT_LANGUAGE
+
+
+def t(key, **kwargs):
+    """Translate inside a request, for copy the server produces itself --
+    flash messages, search chips, blocker explanations. Templates get their
+    own `t` from the context processor; this is the Python-side twin."""
+    return translate(current_language(), key, **kwargs)
+
+
+def opt_label_for(value):
+    """Display label for a stored option value, server-side.
+
+    The stored value is canonical English (see translations.py) because
+    searches_compatible() compares it; this is only for text a human reads,
+    such as the waiting screen's summary chips.
+    """
+    return option_label(current_language(), value)
+
+
+@app.route("/lang/<code>", methods=["GET", "POST"])
+def set_language(code):
+    """Switch language and return the visitor to the page they were reading.
+
+    The redirect target is taken from the form/query rather than Referer, and
+    is required to be a same-site path -- an open redirect here would be a
+    free phishing hop, and this endpoint is reachable without logging in.
+    """
+    lang = normalize_language(code)
+    if lang:
+        session[LANG_SESSION_KEY] = lang
+
+    target = request.values.get("next") or "/"
+    # Only ever a path on this site: no scheme, no host, no protocol-relative
+    # "//evil.example" (which a browser reads as a host, not a path).
+    if not target.startswith("/") or target.startswith("//"):
+        target = "/"
+    return redirect(target)
 
 
 @app.context_processor
@@ -747,7 +815,20 @@ def inject_user():
     # single_city is global rather than passed per-route: it decides whether a
     # location control renders at all, and that question comes up in the
     # profile form, the search wizard and the criteria screen alike.
-    return {"current_user": current_user(), "single_city": SINGLE_CITY}
+    lang = current_language()
+    return {
+        "current_user": current_user(),
+        "single_city": SINGLE_CITY,
+        # t() is the workhorse: every template calls it, so it is short on
+        # purpose. opt() and interest() translate *labels* for values that
+        # stay canonical English in the database.
+        "t": lambda key, **kw: translate(lang, key, **kw),
+        "opt_label": lambda value: option_label(lang, value),
+        "interest_text": lambda value: interest_label(lang, value),
+        "lang": lang,
+        "languages": LANGUAGES,
+        "language_short": LANGUAGE_SHORT,
+    }
 
 
 @app.before_request
@@ -836,19 +917,19 @@ def landing_pulse():
 
     if row["live"]:
         n = row["live"]
-        return {"live": True, "text": f"{n} searching right now"}
+        return {"live": True, "text": t("pulse.live_one") if n == 1 else t("pulse.live_many", n=n)}
     if row["today"]:
         # Even one is worth saying: it is recency, which is the thing a visitor
         # is actually judging.
         n = row["today"]
-        word = "search" if n == 1 else "searches"
-        return {"live": False, "text": f"{n} {word} started today"}
+        return {"live": False,
+                "text": t("pulse.today_one") if n == 1 else t("pulse.today_many", n=n)}
     if row["members"] >= MEMBER_COUNT_FLOOR:
-        return {"live": False, "text": f"{row['members']} members"}
+        return {"live": False, "text": t("pulse.members", n=row["members"])}
     # Below the floor the true number is weaker than no number at all --
     # "3 members" actively puts someone off, where an invitation does not.
     # Choosing which true thing to say is fair game; inventing one is not.
-    return {"live": False, "text": "Be the first one searching tonight"}
+    return {"live": False, "text": t("pulse.be_first")}
 
 
 @app.route("/")
@@ -948,9 +1029,10 @@ def clear_auth_failures(username):
     db.commit()
 
 
-THROTTLE_MESSAGE = (
-    "Too many attempts. Wait a few minutes before trying again."
-)
+# Looked up per request rather than held as a constant, so it speaks the
+# reader's language.
+def throttle_message():
+    return t("msg.throttled")
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -967,13 +1049,13 @@ def register():
         # Registration hashes a password too, so it is the same CPU/memory
         # amplifier as login and needs the same gate ahead of the hash.
         if auth_throttled("register", username):
-            error = THROTTLE_MESSAGE
+            error = throttle_message()
         elif not username or len(username) < 3:
-            error = "Username must be at least 3 characters."
+            error = t("msg.username_short")
         elif len(password) < 8:
-            error = "Password must be at least 8 characters."
+            error = t("msg.password_short")
         elif password != confirm:
-            error = "Passwords do not match."
+            error = t("msg.passwords_differ")
 
         if error is None:
             db = get_db()
@@ -989,11 +1071,11 @@ def register():
                 # Counted: repeatedly probing which usernames are taken is
                 # the cheap half of an account-enumeration sweep.
                 record_auth_failure("register", username)
-                error = "That username is already taken."
+                error = t("msg.username_taken")
             else:
-                session.clear()
+                reset_session_keeping_language()
                 session["user_id"] = new_id
-                flash("Welcome! Now set up your profile.")
+                flash(t("msg.welcome"))
                 return redirect(url_for("edit_profile"))
 
         flash(error)
@@ -1014,7 +1096,7 @@ def login():
         # a throttled attempt has to be cheap, or the throttle is itself the
         # denial of service it was added to prevent.
         if auth_throttled("login", username):
-            flash(THROTTLE_MESSAGE)
+            flash(throttle_message())
             return render_template("login.html"), 429
 
         user = get_db().execute(
@@ -1023,22 +1105,39 @@ def login():
 
         if user and check_password_hash(user["password_hash"], password):
             clear_auth_failures(username)
-            session.clear()
+            reset_session_keeping_language()
             session["user_id"] = user["id"]
             return redirect(url_for("live_search"))
 
         record_auth_failure("login", username)
         # Deliberately identical for "no such user" and "wrong password", so
         # the response never reveals which accounts exist.
-        flash("Invalid username or password.")
+        flash(t("msg.bad_credentials"))
 
     return render_template("login.html")
 
 
 @app.route("/logout", methods=["POST"])
 def logout():
-    session.clear()
+    # Language survives sign-out too: the sign-in page you land on should not
+    # suddenly be in a language you did not choose.
+    reset_session_keeping_language()
     return redirect(url_for("login"))
+
+
+def reset_session_keeping_language():
+    """Clear the session but carry the chosen language across.
+
+    session.clear() on sign-in and sign-out is deliberate -- it defends against
+    session fixation, and nothing from the previous visitor should survive. The
+    language is the one exception: it is a display preference rather than
+    anything privileged, and dropping it sent someone who had just picked Dutch
+    back to English at exactly the moment they committed to the product.
+    """
+    chosen = session.get(LANG_SESSION_KEY)
+    session.clear()
+    if chosen:
+        session[LANG_SESSION_KEY] = chosen
 
 
 def validate_profile(values):
@@ -1046,21 +1145,21 @@ def validate_profile(values):
     age = None
     error = None
     if not values["name"]:
-        error = "Please enter your name."
+        error = t("msg.name_required")
     else:
         try:
             age = int(values["age"])
             if not AGE_MIN_YEARS <= age <= AGE_MAX_YEARS:
-                error = f"Age must be between {AGE_MIN_YEARS} and {AGE_MAX_YEARS}."
+                error = t("msg.age_range", min=AGE_MIN_YEARS, max=AGE_MAX_YEARS)
         except (TypeError, ValueError):
-            error = "Please enter a valid age."
+            error = t("msg.age_invalid")
 
     if values["relationship_type"] and values["relationship_type"] not in RELATIONSHIP_TYPES:
-        error = "Please pick a relationship type from the list."
+        error = t("msg.pick_relationship")
     if values["gender"] and values["gender"] not in GENDERS:
-        error = "Please pick a gender from the list."
+        error = t("msg.pick_gender")
     if values["seeking"] and values["seeking"] not in SEEKING_OPTIONS:
-        error = "Please pick who you're looking for from the list."
+        error = t("msg.pick_seeking")
 
     return error, age
 
@@ -1532,11 +1631,11 @@ def edit_profile():
         for is_primary, f in candidates:
             data = f.read(PHOTO_MAX_BYTES + 1)
             if len(data) > PHOTO_MAX_BYTES:
-                error = error or "Each photo must be under 2 MB."
+                error = error or t("msg.photo_too_big")
                 break
             mime = sniff_image_mime(data)
             if mime is None or mime not in PHOTO_ALLOWED_MIMES:
-                error = error or "Photos must be JPEG, PNG, or WebP."
+                error = error or t("msg.photo_type")
                 break
             uploads.append((is_primary, mime, data))
         else:
@@ -1545,7 +1644,7 @@ def edit_profile():
                     "SELECT COUNT(*) AS n FROM photos WHERE user_id = ?", (user_id,)
                 ).fetchone()["n"]
                 if existing_count + len(uploads) > PHOTO_MAX_PER_USER:
-                    error = error or f"You can have at most {PHOTO_MAX_PER_USER} photos."
+                    error = error or t("msg.photo_count", max=PHOTO_MAX_PER_USER)
 
         if error is None:
             # An UPSERT rather than a bare UPDATE: user_id is profiles' own
@@ -1611,7 +1710,7 @@ def edit_profile():
                     (user_id, data, mime, is_primary),
                 )
             db.commit()
-            flash("Profile saved.")
+            flash(t("msg.profile_saved"))
             return redirect(url_for("view_profile", user_id=user_id))
 
         flash(error)
@@ -1682,7 +1781,7 @@ def view_profile(user_id):
     ).fetchone()
 
     if row is None:
-        flash("That profile does not exist.")
+        flash(t("msg.no_such_profile"))
         return redirect(url_for("live_search"))
 
     user = current_user()
@@ -1726,9 +1825,9 @@ def admin_new_profile():
         error = None
         phys = None
         if not username or len(username) < 3:
-            error = "Username must be at least 3 characters."
+            error = t("msg.username_short")
         elif password and len(password) < 8:
-            error = "Password must be at least 8 characters (or leave it empty)."
+            error = t("msg.password_short_optional")
         else:
             error, age = validate_profile(values)
             phys_error, phys = validate_physical(values)
@@ -1777,9 +1876,9 @@ def admin_new_profile():
                 db.commit()
             except psycopg.errors.UniqueViolation:
                 db.rollback()
-                error = "That username is already taken."
+                error = t("msg.username_taken")
             else:
-                flash(f"Profile for {values['name']} (@{username}) created.")
+                flash(t("msg.profile_created", name=values["name"], username=username))
                 return redirect(url_for("view_profile", user_id=new_id))
 
         flash(error)
@@ -2284,7 +2383,7 @@ def live_search():
     """
     me = require_profile()
     if me is None:
-        flash("Fill in your profile first so others can match with you.")
+        flash(t("msg.fill_profile_first"))
         return redirect(url_for("edit_profile"))
 
     if request.method == "POST":
@@ -2335,9 +2434,9 @@ def live_search():
 
         error = None
         if wanted not in RELATIONSHIP_TYPES:
-            error = "Please choose what kind of connection you want."
+            error = t("msg.choose_connection")
         elif seeking not in SEEKING_OPTIONS:
-            error = "Please choose who you're looking for."
+            error = t("msg.choose_seeking")
 
         if error:
             flash(error)
@@ -2406,7 +2505,7 @@ def search_criteria():
     user_id = session["user_id"]
     me = require_profile()
     if me is None:
-        flash("Fill in your profile first so others can match with you.")
+        flash(t("msg.fill_profile_first"))
         return redirect(url_for("edit_profile"))
 
     wanted = request.values.get("relationship_type", "")
@@ -2442,21 +2541,21 @@ def search_criteria():
 
         error = None
         if seeking and seeking not in SEEKING_OPTIONS:
-            error = "Please choose who you're looking for."
+            error = t("msg.choose_seeking")
 
         try:
             age_min = int(request.form.get("age_min", AGE_MIN_YEARS))
             age_max = int(request.form.get("age_max", AGE_MAX_YEARS))
             radius_km = int(request.form.get("radius_km", RADIUS_MAX_KM))
         except ValueError:
-            error = "Please check the age range and radius."
+            error = t("msg.check_age_radius")
             age_min, age_max, radius_km = AGE_MIN_YEARS, AGE_MAX_YEARS, RADIUS_MAX_KM
 
         if error is None:
             if not AGE_MIN_YEARS <= age_min <= age_max <= AGE_MAX_YEARS:
                 error = f"Age range must run from {AGE_MIN_YEARS} up to {AGE_MAX_YEARS}."
             elif not 1 <= radius_km <= RADIUS_MAX_KM:
-                error = f"Radius must be between 1 and {RADIUS_MAX_KM} km."
+                error = t("msg.radius_range", max=RADIUS_MAX_KM)
 
         phys = {}
         if error is None:
@@ -2903,12 +3002,12 @@ def search_summary_chips(search):
     """
     chips = []
     if search["relationship_type"]:
-        chips.append(search["relationship_type"])
-    chips.append(search["seeking"] or "Anyone")
+        chips.append(opt_label_for(search["relationship_type"]))
+    chips.append(opt_label_for(search["seeking"]) or t("chip.anyone"))
     if search["use_age"]:
         chips.append(f"{search['age_min']}–{search['age_max']}")
     else:
-        chips.append("Any age")
+        chips.append(t("chip.any_age"))
     # While there is only one city, naming it says nothing about what this
     # search is looking for -- it is true of everyone by construction.
     if search["location"] and not SINGLE_CITY:
@@ -3004,7 +3103,7 @@ def search_cancel():
         (session["user_id"],),
     )
     db.commit()
-    flash("Search stopped.")
+    flash(t("msg.search_stopped"))
     return redirect(url_for("live_search"))
 
 
@@ -3251,14 +3350,14 @@ def relative_time_label(when):
         return ""
     seconds = int((dt.now(timezone.utc) - when).total_seconds())
     if seconds < 60:
-        return "now"
+        return t("time.now")
     minutes = seconds // 60
     if minutes < 60:
-        return f"{minutes}m"
+        return t("time.minutes", n=minutes)
     hours = minutes // 60
     if hours < 24:
-        return f"{hours}h"
-    return f"{hours // 24}d"
+        return t("time.hours", n=hours)
+    return t("time.days", n=hours // 24)
 
 
 @app.route("/chats")
@@ -3329,12 +3428,12 @@ def chat(match_id):
     match, profiles = get_match_participants(match_id)
     user = current_user()
     if match is None:
-        flash("That chatroom does not exist.")
+        flash(t("msg.no_such_room"))
         return redirect(url_for("chats"))
 
     is_participant = user["id"] in (match["user_a"], match["user_b"])
     if not is_participant and not user["is_admin"]:
-        flash("That chatroom is private.")
+        flash(t("msg.room_private"))
         return redirect(url_for("chats"))
 
     if is_participant:
@@ -3678,27 +3777,27 @@ def send_message(match_id):
         return redirect(url_for(target, **kwargs))
 
     if match is None:
-        return fail("That chatroom does not exist.", 404)
+        return fail(t("msg.no_such_room"), 404)
 
     body = request.form.get("body", "").strip()
     # Messages are always sent as the logged-in user, who must be one
     # of the two matched participants.
     sender_id = session["user_id"]
     if sender_id not in (match["user_a"], match["user_b"]):
-        return fail("Only the two matched members can write in this chatroom.", 403)
+        return fail(t("msg.only_matched_write"), 403)
 
     # The 5-minute lock is server-authoritative: a disabled composer in the
     # browser is not enough, since this endpoint can be hit directly.
     match = resolve_match(match_id) or match
     phase = match_phase(match)
     if phase not in ("timed", "active"):
-        msg = "The match hasn't opened for chat yet." if phase == "reveal" \
-            else "Time's up — press Continue or Unmatch to move on." if phase == "deciding" \
-            else "This match has ended."
+        msg = t("msg.not_open_yet") if phase == "reveal" \
+            else t("msg.times_up_decide") if phase == "deciding" \
+            else t("msg.match_ended")
         return fail(msg, 409)
 
     if not body:
-        return fail("Message can't be empty.", 400)
+        return fail(t("msg.empty_message"), 400)
 
     db = get_db()
     new_id = db.insert_returning_id(

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Chat — Velvt{% endblock %}
+{% block title %}{{ t('chat.title') }}{% endblock %}
 {% block content %}
 {% set left = profiles[0] %}
 {% set right = profiles[1] %}
@@ -25,7 +25,7 @@
 {% if is_participant and phase == 'reveal' %}
   <div class="wiz match">
     <div class="wiz-body">
-      <p class="wiz-count">Match found</p>
+      <p class="wiz-count">{{ t('chat.match_found') }}</p>
 
       {# photos are still locked this early, so these are hatched stand-ins #}
       <div class="pair">
@@ -33,12 +33,12 @@
         <span class="ph"></span>
       </div>
 
-      <h1 class="wiz-q">You matched with<br>{{ other['name'] }}{% if other['age'] %}, {{ other['age'] }}{% endif %}</h1>
+      <h1 class="wiz-q">{{ t('chat.you_matched') }}<br>{{ other['name'] }}{% if other['age'] %}, {{ other['age'] }}{% endif %}</h1>
       <p class="wiz-hint">
-        You were both looking for each other. Photos unlock once you both continue.
+        {{ t('chat.reveal_note') }}
       </p>
       <p class="match-line">
-        <span class="live-dot"></span>{{ other['name'] }} is already in the room
+        <span class="live-dot"></span>{{ t('chat.already_here', name=other['name']) }}
       </p>
 
       {% if reveal_chips %}
@@ -49,7 +49,7 @@
           {% endfor %}
         </div>
         <p class="match-note">
-          Ask {{ reveal_pronoun }} about <strong>{{ reveal_highlight }}</strong>.
+          {{ t('chat.ask_about', pronoun=reveal_pronoun) }} <strong>{{ reveal_highlight }}</strong>.
         </p>
       {% else %}
         <p class="match-note">{{ match_reason }}</p>
@@ -59,10 +59,10 @@
            style="--deg: {{ (state.seconds_left / reveal_seconds * 360) | round | int }}deg;">
         <div class="ring-inner">
           <span class="ring-num" id="reveal-count">{{ state.seconds_left }}</span>
-          <span class="ring-unit">seconds</span>
+          <span class="ring-unit">{{ t('chat.seconds') }}</span>
         </div>
       </div>
-      <p class="match-note is-aside">Say yes to start now — or wait, and the chat opens on its own.</p>
+      <p class="match-note is-aside">{{ t('chat.reveal_aside') }}</p>
     </div>
 
     {# Accepting is implicit — waiting is the yes. Leaving needs a button
@@ -71,11 +71,11 @@
     <div class="wiz-nav">
       <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}">
         <input type="hidden" name="choice" value="unmatch">
-        <button class="wiz-skip wiz-skip-danger" type="submit">Not this one</button>
+        <button class="wiz-skip wiz-skip-danger" type="submit">{{ t('chat.not_this_one') }}</button>
       </form>
       <form method="post" action="{{ url_for('match_skip_reveal', match_id=match['id']) }}"
             class="wiz-nav-end">
-        <button class="wiz-go" type="submit">Yes, start chatting</button>
+        <button class="wiz-go" type="submit">{{ t('chat.yes_start') }}</button>
       </form>
     </div>
   </div>
@@ -83,11 +83,11 @@
 {% elif is_participant and phase == 'deciding' %}
   <div class="wiz match wiz-fit">
     <div class="wiz-body">
-      <p class="wiz-count">Time's up</p>
-      <h1 class="wiz-q">Continue with<br>{{ other['name'] }}?</h1>
+      <p class="wiz-count">{{ t('chat.times_up') }}</p>
+      <h1 class="wiz-q">{{ t('chat.continue_with') }}<br>{{ other['name'] }}?</h1>
       <p class="wiz-hint">
-        Your five minutes are over.
-        {% if state.their_decision %}{{ other['name'] }} has already decided.{% endif %}
+        {{ t('chat.five_over') }}
+        {% if state.their_decision %}{{ t('chat.they_decided', name=other['name']) }}{% endif %}
       </p>
 
       <div class="chat-log" id="chat-log-static" data-their-read-id="{{ their_read_id or 0 }}">
@@ -99,8 +99,8 @@
 
       {% if state.my_decision %}
         <p class="match-note">
-          You chose <strong>{{ 'Continue' if state.my_decision == 'continue' else 'Unmatch' }}</strong>.
-          Waiting for {{ other['name'] }}…
+          {{ t('chat.you_chose', choice='<strong>' ~ (t('chat.continue_word') if state.my_decision == 'continue' else t('chat.unmatch_word')) ~ '</strong>') | safe }}
+          {{ t('chat.waiting_for', name=other['name']) }}
         </p>
         <div id="decision-status" data-state-url="{{ url_for('match_state', match_id=match['id']) }}" data-chat-url="{{ url_for('chat', match_id=match['id']) }}"></div>
       {% endif %}
@@ -110,9 +110,9 @@
       <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
             class="wiz-nav" id="decision-form">
         <input type="hidden" name="choice" id="decision-choice" value="">
-        <button class="wiz-skip wiz-skip-danger" type="submit" data-choice="unmatch">Unmatch</button>
+        <button class="wiz-skip wiz-skip-danger" type="submit" data-choice="unmatch">{{ t('chat.unmatch_word') }}</button>
         <span class="wiz-nav-end">
-          <button class="wiz-go" type="submit" data-choice="continue">Continue match</button>
+          <button class="wiz-go" type="submit" data-choice="continue">{{ t('chat.continue_match') }}</button>
         </span>
       </form>
     {% endif %}
@@ -121,13 +121,13 @@
 {% elif is_participant and phase == 'ended' %}
   <div class="wiz match wiz-fit">
     <div class="wiz-body">
-      <p class="wiz-count">Match ended</p>
-      <h1 class="wiz-q">This one's<br>over</h1>
+      <p class="wiz-count">{{ t('chat.match_ended') }}</p>
+      <h1 class="wiz-q">{{ t('chat.over_1') }}<br>{{ t('chat.over_2') }}</h1>
       <p class="wiz-hint">
         {% if state.my_decision == 'unmatch' or state.their_decision == 'unmatch' %}
-          One of you chose to unmatch.
+          {{ t('chat.one_unmatched') }}
         {% else %}
-          The decision window closed without an answer from both sides.
+          {{ t('chat.window_closed') }}
         {% endif %}
       </p>
       <div class="chat-log" id="chat-log-static" data-their-read-id="{{ their_read_id or 0 }}">
@@ -138,9 +138,9 @@
       </div>
     </div>
     <div class="wiz-nav">
-      <a class="wiz-skip" href="{{ url_for('chats') }}">Your chats</a>
+      <a class="wiz-skip" href="{{ url_for('chats') }}">{{ t('chat.your_chats') }}</a>
       <span class="wiz-nav-end">
-        <a class="wiz-go wiz-go-violet" href="{{ url_for('live_search') }}">Search again</a>
+        <a class="wiz-go wiz-go-violet" href="{{ url_for('live_search') }}">{{ t('chat.search_again') }}</a>
       </span>
     </div>
   </div>
@@ -151,7 +151,7 @@
     {# 'timed' or 'active', and non-participant (admin) viewers of any phase #}
     {% if is_participant %}
       <div class="chat-head">
-        <a class="chat-back" href="{{ url_for('chats') }}" aria-label="Back to chats">&lsaquo;</a>
+        <a class="chat-back" href="{{ url_for('chats') }}" aria-label="{{ t('chat.back_aria') }}">&lsaquo;</a>
         {% if other_photo_id %}
           <img class="avatar" src="{{ url_for('photo', photo_id=other_photo_id) }}"
                alt="{{ other['name'] }}">
@@ -165,10 +165,10 @@
           </a>
           <p class="chat-head-live">
             <span class="live-dot"></span>
-            <span id="live-status">live</span>
+            <span id="live-status">{{ t('chat.live') }}</span>
           </p>
         </div>
-        {% if phase == 'active' %}<span class="tag">Matched</span>{% endif %}
+        {% if phase == 'active' %}<span class="tag">{{ t('chat.matched_tag') }}</span>{% endif %}
       </div>
 
       {% if phase == 'timed' %}
@@ -183,17 +183,16 @@
             </div>
           </div>
           <div>
-            <div class="room-timer-label">Time left in this room</div>
+            <div class="room-timer-label">{{ t('chat.time_left') }}</div>
             <p>
-              If neither of you continues, the room closes and nobody is told
-              who hesitated.
+              {{ t('chat.neither_note') }}
             </p>
           </div>
         </div>
       {% endif %}
     {% else %}
       <div class="chat-head">
-        <a class="chat-back" href="{{ url_for('chats') }}" aria-label="Back to chats">&lsaquo;</a>
+        <a class="chat-back" href="{{ url_for('chats') }}" aria-label="{{ t('chat.back_aria') }}">&lsaquo;</a>
         <span class="avatar ph"></span>
         <div class="chat-head-main">
           <span class="chat-head-name">{{ left['name'] }} &amp; {{ right['name'] }}</span>
@@ -202,11 +201,11 @@
             <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">@{{ left['username'] }}</a>
             &middot;
             <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">@{{ right['username'] }}</a>
-            &middot; <span id="live-status">live</span>
+            &middot; <span id="live-status">{{ t('chat.live') }}</span>
           </p>
         </div>
         <span class="tag{% if phase != 'active' %} tag-timed{% endif %}">
-          {% if phase == 'active' %}Matched{% else %}Timed{% endif %}
+          {% if phase == 'active' %}{{ t('chat.matched_tag') }}{% else %}{{ t('chat.timed_tag') }}{% endif %}
         </span>
       </div>
     {% endif %}
@@ -229,7 +228,7 @@
         {{ bubble(msg, side, is_participant and side == 'right') }}
       {% endfor %}
       <p class="muted" id="empty-note" {% if messages %}hidden{% endif %} style="margin: 0;">
-        No messages yet — break the ice!
+        {{ t('chat.no_messages') }}
       </p>
     </div>
 
@@ -239,7 +238,7 @@
       {% if state.my_decision %}
         <p class="match-line" style="margin: 0.8rem 0 0;">
           <span class="live-dot"></span>
-          You chose {{ 'to continue' if state.my_decision == 'continue' else 'to unmatch' }} — waiting for {{ other['name'] }}
+          {{ t('chat.you_chose_inline', choice=(t('chat.to_continue') if state.my_decision == 'continue' else t('chat.to_unmatch')), name=other['name']) }}
         </p>
       {% else %}
         <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
@@ -248,13 +247,13 @@
           <p class="match-line">
             <span class="live-dot"></span>
             {% if state.their_decision %}
-              {{ other['name'] }} has already decided
+              {{ t('chat.they_decided', name=other['name']) }}
             {% else %}
-              {{ other['name'] }} hasn't decided yet
+              {{ t('chat.not_decided', name=other['name']) }}
             {% endif %}
           </p>
-          <button class="wiz-skip wiz-skip-danger" type="submit" data-choice="unmatch">Unmatch</button>
-          <button class="wiz-go wiz-go-sm" type="submit" data-choice="continue">Continue</button>
+          <button class="wiz-skip wiz-skip-danger" type="submit" data-choice="unmatch">{{ t('chat.unmatch_word') }}</button>
+          <button class="wiz-go wiz-go-sm" type="submit" data-choice="continue">{{ t('chat.continue_word') }}</button>
         </form>
       {% endif %}
     {% endif %}
@@ -263,15 +262,15 @@
     {% if is_participant %}
       <div class="wiz-nav">
         <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
-          <input type="text" name="body" id="chat-input" placeholder="Type a message…"
+          <input type="text" name="body" id="chat-input" placeholder="{{ t('chat.input_ph') }}"
                  autofocus required autocomplete="off">
-          <button class="btn btn-send" type="submit" aria-label="Send">&#8593;</button>
+          <button class="btn btn-send" type="submit" aria-label="{{ t('chat.send') }}">&#8593;</button>
         </form>
       </div>
     {% else %}
       <div class="wiz-nav">
         <p class="match-line" style="margin: 0;">
-          Admin view — only the two matched members can write here
+          {{ t('chat.admin_view') }}
         </p>
       </div>
     {% endif %}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Live search — Velvt{% endblock %}
+{% block title %}{{ t('wiz.title') }}{% endblock %}
 {% block content %}
 {# Six questions, one visible at a time. Every step is in this one form and
    the stepping happens in the browser, so answering a question never costs a
@@ -10,12 +10,14 @@
 
   <div class="wiz-progress" aria-hidden="true"><span id="wiz-bar"></span></div>
 
-  <p class="wiz-count" id="wiz-count">Step 1 of 6</p>
+  {# no-JS initial value; the stepper rewrites it from the real step count #}
+  {% set step_total = 5 if single_city else 6 %}
+  <p class="wiz-count" id="wiz-count">{{ t('wiz.step', n=1, total=step_total) }}</p>
 
   <div class="wiz-body">
   {# ---- 1. connection type ------------------------------------------- #}
   <section class="wiz-step" data-step="1" data-required="relationship_type">
-    <h1 class="wiz-q">What are you<br>looking for?</h1>
+    <h1 class="wiz-q">{{ t('wiz.q_relationship_1') }}<br>{{ t('wiz.q_relationship_2') }}</h1>
     <div class="opt-list">
       {% set rel_icons = {
         'Long-term relationship': 'M12 20.2s-7.8-4.6-10-9.3C.4 7.4 2.6 4 6.2 4c2 0 3.7 1 4.8 2.6C12.1 5 13.8 4 15.8 4c3.6 0 5.8 3.4 4.2 6.9-2.2 4.7-10 9.3-10 9.3Z',
@@ -43,7 +45,7 @@
               {% endif %}
             </svg>
           </span>
-          <span class="opt-label">{{ rt }}</span>
+          <span class="opt-label">{{ opt_label(rt) }}</span>
           <span class="opt-mark"></span>
         </label>
       {% endfor %}
@@ -52,7 +54,7 @@
 
   {# ---- 2. gender ---------------------------------------------------- #}
   <section class="wiz-step" data-step="2" data-required="seeking">
-    <h1 class="wiz-q">Who are you<br>looking for?</h1>
+    <h1 class="wiz-q">{{ t('wiz.q_seeking_1') }}<br>{{ t('wiz.q_seeking_2') }}</h1>
     <div class="opt-list">
       {% for opt in seeking_options %}
         <label class="opt opt-{{ loop.index }}">
@@ -79,7 +81,7 @@
               {% endif %}
             </svg>
           </span>
-          <span class="opt-label">{{ opt }}</span>
+          <span class="opt-label">{{ opt_label(opt) }}</span>
           <span class="opt-mark"></span>
         </label>
       {% endfor %}
@@ -88,9 +90,9 @@
 
   {# ---- 3. age ------------------------------------------------------- #}
   <section class="wiz-step" data-step="3">
-    <h1 class="wiz-q">What age are<br>you after?</h1>
+    <h1 class="wiz-q">{{ t('wiz.q_age_1') }}<br>{{ t('wiz.q_age_2') }}</h1>
     <p class="wiz-hint">
-      Leave it at the full span for no preference.
+      {{ t('wiz.hint_age') }}
     </p>
     <div class="wiz-field">
       <p class="wiz-readout" id="age-value"></p>
@@ -101,11 +103,11 @@
         <input type="range" id="age_min" name="age_min"
                min="{{ age_min_bound }}" max="{{ age_max_bound }}"
                value="{{ existing['age_min'] if existing else age_min_bound }}"
-               aria-label="Minimum age">
+               aria-label="{{ t('wiz.age_min_aria') }}">
         <input type="range" id="age_max" name="age_max"
                min="{{ age_min_bound }}" max="{{ age_max_bound }}"
                value="{{ existing['age_max'] if existing else age_max_bound }}"
-               aria-label="Maximum age">
+               aria-label="{{ t('wiz.age_max_aria') }}">
       </div>
     </div>
   </section>
@@ -117,10 +119,9 @@
      so omitting this section renumbers the wizard on its own. #}
   {% if not single_city %}
   <section class="wiz-step" data-step="4">
-    <h1 class="wiz-q">Where are you<br>searching?</h1>
+    <h1 class="wiz-q">{{ t('wiz.q_location_1') }}<br>{{ t('wiz.q_location_2') }}</h1>
     <p class="wiz-hint">
-      We won't filter by distance — this only helps people who do filter by it
-      find you.
+      {{ t('wiz.hint_location') }}
     </p>
     <div class="wiz-field">
       {% with loc_label = 'Location',
@@ -138,10 +139,9 @@
   {# The value the server reads is this hidden CSV; the chips below (and the
      overlay) are just two ways of editing it, so it stays one field. #}
   <section class="wiz-step" data-step="5">
-    <h1 class="wiz-q">Share any<br>interests?</h1>
+    <h1 class="wiz-q">{{ t('wiz.q_interests_1') }}<br>{{ t('wiz.q_interests_2') }}</h1>
     <p class="wiz-hint">
-      Pick none for no preference, or up to {{ interest_max }} to only meet
-      people who share at least one.
+      {{ t('wiz.hint_interests', max=interest_max) }}
     </p>
     <input type="hidden" id="interests" name="interests"
            value="{{ existing['interests'] if existing else '' }}">
@@ -150,22 +150,22 @@
          so a pick made in the overlay is still visible on the step #}
       {% for opt in interest_chosen if opt not in interest_common %}
         <button type="button" class="pill is-on" data-value="{{ opt }}"
-                aria-pressed="true">{{ opt }}</button>
+                aria-pressed="true">{{ interest_text(opt) }}</button>
       {% endfor %}
       {% for opt in interest_common %}
         <button type="button" class="pill{% if opt in interest_chosen %} is-on{% endif %}"
                 data-value="{{ opt }}"
-                aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ opt }}</button>
+                aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ interest_text(opt) }}</button>
       {% endfor %}
       <button type="button" class="pill pill-more" id="interest-more"
-              aria-haspopup="dialog">+ More</button>
+              aria-haspopup="dialog">{{ t('wiz.more') }}</button>
     </div>
   </section>
 
   {# ---- 6. body type ------------------------------------------------- #}
   <section class="wiz-step" data-step="6">
-    <h1 class="wiz-q">Any body type<br>in mind?</h1>
-    <p class="wiz-hint">Pick as many as you like, or none for no preference.</p>
+    <h1 class="wiz-q">{{ t('wiz.q_body_1') }}<br>{{ t('wiz.q_body_2') }}</h1>
+    <p class="wiz-hint">{{ t('wiz.hint_body') }}</p>
     <div class="opt-list opt-list-2col">
       {% for bt in body_types %}
         <label class="opt opt-{{ loop.index }}">
@@ -179,7 +179,7 @@
                     stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
             </svg>
           </span>
-          <span class="opt-label">{{ bt }}</span>
+          <span class="opt-label">{{ opt_label(bt) }}</span>
           <span class="opt-mark opt-mark-box"></span>
         </label>
       {% endfor %}
@@ -189,15 +189,15 @@
   </div>
 
   <div class="wiz-nav">
-    <button type="button" class="wiz-back" id="wiz-back" aria-label="Previous step">
+    <button type="button" class="wiz-back" id="wiz-back" aria-label="{{ t('wiz.back_aria') }}">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </button>
     <div class="wiz-nav-end">
-      <button type="button" class="wiz-skip" id="wiz-skip">Skip</button>
-      <button type="submit" class="wiz-next" id="wiz-next" aria-label="Next step">
+      <button type="button" class="wiz-skip" id="wiz-skip">{{ t('wiz.skip') }}</button>
+      <button type="submit" class="wiz-next" id="wiz-next" aria-label="{{ t('wiz.next_aria') }}">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round"/>
@@ -212,8 +212,8 @@
     <div class="sheet-panel" role="dialog" aria-modal="true"
          aria-labelledby="interest-sheet-title">
       <div class="sheet-head">
-        <h2 id="interest-sheet-title">All interests</h2>
-        <button type="button" class="sheet-x" data-close aria-label="Close">
+        <h2 id="interest-sheet-title">{{ t('wiz.sheet_title') }}</h2>
+        <button type="button" class="sheet-x" data-close aria-label="{{ t('wiz.sheet_close') }}">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2"
                   stroke-linecap="round"/>
@@ -226,17 +226,17 @@
           {% for opt in interest_all %}
             <button type="button" class="pill{% if opt in interest_chosen %} is-on{% endif %}"
                     data-value="{{ opt }}"
-                    aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ opt }}</button>
+                    aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ interest_text(opt) }}</button>
           {% endfor %}
         </div>
       </div>
       <div class="sheet-add">
         <input type="text" id="interest-custom" maxlength="30"
-               placeholder="Something else…" aria-label="Add your own interest">
-        <button type="button" class="btn btn-secondary" id="interest-add">Add</button>
+               placeholder="{{ t('wiz.custom_ph') }}" aria-label="{{ t('wiz.custom_aria') }}">
+        <button type="button" class="btn btn-secondary" id="interest-add">{{ t('wiz.add') }}</button>
       </div>
       <div class="sheet-foot">
-        <button type="button" class="btn btn-block" data-close>Done</button>
+        <button type="button" class="btn btn-block" data-close>{{ t('wiz.done') }}</button>
       </div>
     </div>
   </div>
@@ -273,7 +273,8 @@
   function render() {
     steps.forEach(function (s, i) { s.classList.toggle("is-on", i === at); });
     bar.style.width = ((at + 1) / steps.length * 100) + "%";
-    count.textContent = "Step " + (at + 1) + " of " + steps.length;
+    count.textContent = {{ t('wiz.step', n='@N@', total='@T@') | tojson }}
+      .replace("@N@", at + 1).replace("@T@", steps.length);
     // visibility, not display: Back and Skip keep their space when hidden so
     // Next never shifts by a pixel between steps.
     back.classList.toggle("is-hidden", at === 0);
@@ -281,7 +282,7 @@
     // ones offer Skip instead, so the button never looks enabled-but-dead.
     skip.classList.toggle("is-hidden", !!required(at) || at === last);
     next.classList.toggle("is-final", at === last);
-    next.setAttribute("aria-label", at === last ? "Start searching" : "Next step");
+    next.setAttribute("aria-label", at === last ? {{ t('wiz.start_aria') | tojson }} : {{ t('wiz.next_aria') | tojson }});
     // The submit only ever belongs to the last step. Everywhere else the
     // click is intercepted below, but typing Enter in a text field would
     // otherwise post a half-finished form.
@@ -382,7 +383,7 @@
     var hidden = on.filter(function (v) {
       return !inlinePills.querySelector('.pill[data-value="' + CSS.escape(v) + '"]');
     }).length;
-    moreBtn.textContent = hidden ? "+ More · " + hidden : "+ More";
+    moreBtn.textContent = hidden ? {{ t('wiz.more') | tojson }} + " · " + hidden : {{ t('wiz.more') | tojson }};
   }
 
   function toggleInterest(value) {
