@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Edit profile — Velvt{% endblock %}
+{% block title %}{{ t("edit.title") }}{% endblock %}
 {% block content %}
 {# The wizard's column with a document in the middle: the compact bar is
    the pinned head, the fields scroll under it, and Save sits where Next
@@ -7,8 +7,8 @@
 <div class="wiz edit-screen wiz-fit">
   <div class="edit-head">
     <a class="chat-back" href="{{ url_for('view_profile', user_id=current_user['id']) }}"
-       aria-label="Back to your profile">&lsaquo;</a>
-    <span class="edit-head-title">Edit profile</span>
+       aria-label="{{ t('edit.back') }}">&lsaquo;</a>
+    <span class="edit-head-title">{{ t("edit.heading") }}</span>
   </div>
 
   <div class="wiz-body wiz-scroll">
@@ -21,7 +21,7 @@
       {% if strength_pct is defined %}
         <div class="field-group">
           <div class="strength-head">
-            <span class="eyebrow">Profile strength</span>
+            <span class="eyebrow">{{ t("edit.strength") }}</span>
             <span class="strength-value">{{ strength_pct }}%</span>
           </div>
           <div class="strength-bar">
@@ -45,7 +45,7 @@
 
   {# outside the scroller, so it submits the form by id rather than by nesting #}
   <div class="wiz-nav wiz-nav-block">
-    <button class="btn btn-block" type="submit" form="profile-form">Save changes</button>
+    <button class="btn btn-block" type="submit" form="profile-form">{{ t("edit.save_changes") }}</button>
   </div>
 </div>
 {% endblock %}

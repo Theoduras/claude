@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Searching… — Velvt{% endblock %}
+{% block title %}{{ t("waiting.title") }}{% endblock %}
 {% block content %}
 {# Same column shape as the wizard this screen follows on from: a fixed
    header, the content centred in the space between, and the action pinned
@@ -16,10 +16,10 @@
       <div class="pulse-heart"></div>
     </div>
 
-    <p class="wiz-count">Searching</p>
-    <h1 class="wiz-q">Feeling for<br>a match</h1>
+    <p class="wiz-count">{{ t("waiting.eyebrow") }}</p>
+    <h1 class="wiz-q">{{ t("waiting.heading_1") }}<br>{{ t("waiting.heading_2") }}</h1>
     <p class="wiz-hint" id="status-line">
-      Looking for someone who fits — and who's looking for you.
+      {{ t("waiting.phrase_1") }}
     </p>
 
     <p class="waiting-meta">
@@ -28,7 +28,7 @@
       <span id="waiting-count">{{ state.waiting }} searching</span>
       <span id="waiting-fits-wrap"{% if not state.fits %} hidden{% endif %}>
         <span aria-hidden="true">·</span>
-        <span class="waiting-fits" id="waiting-fits">{{ state.fits }} fit</span>
+        <span class="waiting-fits" id="waiting-fits">{{ t("waiting.fits_n", n=state.fits) }}</span>
       </span>
     </p>
 
@@ -40,7 +40,7 @@
        screen readers get the disclosure semantics for free. #}
     <details class="filters-fold" id="filters-fold">
       <summary>
-        <span class="filters-fold-label">Your filters</span>
+        <span class="filters-fold-label">{{ t("waiting.filters_label") }}</span>
         <span class="filters-fold-count" id="chip-count">{{ state.chips | length }}</span>
       </summary>
       <div class="pillset" id="chip-row">
@@ -58,22 +58,21 @@
        neither can shove the nav row down when it arrives. #}
     <div class="waiting-fix">
       <p class="waiting-none" id="waiting-none"{% if state.fits %} hidden{% endif %}>
-        Nobody searching right now fits all of this. You'll be paired the
-        moment someone does — or open your filters above to change one.
+        {{ t("waiting.none_open") }}
       </p>
 
       <button type="button" class="btn btn-secondary btn-block waiting-wider"
               id="wider-btn"{% if not state.relax_all.offer %} hidden{% endif %}>
-        Search wider — {{ state.relax_all.count }} fit
+        {{ t("waiting.wider_n", n=state.relax_all.count) }}
       </button>
     </div>
   </div>
 
   <div class="wiz-nav">
-    <a class="wiz-skip" href="{{ url_for('live_search') }}">Change</a>
+    <a class="wiz-skip" href="{{ url_for('live_search') }}">{{ t("waiting.change") }}</a>
     <form method="post" action="{{ url_for('search_cancel') }}" class="wiz-nav-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="btn btn-secondary wiz-stop" type="submit">Stop searching</button>
+      <button class="btn btn-secondary wiz-stop" type="submit">{{ t("waiting.stop") }}</button>
     </form>
   </div>
 </div>
@@ -85,10 +84,10 @@
   <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="filter-sheet-title">
     <div class="sheet-head">
       <div>
-        <p class="sheet-eyebrow">Change what you're after</p>
-        <h2 id="filter-sheet-title">Filter</h2>
+        <p class="sheet-eyebrow">{{ t("waiting.change_what") }}</p>
+        <h2 id="filter-sheet-title">{{ t("waiting.filter_aria") }}</h2>
       </div>
-      <button type="button" class="sheet-x" data-close aria-label="Close">
+      <button type="button" class="sheet-x" data-close aria-label="{{ t('sheet.close') }}">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round"/>
@@ -102,7 +101,7 @@
        pick: a single-value one closes itself on the tap that answers it.
        Same foot/button pattern as the wizard's interest picker. #}
     <div class="sheet-foot">
-      <button type="button" class="btn btn-block" data-close>Done</button>
+      <button type="button" class="btn btn-block" data-close>{{ t("wiz.done") }}</button>
     </div>
   </div>
 </div>
@@ -152,12 +151,17 @@
   // The pairing attempt below only starts returning a match once the search
   // has run for a few seconds (MIN_SEARCH_SECONDS server-side). Cycling the
   // line gives that wait something to show rather than one frozen sentence.
+  {# Rendered by Jinja rather than held as literals, so the cycling line
+     speaks the reader's language like everything else on the screen. #}
   var PHRASES = [
-    "Looking for someone who fits — and who's looking for you.",
-    "Checking who's searching right now…",
-    "Matching your filters against theirs…",
-    "Both sides have to fit — holding out for that…"
+    {{ t("waiting.phrase_1") | tojson }},
+    {{ t("waiting.phrase_2") | tojson }},
+    {{ t("waiting.phrase_3") | tojson }},
+    {{ t("waiting.phrase_4") | tojson }}
   ];
+  // The catalogue writes counts as "{n} searching"; the browser fills the
+  // same slot the server does, so one string serves both.
+  function fmt(template, n) { return String(template).replace("{n}", n); }
   var phrase = 0;
   var connected = true;  // paused while reconnecting, so it can say so
   // A filter change has something specific to say, and the idle cycle would
@@ -204,16 +208,18 @@
   }
   function isMulti(key) { return !!MULTI[groupOf(key)]; }
 
+  {# The sheet's heading per filter group. Rendered by Jinja rather than
+     held in the script as literals, so it translates with everything else. #}
   var TITLES = {
-    gender: "Who are you looking for?",
-    age: "What age range?",
-    location: "Location",
-    relationship: "What kind of connection?",
-    interest: "Interests",
-    body: "Body type"
+    gender: {{ t("sheet.gender") | tojson }},
+    age: {{ t("sheet.age") | tojson }},
+    location: {{ t("sheet.location") | tojson }},
+    relationship: {{ t("sheet.relationship") | tojson }},
+    interest: {{ t("sheet.interest") | tojson }},
+    body: {{ t("sheet.body") | tojson }}
   };
   function titleFor(key) {
-    return TITLES[groupOf(key)] || "Filter";
+    return TITLES[groupOf(key)] || {{ t("waiting.filter_aria") | tojson }};
   }
 
   var state = null;  // last state payload, so a tap can render without a round-trip
@@ -236,10 +242,10 @@
     });
 
     chipCountEl.textContent = data.chips.length;
-    waitingCountEl.textContent = data.waiting + " searching";
+    waitingCountEl.textContent = fmt({{ t("waiting.searching_n") | tojson }}, data.waiting);
     if (data.fits) {
       waitingFitsWrap.hidden = false;
-      waitingFitsEl.textContent = data.fits + " fit";
+      waitingFitsEl.textContent = fmt({{ t("waiting.fits_n") | tojson }}, data.fits);
     } else {
       waitingFitsWrap.hidden = true;
     }
@@ -248,7 +254,7 @@
     if (data.relax_all.offer) {
       var wasHidden = widerBtn.hidden;
       widerBtn.hidden = false;
-      widerBtn.textContent = "Search wider — " + data.relax_all.count + " fit";
+      widerBtn.textContent = fmt({{ t("waiting.wider_n") | tojson }}, data.relax_all.count);
       if (wasHidden) {
         widerBtn.classList.remove("wiz-in");
         // restart the entrance animation on the newly-shown button
@@ -293,7 +299,8 @@
 
       var count = document.createElement("span");
       count.className = "sheet-opt-count" + (opt.count ? "" : " is-zero");
-      count.textContent = opt.count ? (opt.count + " fit") : "none yet";
+      count.textContent = opt.count ? fmt({{ t("waiting.fits_n") | tojson }}, opt.count)
+                                  : {{ t("waiting.none_yet") | tojson }};
       row.appendChild(count);
 
       row.addEventListener("click", function () { applyChip(chip.key, opt.value); });

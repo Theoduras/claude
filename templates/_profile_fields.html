@@ -1,25 +1,25 @@
 {% if sample_profile is defined %}
   <p style="margin-bottom: 1rem;">
-    <button type="button" class="btn btn-secondary btn-small" id="fill-all-btn">Fill everything</button>
+    <button type="button" class="btn btn-secondary btn-small" id="fill-all-btn">{{ t("form.fill_all") }}</button>
   </p>
   <script nonce="{{ csp_nonce() }}" id="sample-profile-data" type="application/json">{{ sample_profile | tojson }}</script>
 {% endif %}
 
 {# ---- who you are ----------------------------------------------------- #}
 <div class="field-group">
-  <h2>About you</h2>
+  <h2>{{ t("form.about_you") }}</h2>
 </div>
 
 <div class="field-pair">
   <div>
-    <label for="name">Name
-      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="name">Fill</button></span>{% endif %}
+    <label for="name">{{ t("form.name") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="name">{{ t("form.fill") }}</button></span>{% endif %}
     </label>
     <input id="name" name="name" type="text" value="{{ profile['name'] or '' }}" required>
   </div>
   <div>
-    <label for="age">Age
-      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="age">Fill</button></span>{% endif %}
+    <label for="age">{{ t("form.age") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="age">{{ t("form.fill") }}</button></span>{% endif %}
     </label>
     <input id="age" name="age" type="number" min="18" max="39"
            value="{{ profile['age'] or '' }}" required>
@@ -28,24 +28,24 @@
 
 <div class="field-pair">
   <div>
-    <label for="gender">Gender
-      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="gender">Fill</button></span>{% endif %}
+    <label for="gender">{{ t("form.gender") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="gender">{{ t("form.fill") }}</button></span>{% endif %}
     </label>
     <select id="gender" name="gender">
-      <option value="">— Select —</option>
+      <option value="">{{ t("form.select") }}</option>
       {% for g in genders %}
-        <option value="{{ g }}" {% if profile['gender'] == g %}selected{% endif %}>{{ g }}</option>
+        <option value="{{ g }}" {% if profile['gender'] == g %}selected{% endif %}>{{ opt_label(g) }}</option>
       {% endfor %}
     </select>
   </div>
   <div>
-    <label for="seeking">Looking for
-      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="seeking">Fill</button></span>{% endif %}
+    <label for="seeking">{{ t("form.seeking") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="seeking">{{ t("form.fill") }}</button></span>{% endif %}
     </label>
     <select id="seeking" name="seeking">
-      <option value="">— Select —</option>
+      <option value="">{{ t("form.select") }}</option>
       {% for s in seeking_options %}
-        <option value="{{ s }}" {% if profile['seeking'] == s %}selected{% endif %}>{{ s }}</option>
+        <option value="{{ s }}" {% if profile['seeking'] == s %}selected{% endif %}>{{ opt_label(s) }}</option>
       {% endfor %}
     </select>
   </div>
@@ -59,30 +59,30 @@
    fields below and lands when the form does. #}
 {% if allow_photos is defined and allow_photos %}
   <div class="field-group">
-    <h2>Photos</h2>
+    <h2>{{ t("form.photos") }}</h2>
   </div>
   <div class="photo-tiles" id="photo-tiles" data-max="{{ photo_max_per_user }}">
     {% for photo in (photos if photos is defined else []) %}
       <div class="photo-tile{% if photo['is_primary'] %} is-main{% endif %}"
            data-key="{{ photo['id'] }}">
-        <img src="{{ url_for('photo', photo_id=photo['id']) }}" alt="Your photo" loading="lazy">
+        <img src="{{ url_for('photo', photo_id=photo['id']) }}" alt="{{ t('profile.your_photo') }}" loading="lazy">
         {# two sibling buttons, not one inside the other: nesting them is
            invalid, and the corner x has to stay clickable on its own #}
         <button type="button" class="photo-main" data-main
-                aria-label="Make this the main photo"></button>
-        <button type="button" class="photo-x" data-remove aria-label="Remove this photo">
+                aria-label="{{ t('form.make_main') }}"></button>
+        <button type="button" class="photo-x" data-remove aria-label="{{ t('form.remove_photo') }}">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4"
                   stroke-linecap="round"/>
           </svg>
         </button>
-        <span class="photo-tile-label">main</span>
-        <button type="button" class="photo-undo" data-undo>Undo</button>
+        <span class="photo-tile-label">{{ t("form.main") }}</span>
+        <button type="button" class="photo-undo" data-undo>{{ t("form.undo") }}</button>
       </div>
     {% endfor %}
     {# the file input itself is offscreen; this label is the control #}
     <label class="photo-tile photo-tile-add" id="photo-add" for="photos"
-           title="Add photos">+</label>
+           title="{{ t('form.add_photos') }}">+</label>
   </div>
   <p class="hint" style="margin-top: 0;">
     Tap a photo to make it the main one, drag to reorder. Only visible to
@@ -101,20 +101,20 @@
    needs a name to search (require_profile()), and /search asks for
    location and connection type anyway. #}
 <details class="more-fields">
-  <summary>Add more</summary>
+  <summary>{{ t("form.add_more") }}</summary>
   <div class="more-fields-body">
 
 {# ---- bio ------------------------------------------------------------- #}
-<label for="bio">Bio
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="bio">Fill</button></span>{% endif %}
+<label for="bio">{{ t("form.bio") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="bio">{{ t("form.fill") }}</button></span>{% endif %}
 </label>
 <textarea id="bio" name="bio" maxlength="{{ bio_max }}"
-          placeholder="A few sentences about yourself...">{{ profile['bio'] or '' }}</textarea>
+          placeholder="{{ t('form.bio_ph') }}">{{ profile['bio'] or '' }}</textarea>
 <div class="char-count"><span id="bio-count">0</span> / {{ bio_max }}</div>
 
 {# ---- interests: chips over the free-text value ----------------------- #}
-<label for="interests">Interests
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="interests">Fill</button></span>{% endif %}
+<label for="interests">{{ t("form.interests") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="interests">{{ t("form.fill") }}</button></span>{% endif %}
 </label>
 {# the real field stays a plain CSV string; the chips just edit it #}
 <input type="hidden" id="interests" name="interests" value="{{ profile['interests'] or '' }}">
@@ -131,54 +131,54 @@
   {% include "_location_field.html" with context %}
 {% endwith %}
 
-<label for="relationship_type">Relationship type
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="relationship_type">Fill</button></span>{% endif %}
+<label for="relationship_type">{{ t("form.relationship_type") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="relationship_type">{{ t("form.fill") }}</button></span>{% endif %}
 </label>
 <select id="relationship_type" name="relationship_type">
-  <option value="">— Select —</option>
+  <option value="">{{ t("form.select") }}</option>
   {% for rt in relationship_types %}
-    <option value="{{ rt }}" {% if profile['relationship_type'] == rt %}selected{% endif %}>{{ rt }}</option>
+    <option value="{{ rt }}" {% if profile['relationship_type'] == rt %}selected{% endif %}>{{ opt_label(rt) }}</option>
   {% endfor %}
 </select>
 
-<label for="hobbies">Hobbies
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="hobbies">Fill</button></span>{% endif %}
+<label for="hobbies">{{ t("form.hobbies") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="hobbies">{{ t("form.fill") }}</button></span>{% endif %}
 </label>
-<textarea id="hobbies" name="hobbies" placeholder="e.g. hiking, gaming, painting">{{ profile['hobbies'] or '' }}</textarea>
+<textarea id="hobbies" name="hobbies" placeholder="{{ t('form.hobbies_ph') }}">{{ profile['hobbies'] or '' }}</textarea>
 
-<label for="wants">What I want
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="wants">Fill</button></span>{% endif %}
+<label for="wants">{{ t("form.wants") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="wants">{{ t("form.fill") }}</button></span>{% endif %}
 </label>
-<textarea id="wants" name="wants" placeholder="What you're hoping to find...">{{ profile['wants'] or '' }}</textarea>
+<textarea id="wants" name="wants" placeholder="{{ t('form.wants_ph') }}">{{ profile['wants'] or '' }}</textarea>
 
-<label for="needs">What I need
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="needs">Fill</button></span>{% endif %}
+<label for="needs">{{ t("form.needs") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="needs">{{ t("form.fill") }}</button></span>{% endif %}
 </label>
-<textarea id="needs" name="needs" placeholder="What matters most to you in a partner...">{{ profile['needs'] or '' }}</textarea>
+<textarea id="needs" name="needs" placeholder="{{ t('form.needs_ph') }}">{{ profile['needs'] or '' }}</textarea>
 
 {# ---- physical -------------------------------------------------------- #}
 <div class="field-group">
-  <h2>Physical attributes</h2>
-  <p class="subtitle">All optional — anything you leave blank is simply skipped when matching.</p>
+  <h2>{{ t("form.physical") }}</h2>
+  <p class="subtitle">{{ t("form.optional_note") }}</p>
 </div>
 
 <div class="field-pair">
   <div>
-    <label for="height_cm">Height (cm)
-      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="height_cm">Fill</button></span>{% endif %}
+    <label for="height_cm">{{ t("form.height_cm") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="height_cm">{{ t("form.fill") }}</button></span>{% endif %}
     </label>
     <input id="height_cm" name="height_cm" type="number"
            min="{{ height_min }}" max="{{ height_max }}"
-           value="{{ profile['height_cm'] or '' }}" placeholder="e.g. 175">
+           value="{{ profile['height_cm'] or '' }}" placeholder="{{ t('form.height_ph') }}">
   </div>
   <div>
-    <label for="eye_color">Eyes
-      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="eye_color">Fill</button></span>{% endif %}
+    <label for="eye_color">{{ t("form.eyes") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="eye_color">{{ t("form.fill") }}</button></span>{% endif %}
     </label>
     <select id="eye_color" name="eye_color">
-      <option value="">— Select —</option>
+      <option value="">{{ t("form.select") }}</option>
       {% for opt in eye_colors %}
-        <option value="{{ opt }}" {% if profile['eye_color'] == opt %}selected{% endif %}>{{ opt }}</option>
+        <option value="{{ opt }}" {% if profile['eye_color'] == opt %}selected{% endif %}>{{ opt_label(opt) }}</option>
       {% endfor %}
     </select>
   </div>
@@ -191,44 +191,41 @@
      ('tattoos', 'Tattoos', tattoo_levels),
    ] %}
   <label for="{{ field }}">{{ label }}
-    {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="{{ field }}">Fill</button></span>{% endif %}
+    {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="{{ field }}">{{ t("form.fill") }}</button></span>{% endif %}
   </label>
   <select id="{{ field }}" name="{{ field }}">
-    <option value="">— Select —</option>
+    <option value="">{{ t("form.select") }}</option>
     {% for opt in options %}
-      <option value="{{ opt }}" {% if profile[field] == opt %}selected{% endif %}>{{ opt }}</option>
+      <option value="{{ opt }}" {% if profile[field] == opt %}selected{% endif %}>{{ opt_label(opt) }}</option>
     {% endfor %}
   </select>
 {% endfor %}
 
 {# ---- what you're looking for ----------------------------------------- #}
 <div class="field-group">
-  <h2>What I'm looking for (physical)</h2>
-  <p class="subtitle">
-    These weigh heavily in your match ranking, and they count both ways — a
-    match scores well only when each of you fits what the other asked for.
-  </p>
+  <h2>{{ t("form.prefs_heading") }}</h2>
+  <p class="subtitle">{{ t("form.pref_note") }}</p>
 </div>
 
 <div class="field-pair">
   <div>
-    <label for="pref_height_min">Height from (cm)</label>
+    <label for="pref_height_min">{{ t("form.height_from") }}</label>
     <input id="pref_height_min" name="pref_height_min" type="number"
            min="{{ height_min }}" max="{{ height_max }}"
            value="{{ profile['pref_height_min'] or '' }}" placeholder="{{ height_min }}">
   </div>
   <div>
-    <label for="pref_height_max">Height to (cm)</label>
+    <label for="pref_height_max">{{ t("form.height_to") }}</label>
     <input id="pref_height_max" name="pref_height_max" type="number"
            min="{{ height_min }}" max="{{ height_max }}"
            value="{{ profile['pref_height_max'] or '' }}" placeholder="{{ height_max }}">
   </div>
 </div>
-<p class="hint">Set both or neither. Leave empty for no height preference.</p>
+<p class="hint">{{ t("form.height_note") }}</p>
 
 {% set chosen_body_types = (profile['pref_body_types'] or '').split(',') %}
 <label>Body types I'm drawn to
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="pref_body_types">Fill</button></span>{% endif %}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="pref_body_types">{{ t("form.fill") }}</button></span>{% endif %}
 </label>
 <div class="checkgroup">
   {% for bt in body_types %}
@@ -240,7 +237,7 @@
     </label>
   {% endfor %}
 </div>
-<p class="hint">Tick any that apply. None ticked means no preference.</p>
+<p class="hint">{{ t("form.tick_note") }}</p>
 
 {% for field, label, options in [
      ('pref_fitness_level', 'Preferred fitness level', fitness_levels),
@@ -249,12 +246,12 @@
      ('pref_tattoos', 'Preferred tattoos', tattoo_levels),
    ] %}
   <label for="{{ field }}">{{ label }}
-    {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="{{ field }}">Fill</button></span>{% endif %}
+    {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="{{ field }}">{{ t("form.fill") }}</button></span>{% endif %}
   </label>
   <select id="{{ field }}" name="{{ field }}">
-    <option value="">No preference</option>
+    <option value="">{{ t("crit.no_preference") }}</option>
     {% for opt in options %}
-      <option value="{{ opt }}" {% if profile[field] == opt %}selected{% endif %}>{{ opt }}</option>
+      <option value="{{ opt }}" {% if profile[field] == opt %}selected{% endif %}>{{ opt_label(opt) }}</option>
     {% endfor %}
   </select>
 {% endfor %}
@@ -361,16 +358,32 @@
       tile.className = "photo-tile";
       tile.dataset.key = key;
       tile._file = file;
+      {# The labels come through tojson rather than interpolated inside these
+         quoted fragments: a translation containing an apostrophe would
+         otherwise close the JavaScript string it sits in. tojson also does
+         the HTML-attribute escaping, so the built markup stays well formed
+         whatever the copy says. #}
+      var L = {
+        alt: {{ t("profile.your_photo") | tojson }},
+        makeMain: {{ t("form.make_main") | tojson }},
+        remove: {{ t("form.remove_photo") | tojson }},
+        main: {{ t("form.main") | tojson }},
+        undo: {{ t("form.undo") | tojson }}
+      };
+      function attr(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+                        .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
       tile.innerHTML =
-        '<img alt="Your photo">' +
+        '<img alt="' + attr(L.alt) + '">' +
         '<button type="button" class="photo-main" data-main' +
-        ' aria-label="Make this the main photo"></button>' +
-        '<button type="button" class="photo-x" data-remove aria-label="Remove this photo">' +
+        ' aria-label="' + attr(L.makeMain) + '"></button>' +
+        '<button type="button" class="photo-x" data-remove aria-label="' + attr(L.remove) + '">' +
         '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
         '<path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4"' +
         ' stroke-linecap="round"/></svg></button>' +
-        '<span class="photo-tile-label">main</span>' +
-        '<button type="button" class="photo-undo" data-undo>Undo</button>';
+        '<span class="photo-tile-label">' + attr(L.main) + '</span>' +
+        '<button type="button" class="photo-undo" data-undo>' + attr(L.undo) + '</button>';
       tile.querySelector("img").src = url;
       strip.insertBefore(tile, addSlot);
       controls(tile);

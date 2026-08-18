@@ -49,7 +49,19 @@ from flask import (
     session,
     url_for,
 )
+from markupsafe import Markup, escape
 from werkzeug.security import check_password_hash, generate_password_hash
+
+from translations import (
+    DEFAULT_LANGUAGE,
+    LANGUAGES,
+    LANGUAGE_CODES,
+    LANGUAGE_SHORT,
+    interest_label,
+    normalize_language,
+    option_label,
+    translate,
+)
 
 # Debug is opt-in. The safe default has to be the production one: a
 # deployment that simply forgets to set anything must not inherit the
@@ -1542,13 +1554,64 @@ def start_session(user_id, remember=True):
     )
     db.commit()
 
-    session.clear()
+    reset_session_keeping_language()
     session["sid"] = token
     # Unchecked "keep me signed in" leaves a browser-session cookie, which is
     # what someone on a shared machine is asking for.
     session.permanent = bool(remember)
     g.current_user = None  # force a re-resolve on the next current_user()
     return token
+
+
+LANG_SESSION_KEY = "lang"
+
+
+def current_language():
+    """The language to render this request in.
+
+    An explicit choice wins and is remembered in the session. Failing that,
+    the browser's own Accept-Language is honoured, so a Dutch speaker's first
+    visit is already Dutch without touching the switcher. Failing that,
+    English.
+    """
+    chosen = normalize_language(session.get(LANG_SESSION_KEY))
+    if chosen:
+        return chosen
+    # Werkzeug does the quality-value parsing; we only offer what we have.
+    guessed = request.accept_languages.best_match(LANGUAGE_CODES)
+    return normalize_language(guessed) or DEFAULT_LANGUAGE
+
+
+def t(key, **kwargs):
+    """Translate inside a request, for copy the server produces itself --
+    flash messages and validation errors. Templates get their own `t` from
+    the context processor; this is the Python-side twin."""
+    return translate(current_language(), key, **kwargs)
+
+
+def opt_label_for(value):
+    """Display label for a stored option value, server-side.
+
+    The stored value stays canonical English (see translations.py) because
+    searches_compatible() compares it as a string; this is only for text a
+    human reads.
+    """
+    return option_label(current_language(), value)
+
+
+def reset_session_keeping_language():
+    """Clear the session but carry the chosen language across.
+
+    session.clear() on sign-in and sign-out is deliberate -- it defends
+    against session fixation, and nothing from the previous visitor should
+    survive. The language is the one exception: it is a display preference
+    rather than anything privileged, and dropping it sent someone who had
+    just picked Dutch back to English at exactly the moment they committed.
+    """
+    chosen = session.get(LANG_SESSION_KEY)
+    session.clear()
+    if chosen:
+        session[LANG_SESSION_KEY] = chosen
 
 
 def end_session():
@@ -1558,7 +1621,9 @@ def end_session():
         db = get_db()
         db.execute("DELETE FROM sessions WHERE token_hash = ?", (hash_token(token),))
         db.commit()
-    session.clear()
+    # Language survives sign-out too: the sign-in page you land on should not
+    # suddenly be in a language you did not choose.
+    reset_session_keeping_language()
     g.current_user = None
 
 
@@ -1623,7 +1688,7 @@ def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if current_user() is None:
-            flash("Please sign in first.")
+            flash(t("msg.sign_in_first"))
             return redirect(url_for("login"))
         return view(*args, **kwargs)
 
@@ -1637,7 +1702,7 @@ def admin_required(view):
     def wrapped(*args, **kwargs):
         user = current_user()
         if user is None or not user["is_admin"]:
-            flash("Only the admin can do that.")
+            flash(t("msg.admin_only"))
             return redirect(url_for("live_search"))
         return view(*args, **kwargs)
 
@@ -1646,6 +1711,7 @@ def admin_required(view):
 
 @app.context_processor
 def inject_user():
+    lang = current_language()
     return {
         "current_user": current_user(),
         "csrf_token": csrf_token,
@@ -1653,6 +1719,15 @@ def inject_user():
         "support_email": SUPPORT_EMAIL,
         # So the composer's maxlength and send_message()'s cap cannot drift.
         "message_max_chars": MESSAGE_MAX_CHARS,
+        # t() is the workhorse: every template calls it, so it is short on
+        # purpose. opt_label() and interest_text() translate the *label* of a
+        # value that stays canonical English in the database.
+        "t": lambda key, **kw: translate(lang, key, **kw),
+        "opt_label": lambda value: option_label(lang, value),
+        "interest_text": lambda value: interest_label(lang, value),
+        "lang": lang,
+        "languages": LANGUAGES,
+        "language_short": LANGUAGE_SHORT,
     }
 
 
@@ -1724,7 +1799,7 @@ def load_current_user():
         # Suspended or banned mid-session: drop the session rather than
         # waiting for it to expire on its own.
         end_session()
-        flash("This account is not available. Please contact support.")
+        flash(t("msg.account_unavailable"))
         return
     g.current_user = user
 
@@ -1784,6 +1859,19 @@ CSP = (
 @app.before_request
 def make_csp_nonce():
     g.csp_nonce = secrets.token_urlsafe(16)
+
+
+@app.template_filter("br")
+def _br(text):
+    """Render a translated string's line breaks as <br>.
+
+    Several headlines are deliberately broken across lines -- "Something /
+    softer than / swiping." -- and where the break falls is a translator's
+    decision, not the template's, so the newline lives in the catalogue and
+    this turns it into markup. Escapes first, so only the <br> it adds is
+    ever treated as HTML.
+    """
+    return Markup("<br>".join(escape(line) for line in str(text).split("\n")))
 
 
 @app.context_processor
@@ -1880,22 +1968,22 @@ def register():
 
         error = None
         if not form["username"] or len(form["username"]) < 3:
-            error = "Username must be at least 3 characters."
+            error = t("msg.username_short")
         elif not valid_email(form["email"]):
-            error = "Please enter an email address we can reach you at."
+            error = t("msg.email_required")
         elif dob is None:
-            error = "Please enter your date of birth."
+            error = t("msg.dob_required")
         elif age is None or age < MIN_SIGNUP_AGE:
             # Deliberately terminal: a "you must be 18" message next to an
             # editable date field is an instruction to try another one.
             session["age_gate_failed"] = True
             return render_template("age_gate.html"), 403
         elif age > MAX_PLAUSIBLE_AGE:
-            error = "Please check your date of birth."
+            error = t("msg.dob_invalid")
         elif password_problem(password, confirm):
             error = password_problem(password, confirm)
         elif not request.form.get("accept_terms"):
-            error = "Please accept the terms and privacy policy to continue."
+            error = t("msg.accept_terms")
         elif not request.form.get("accept_sensitive"):
             # Separate from the terms box on purpose. Article 9 consent has
             # to be specific and freely given, which a single "I agree to
@@ -1960,7 +2048,7 @@ def register():
             else:
                 send_verification_email(new_id, form["email"])
                 start_session(new_id)
-                flash("Welcome! Check your email to confirm your address.")
+                flash(t("msg.registered"))
                 return redirect(url_for("edit_profile"))
 
         flash(error)
@@ -1993,7 +2081,7 @@ def login():
             if user["status"] not in LOGIN_ALLOWED_STATUSES:
                 security_event("login", "refused", user_id=user["id"],
                                detail=f"status={user['status']}")
-                flash("This account is not available. Please contact support.")
+                flash(t("msg.account_unavailable"))
                 return render_template("login.html")
             start_session(user["id"], remember=remember)
             security_event("login", "success", user_id=user["id"])
@@ -2005,7 +2093,7 @@ def login():
         security_event("login", "failure",
                        user_id=user["id"] if user else None,
                        detail="unknown account" if not user else "wrong password")
-        flash("Invalid username or password.")
+        flash(t("msg.bad_credentials"))
 
     return render_template("login.html")
 
@@ -2020,7 +2108,7 @@ def logout():
 def verify_email(token):
     user_id = consume_email_token(token, "verify")
     if user_id is None:
-        flash("That confirmation link has expired. We've sent a new one.")
+        flash(t("msg.verify_expired"))
         user = current_user()
         if user is not None and user["email"]:
             send_verification_email(user["id"], user["email"])
@@ -2031,7 +2119,7 @@ def verify_email(token):
         "UPDATE users SET email_verified_at = NOW() WHERE id = ?", (user_id,)
     )
     db.commit()
-    flash("Email confirmed. You're all set.")
+    flash(t("msg.verified"))
     return redirect(url_for("live_search") if current_uid() else url_for("login"))
 
 
@@ -2042,7 +2130,7 @@ def resend_verification():
     user = current_user()
     if user["email"] and user["email_verified_at"] is None:
         send_verification_email(user["id"], user["email"])
-    flash("Confirmation email sent.")
+    flash(t("msg.verify_sent"))
     return redirect(request.referrer or url_for("live_search"))
 
 
@@ -2069,7 +2157,7 @@ def forgot_password():
 
         # Same answer either way. Branching here would turn this form into a
         # way to ask the site which addresses have accounts.
-        flash("If that address has an account, a reset link is on its way.")
+        flash(t("msg.reset_sent"))
         return redirect(url_for("login"))
 
     return render_template("forgot.html")
@@ -2080,7 +2168,7 @@ def forgot_password():
 def reset_password(token):
     user_id = consume_email_token(token, "reset", peek=True)
     if user_id is None:
-        flash("That reset link has expired or already been used.")
+        flash(t("msg.reset_expired"))
         return redirect(url_for("forgot_password"))
 
     if request.method == "POST":
@@ -2106,7 +2194,7 @@ def reset_password(token):
             revoke_user_sessions(user_id)
             security_event("password_reset", "success", user_id=user_id)
             start_session(user_id)
-            flash("Password updated. You've been signed out on other devices.")
+            flash(t("msg.password_updated"))
             return redirect(url_for("live_search"))
 
     return render_template("reset.html", token=token)
@@ -2117,21 +2205,21 @@ def validate_profile(values):
     age = None
     error = None
     if not values["name"]:
-        error = "Please enter your name."
+        error = t("msg.name_required")
     else:
         try:
             age = int(values["age"])
             if not AGE_MIN_YEARS <= age <= AGE_MAX_YEARS:
                 error = f"Age must be between {AGE_MIN_YEARS} and {AGE_MAX_YEARS}."
         except (TypeError, ValueError):
-            error = "Please enter a valid age."
+            error = t("msg.age_invalid")
 
     if values["relationship_type"] and values["relationship_type"] not in RELATIONSHIP_TYPES:
-        error = "Please pick a relationship type from the list."
+        error = t("msg.pick_relationship")
     if values["gender"] and values["gender"] not in GENDERS:
-        error = "Please pick a gender from the list."
+        error = t("msg.pick_gender")
     if values["seeking"] and values["seeking"] not in SEEKING_OPTIONS:
-        error = "Please pick who you're looking for from the list."
+        error = t("msg.pick_seeking")
 
     return error, age
 
@@ -2689,11 +2777,11 @@ def edit_profile():
                 continue
             data = f.read(PHOTO_MAX_BYTES + 1)
             if len(data) > PHOTO_MAX_BYTES:
-                error = error or "Each photo must be under 2 MB."
+                error = error or t("msg.photo_too_big")
                 break
             mime = sniff_image_mime(data)
             if mime is None or mime not in PHOTO_ALLOWED_MIMES:
-                error = error or "Photos must be JPEG, PNG, or WebP."
+                error = error or t("msg.photo_type")
                 break
             uploads.append((mime, data))
         else:
@@ -2768,7 +2856,7 @@ def edit_profile():
             )
             apply_photo_edits(db, user_id, removals, uploads, posted_order, posted_primary)
             db.commit()
-            flash("Profile saved.")
+            flash(t("msg.profile_saved"))
             return redirect(url_for("view_profile", user_id=user_id))
 
         flash(error)
@@ -2848,7 +2936,7 @@ def view_profile(user_id):
     ):
         # Same answer for "no such profile" and "blocked", so the page
         # cannot be used to work out that someone blocked you.
-        flash("That profile does not exist.")
+        flash(t("msg.no_such_profile"))
         return redirect(url_for("live_search"))
 
     can_view = can_view_photos(user_id, user["id"], user["is_admin"])
@@ -2987,7 +3075,7 @@ def change_password():
     confirm = request.form.get("confirm", "")
 
     if not check_password_hash(me["password_hash"], current):
-        flash("That isn't your current password.")
+        flash(t("msg.password_wrong"))
     elif password_problem(password, confirm):
         flash(password_problem(password, confirm))
     else:
@@ -3001,7 +3089,7 @@ def change_password():
         # of the tab you did it in, but it must log out everyone else.
         revoke_user_sessions(me["id"], except_token=session.get("sid"))
         security_event("password_change", "success", user_id=me["id"])
-        flash("Password changed. You've been signed out on other devices.")
+        flash(t("msg.password_changed"))
     return redirect(url_for("settings"))
 
 
@@ -3014,7 +3102,7 @@ def revoke_session(session_id):
         (session_id, current_uid()),
     )
     db.commit()
-    flash("Signed out on that device.")
+    flash(t("msg.session_revoked"))
     return redirect(url_for("settings"))
 
 
@@ -3022,7 +3110,7 @@ def revoke_session(session_id):
 @login_required
 def revoke_other_sessions():
     revoke_user_sessions(current_uid(), except_token=session.get("sid"))
-    flash("Signed out everywhere else.")
+    flash(t("msg.sessions_revoked"))
     return redirect(url_for("settings"))
 
 
@@ -3046,7 +3134,7 @@ def update_consent():
             """,
             (current_uid(), CONSENT_SENSITIVE),
         )
-        flash("Thanks — matching is switched back on.")
+        flash(t("msg.consent_given"))
     else:
         db.execute(
             "UPDATE consents SET withdrawn_at = NOW() WHERE user_id = ? AND purpose = ?",
@@ -3056,7 +3144,7 @@ def update_consent():
             "UPDATE searches SET status = 'cancelled' WHERE user_id = ? AND status = 'waiting'",
             (current_uid(),),
         )
-        flash("Consent withdrawn. We've stopped matching you.")
+        flash(t("msg.consent_withdrawn"))
     db.commit()
     return redirect(url_for("settings"))
 
@@ -3132,7 +3220,7 @@ def request_deletion():
     """
     me = current_user()
     if not check_password_hash(me["password_hash"], request.form.get("password", "")):
-        flash("Please confirm your password to delete your account.")
+        flash(t("msg.confirm_password_delete"))
         return redirect(url_for("settings"))
 
     db = get_db()
@@ -3174,7 +3262,7 @@ def cancel_deletion():
         (current_uid(),),
     )
     db.commit()
-    flash("Welcome back — your account is active again.")
+    flash(t("msg.reinstated"))
     return redirect(url_for("settings"))
 
 
@@ -3358,7 +3446,7 @@ def report_user(user_id):
     """
     me = current_uid()
     if user_id == me:
-        flash("You can't report yourself.")
+        flash(t("msg.report_self"))
         return redirect(url_for("live_search"))
 
     subject = get_db().execute(
@@ -3370,7 +3458,7 @@ def report_user(user_id):
         (user_id,),
     ).fetchone()
     if subject is None:
-        flash("That profile does not exist.")
+        flash(t("msg.no_such_profile"))
         return redirect(url_for("live_search"))
 
     match_id = request.values.get("match_id", type=int)
@@ -3381,7 +3469,7 @@ def report_user(user_id):
         also_block = bool(request.form.get("block"))
 
         if reason not in REPORT_REASON_KEYS:
-            flash("Please choose a reason.")
+            flash(t("msg.report_reason"))
             return render_template(
                 "report.html", subject=subject, reasons=REPORT_REASONS,
                 match_id=match_id,
@@ -3401,11 +3489,11 @@ def report_user(user_id):
 
         if also_block:
             apply_block(me, user_id)
-            flash("Thanks — we've received your report and blocked them.")
+            flash(t("msg.report_blocked"))
         else:
             # Article 16 wants the reporter told what happens next, not just
             # that the form submitted.
-            flash("Thanks — we've received your report and a moderator will review it.")
+            flash(t("msg.report_received"))
         return redirect(url_for("live_search"))
 
     return render_template(
@@ -3445,7 +3533,7 @@ def apply_block(blocker_id, blocked_id):
 @login_required
 def block_user(user_id):
     apply_block(current_uid(), user_id)
-    flash("Blocked. They can't reach you, and you won't be matched again.")
+    flash(t("msg.blocked"))
     return redirect(url_for("chats"))
 
 
@@ -3458,7 +3546,7 @@ def unblock_user(user_id):
         (current_uid(), user_id),
     )
     db.commit()
-    flash("Unblocked.")
+    flash(t("msg.unblocked"))
     return redirect(url_for("settings"))
 
 
@@ -3526,13 +3614,13 @@ def admin_resolve_report(report_id):
     note = request.form.get("note", "").strip()[:1000]
 
     if action not in ADMIN_ACTIONS:
-        flash("Unknown action.")
+        flash(t("msg.unknown_action"))
         return redirect(url_for("admin_reports"))
 
     db = get_db()
     report = db.execute("SELECT * FROM reports WHERE id = ?", (report_id,)).fetchone()
     if report is None:
-        flash("That report no longer exists.")
+        flash(t("msg.no_such_report"))
         return redirect(url_for("admin_reports"))
 
     me = current_uid()
@@ -3580,7 +3668,7 @@ def admin_reinstate(user_id):
     db.execute("UPDATE users SET status = 'active' WHERE id = ?", (user_id,))
     db.commit()
     log_admin_action(current_uid(), user_id, "reinstate")
-    flash("Account reinstated.")
+    flash(t("msg.account_reinstated_admin"))
     return redirect(url_for("admin_reports"))
 
 
@@ -3600,9 +3688,9 @@ def admin_new_profile():
         error = None
         phys = None
         if not username or len(username) < 3:
-            error = "Username must be at least 3 characters."
+            error = t("msg.username_short")
         elif password and len(password) < 8:
-            error = "Password must be at least 8 characters (or leave it empty)."
+            error = t("msg.password_short_optional")
         else:
             error, age = validate_profile(values)
             phys_error, phys = validate_physical(values)
@@ -3651,7 +3739,7 @@ def admin_new_profile():
                 db.commit()
             except psycopg.errors.UniqueViolation:
                 db.rollback()
-                error = "That username is already taken."
+                error = t("msg.username_taken")
             else:
                 flash(f"Profile for {values['name']} (@{username}) created.")
                 return redirect(url_for("view_profile", user_id=new_id))
@@ -4216,14 +4304,14 @@ def live_search():
 
     me = require_profile()
     if me is None:
-        flash("Fill in your profile first so others can match with you.")
+        flash(t("msg.fill_profile_first"))
         return redirect(url_for("edit_profile"))
 
     # A profile with nothing in it is somebody the person on the other side
     # of a five-minute conversation has nothing to look at.
     state = profile_completeness(current_uid(), me)
     if not state["ready"]:
-        flash("Before your first search, add: " + ", ".join(state["missing"]).lower() + ".")
+        flash(t("msg.profile_missing", items=", ".join(state["missing"]).lower()))
         return redirect(url_for("edit_profile"))
 
     # How a match works is the most unusual thing about this app and, until
@@ -4278,9 +4366,9 @@ def live_search():
 
         error = None
         if not wanted:
-            error = "Please choose what kind of connection you want."
+            error = t("msg.choose_connection")
         elif seeking not in SEEKING_OPTIONS:
-            error = "Please choose who you're looking for."
+            error = t("msg.choose_seeking")
 
         if error:
             flash(error)
@@ -4357,7 +4445,7 @@ def search_criteria():
 
     me = require_profile()
     if me is None:
-        flash("Fill in your profile first so others can match with you.")
+        flash(t("msg.fill_profile_first"))
         return redirect(url_for("edit_profile"))
 
     wanted = clean_relationship_types(request.values.get("relationship_type", ""))
@@ -4390,14 +4478,14 @@ def search_criteria():
 
         error = None
         if seeking and seeking not in SEEKING_OPTIONS:
-            error = "Please choose who you're looking for."
+            error = t("msg.choose_seeking")
 
         try:
             age_min = int(request.form.get("age_min", AGE_MIN_YEARS))
             age_max = int(request.form.get("age_max", AGE_MAX_YEARS))
             radius_km = int(request.form.get("radius_km", RADIUS_MAX_KM))
         except ValueError:
-            error = "Please check the age range and radius."
+            error = t("msg.check_age_radius")
             age_min, age_max, radius_km = AGE_MIN_YEARS, AGE_MAX_YEARS, RADIUS_MAX_KM
 
         if error is None:
@@ -4865,12 +4953,12 @@ def search_chips(search):
             chips.append({"key": f"relationship:{part}", "label": part, "off": False})
     chips.append({
         "key": "gender",
-        "label": search["seeking"] or "Everyone",
+        "label": opt_label_for(search["seeking"]) or t("chip.anyone"),
         "off": not search["use_gender"],
     })
     chips.append({
         "key": "age",
-        "label": f"{search['age_min']}–{search['age_max']}" if search["use_age"] else "Any age",
+        "label": f"{search['age_min']}–{search['age_max']}" if search["use_age"] else t("chip.any_age"),
         "off": not search["use_age"],
     })
     if search["location"]:
@@ -4965,7 +5053,7 @@ def chip_options(mine, others, key):
         add(mine["age_min"] - 5, mine["age_max"] + 5, "Widen by 5 years")
         add(mine["age_min"] - 10, mine["age_max"] + 10, "Widen by 10 years")
         options.append({
-            "value": "", "label": "Any age",
+            "value": "", "label": t("chip.any_age"),
             "current": not mine["use_age"],
             "count": _chip_trial_count(mine, others, use_age=False),
         })
@@ -5242,7 +5330,7 @@ def search_cancel():
         (current_uid(),),
     )
     db.commit()
-    flash("Search stopped.")
+    flash(t("msg.search_stopped"))
     return redirect(url_for("live_search"))
 
 
@@ -5589,12 +5677,12 @@ def chat(match_id):
     match, profiles = get_match_participants(match_id)
     user = current_user()
     if match is None:
-        flash("That chatroom does not exist.")
+        flash(t("msg.no_such_room"))
         return redirect(url_for("chats"))
 
     is_participant = user["id"] in (match["user_a"], match["user_b"])
     if not is_participant and not user["is_admin"]:
-        flash("That chatroom is private.")
+        flash(t("msg.room_private"))
         return redirect(url_for("chats"))
 
     if is_participant:
@@ -6073,6 +6161,33 @@ def run_purge_deletions():
     # being enforced.
     expired = purge_expired_data()
     return {"purged": purged, "expired": expired}, 200
+
+
+@app.route("/lang/<code>", methods=["GET", "POST"])
+def set_language(code):
+    """Switch language and return the visitor to the page they were reading.
+
+    The redirect target comes from the form/query rather than Referer, and has
+    to be a same-site path: an open redirect here would be a free phishing
+    hop, and this endpoint is reachable without signing in.
+
+    GET as well as POST, and the switcher itself is a plain link. A GET that
+    changes state is normally worth avoiding, but the only state here is a
+    display preference in the caller's own session -- the worst a forged
+    request achieves is showing someone Dutch -- and a link is what works
+    without JavaScript, survives being shared, and needs no CSRF token on a
+    page a signed-out visitor is reading.
+    """
+    lang = normalize_language(code)
+    if lang:
+        session[LANG_SESSION_KEY] = lang
+
+    target = request.values.get("next") or "/"
+    # Only ever a path on this site: no scheme, no host, and no
+    # protocol-relative "//evil.example", which a browser reads as a host.
+    if not target.startswith("/") or target.startswith("//"):
+        target = "/"
+    return redirect(target)
 
 
 @app.get("/healthz")

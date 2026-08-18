@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Velvt{% endblock %}
+{% block title %}{{ t("landing.title") }}{% endblock %}
 {% block content %}
 {# The same column every other screen uses. The hero is the wizard's body,
    the two buttons are its nav -- and .wiz-fit keeps the pair inside the
@@ -14,9 +14,9 @@
          right with `order`, rather than the reverse. #}
       <div class="landing-logo" aria-hidden="true"></div>
       <div class="landing-copy">
-        <h1>Something<br>softer than<br>swiping.</h1>
+        <h1>{{ t("landing.headline") | br }}</h1>
         <p class="landing-lede">
-          Sign in and search — we pair you the moment someone is looking for you too.
+          {{ t("landing.lede") }}
         </p>
       </div>
     </div>
@@ -26,11 +26,11 @@
     {# the count is the whole promise of the product: people are waiting now #}
     <p class="landing-live">
       <span class="live-dot"></span>
-      {{ searching_now }} searching right now
+      {{ t("pulse.live_one") if searching_now == 1 else t("pulse.live_many", n=searching_now) }}
     </p>
-    <a class="btn btn-block" href="{{ url_for('register') }}">Start searching</a>
-    <a class="btn btn-secondary btn-block" href="{{ url_for('login') }}">I already have an account</a>
-    <p class="landing-fine">Nobody matches you unless you match them back.</p>
+    <a class="btn btn-block" href="{{ url_for('register') }}">{{ t("landing.cta_start") }}</a>
+    <a class="btn btn-secondary btn-block" href="{{ url_for('login') }}">{{ t("landing.cta_signin") }}</a>
+    <p class="landing-fine">{{ t("landing.fine") }}</p>
   </div>
 </div>
 {% endblock %}

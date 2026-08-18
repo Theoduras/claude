@@ -2,7 +2,7 @@
 {% block title %}Choose a new password — Velvt{% endblock %}
 {% block content %}
 <div class="card narrow">
-  <p class="eyebrow">Velvt</p>
+  <p class="eyebrow">{{ t("login.eyebrow") }}</p>
   <h1 style="margin-top: 0.5rem;">Choose a new password.</h1>
   <p class="subtitle" style="margin-bottom: 1.6rem;">
     Setting this signs you out everywhere else.
@@ -15,7 +15,7 @@
            minlength="8" required autofocus>
     <p class="hint">At least 8 characters. Longer beats complicated.</p>
 
-    <label for="confirm">Confirm password</label>
+    <label for="confirm">{{ t("register.confirm") }}</label>
     <input id="confirm" name="confirm" type="password" autocomplete="new-password"
            minlength="8" required>
 

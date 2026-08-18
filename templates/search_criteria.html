@@ -1,20 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Search for a match — Velvt{% endblock %}
+{% block title %}{{ t("crit.title") }}{% endblock %}
 {% block content %}
 <div class="card narrow">
-  <h1 class="page-title--sm">What matters to you?</h1>
-  <p class="subtitle">
-    Every filter in full, including the ones the six-step setup doesn't ask
-    about. Switch off anything you don't want to filter on — the more you
-    leave on, the fewer people fit.
-  </p>
+  <h1 class="page-title--sm">{{ t("crit.heading") }}</h1>
+  <p class="subtitle">{{ t("crit.subtitle_six") }}</p>
 
   <p class="recap">
     {# wanted is a CSV now -- relationship_type can hold more than one type. #}
     <span>{{ wanted.replace(',', ', ') }}</span>
     <span aria-hidden="true">·</span>
     <span>{% if place.location %}{{ place.location }}{% else %}anywhere{% endif %}{% if place.location and place.radius_km < radius_max %} · within {{ place.radius_km }} km{% endif %}</span>
-    <a href="{{ url_for('live_search') }}">change</a>
+    <a href="{{ url_for('live_search') }}">{{ t("crit.change") }}</a>
   </p>
 
   <form method="post" action="{{ url_for('search_criteria') }}" id="criteria-form">
@@ -33,20 +29,19 @@
                  {% if not existing or existing['use_gender'] %}checked{% endif %}>
           <span class="switch-track"></span>
         </label>
-        <span class="toggle-label"><strong>Who I'm looking for</strong></span>
+        <span class="toggle-label"><strong>{{ t("crit.who") }}</strong></span>
         <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-gender">?</button>
       </div>
       <p class="help-pop" id="help-gender">
-        Only people whose gender matches this are paired with you. Switch it off
-        to be open to anyone.
+        {{ t("crit.who_help") }}
       </p>
       <div class="toggle-panel"><div>
-        <select id="seeking" name="seeking" aria-label="Who I'm looking for">
-          <option value="">Anyone</option>
+        <select id="seeking" name="seeking" aria-label="{{ t('crit.who') }}">
+          <option value="">{{ t("chip.anyone") }}</option>
           {% for s in seeking_options %}
             <option value="{{ s }}"
               {% if (existing and existing['seeking'] == s) or (not existing and me['seeking'] == s) %}selected{% endif %}>
-              {{ s }}
+              {{ opt_label(s) }}
             </option>
           {% endfor %}
         </select>
@@ -62,14 +57,13 @@
           <span class="switch-track"></span>
         </label>
         <span class="toggle-label">
-          <strong>Age range</strong>
+          <strong>{{ t("crit.age") }}</strong>
           <span class="toggle-summary" id="age-value"></span>
         </span>
         <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-age">?</button>
       </div>
       <p class="help-pop" id="help-age">
-        Only people inside this range are paired with you. Everyone on Velvt is
-        18 or over.
+        {{ t("crit.age_help") }}
       </p>
       <div class="toggle-panel"><div>
         <div class="range-dual">
@@ -77,10 +71,10 @@
           <div class="range-dual-fill" id="age-fill"></div>
           <input type="range" id="age_min" name="age_min" min="{{ age_min_bound }}" max="{{ age_max_bound }}"
                  value="{{ existing['age_min'] if existing else age_min_bound }}"
-                 aria-label="Minimum age">
+                 aria-label="{{ t('wiz.age_min_aria') }}">
           <input type="range" id="age_max" name="age_max" min="{{ age_min_bound }}" max="{{ age_max_bound }}"
                  value="{{ existing['age_max'] if existing else age_max_bound }}"
-                 aria-label="Maximum age">
+                 aria-label="{{ t('wiz.age_max_aria') }}">
         </div>
       </div></div>
     </div>
@@ -94,7 +88,7 @@
           <span class="switch-track"></span>
         </label>
         <span class="toggle-label">
-          <strong>Distance</strong>
+          <strong>{{ t("crit.distance") }}</strong>
           <span class="toggle-summary">
             {% if not place.location %}No location set
             {% elif place.radius_km >= radius_max %}{{ place.location }} · any distance
@@ -104,9 +98,8 @@
         <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-distance">?</button>
       </div>
       <p class="help-pop" id="help-distance">
-        Only people inside your radius are paired with you. Switch it off to
-        match with anyone, anywhere.
-        <a href="{{ url_for('live_search') }}">Change the location or radius</a>.
+        {{ t("crit.distance_help") }}
+        <a href="{{ url_for('live_search') }}">{{ t("crit.distance_change") }}</a>.
       </p>
     </div>
 
@@ -119,26 +112,25 @@
           <span class="switch-track"></span>
         </label>
         <span class="toggle-label">
-          <strong>Physical traits</strong>
-          <span class="toggle-summary">Height, build, hair, eyes, tattoos</span>
+          <strong>{{ t("crit.physical") }}</strong>
+          <span class="toggle-summary">{{ t("crit.physical_summary") }}</span>
         </span>
         <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-physical">?</button>
       </div>
       <p class="help-pop" id="help-physical">
-        Only people who fit every trait you set here are paired with you. Anything
-        you leave blank isn't filtered on, so you can set just the one that matters.
+        {{ t("crit.physical_help") }}
       </p>
       <div class="toggle-panel"><div>
         <div class="field-pair">
           <div>
-            <label for="pref_height_min">Height from (cm)</label>
+            <label for="pref_height_min">{{ t("form.height_from") }}</label>
             <input id="pref_height_min" name="pref_height_min" type="number"
                    min="{{ height_min }}" max="{{ height_max }}"
                    value="{{ existing['pref_height_min'] if existing and existing['pref_height_min'] else '' }}"
                    placeholder="{{ height_min }}">
           </div>
           <div>
-            <label for="pref_height_max">Height to (cm)</label>
+            <label for="pref_height_max">{{ t("form.height_to") }}</label>
             <input id="pref_height_max" name="pref_height_max" type="number"
                    min="{{ height_min }}" max="{{ height_max }}"
                    value="{{ existing['pref_height_max'] if existing and existing['pref_height_max'] else '' }}"
@@ -147,7 +139,7 @@
         </div>
 
         {% set chosen_body_types = (existing['pref_body_types'] if existing else '').split(',') %}
-        <label>Body types</label>
+        <label>{{ t("crit.body_types") }}</label>
         <div class="checkgroup">
           {% for bt in body_types %}
             <label for="pref_body_types_{{ loop.index }}">
@@ -167,9 +159,9 @@
            ] %}
           <label for="{{ field }}">{{ label }}</label>
           <select id="{{ field }}" name="{{ field }}">
-            <option value="">No preference</option>
+            <option value="">{{ t("crit.no_preference") }}</option>
             {% for opt in options %}
-              <option value="{{ opt }}" {% if existing and existing[field] == opt %}selected{% endif %}>{{ opt }}</option>
+              <option value="{{ opt }}" {% if existing and existing[field] == opt %}selected{% endif %}>{{ opt_label(opt) }}</option>
             {% endfor %}
           </select>
         {% endfor %}
@@ -185,38 +177,36 @@
           <span class="switch-track"></span>
         </label>
         <span class="toggle-label">
-          <strong>Interests</strong>
-          <span class="toggle-summary">Only matches people who share one</span>
+          <strong>{{ t("crit.interests") }}</strong>
+          <span class="toggle-summary">{{ t("crit.interests_summary") }}</span>
         </span>
         <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-interests">?</button>
       </div>
       <p class="help-pop" id="help-interests">
-        Turning this on narrows the pool to people who share at least one of
-        these. Among the people who do, the one with the most in common is
-        paired first.
+        {{ t("crit.interests_help") }}
       </p>
       <div class="toggle-panel"><div>
         <input id="interests" name="interests" type="text"
                value="{{ existing['interests'] if existing else me['interests'] }}"
-               placeholder="e.g. music, hiking" aria-label="Interests">
+               placeholder="{{ t('crit.interests_ph') }}" aria-label="{{ t('crit.interests') }}">
       </div></div>
     </div>
 
     <div class="pool-live" id="pool-live" aria-live="polite">
-      <span class="muted">Checking the pool…</span>
+      <span class="muted">{{ t("crit.checking") }}</span>
     </div>
     <div id="pool-suggestions"></div>
 
     <div class="criteria-nav">
-      <a class="btn btn-secondary" href="{{ url_for('live_search') }}">Back</a>
-      <button class="btn" type="submit">&#128269; Start searching</button>
+      <a class="btn btn-secondary" href="{{ url_for('live_search') }}">{{ t("crit.back") }}</a>
+      <button class="btn" type="submit">&#128269; {{ t("crit.start") }}</button>
     </div>
   </form>
 
   <p class="hint" style="margin-top: 0.9rem;">
-    You are {{ me['gender'] or 'unspecified gender' }}{% if me['age'] %}, {{ me['age'] }}{% endif %}{% if me['location'] %}, in {{ me['location'] }}{% endif %} —
-    others' filters apply to you too, so keep
-    <a href="{{ url_for('edit_profile') }}">your profile</a> accurate.
+    {%- set who %}{{ opt_label(me['gender']) or t("crit.unspecified_gender") }}{% if me['age'] %}, {{ me['age'] }}{% endif %}{% if me['location'] %}, in {{ me['location'] }}{% endif %}{% endset -%}
+    {%- set profile_link %}<a href="{{ url_for('edit_profile') }}">{{ t("crit.profile_link") }}</a>{% endset -%}
+    {{ t("crit.you_are", who=who) }} — {{ t("crit.profile_note_tail", link=profile_link) | safe }}
   </p>
 </div>
 

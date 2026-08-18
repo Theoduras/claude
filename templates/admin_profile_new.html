@@ -1,31 +1,31 @@
 {% extends "base.html" %}
-{% block title %}New profile — Velvt{% endblock %}
+{% block title %}{{ t("admin.title") }}{% endblock %}
 {% block content %}
 {# Edit profile's shape: question at the top, the long form scrolling
    under it, the action pinned at the foot. #}
 <div class="wiz edit-screen wiz-fit">
-  <p class="wiz-count">Admin</p>
+  <p class="wiz-count">{{ t("nav.admin") }}</p>
   <h1 class="wiz-q">Create a<br>new profile</h1>
   <p class="wiz-hint">Adds a new member with a full profile to the database.</p>
 
   <div class="wiz-body wiz-scroll">
     <form id="new-profile-form" method="post" action="{{ url_for('admin_new_profile') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label for="username">Username</label>
+      <label for="username">{{ t("admin.username") }}</label>
       <input id="username" name="username" type="text" minlength="3" required autofocus
-             value="{{ profile['username'] or '' }}" placeholder="unique handle, e.g. maria92">
+             value="{{ profile['username'] or '' }}" placeholder="{{ t('admin.username_ph') }}">
 
-      <label for="password">Password (optional)</label>
+      <label for="password">{{ t("admin.password") }}</label>
       <input id="password" name="password" type="password" minlength="8" autocomplete="new-password"
-             placeholder="lets this member log in themselves">
-      <p class="hint">Leave empty to create a profile without login access.</p>
+             placeholder="{{ t('admin.password_ph') }}">
+      <p class="hint">{{ t("admin.password_hint") }}</p>
 
       {% include "_profile_fields.html" %}
     </form>
   </div>
 
   <div class="wiz-nav wiz-nav-block">
-    <button class="btn btn-block" type="submit" form="new-profile-form">Create profile</button>
+    <button class="btn btn-block" type="submit" form="new-profile-form">{{ t("admin.submit") }}</button>
   </div>
 </div>
 {% endblock %}

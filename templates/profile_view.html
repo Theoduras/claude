@@ -15,7 +15,7 @@
      phones and would sit directly on top of it, swallowing the taps. Left
      is also where the room and the edit form already put theirs. #}
   <div class="pro-head">
-    <button type="button" class="pro-close" id="pro-close" aria-label="Close profile">
+    <button type="button" class="pro-close" id="pro-close" aria-label="{{ t('profile.close') }}">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round"/>
@@ -29,7 +29,7 @@
   {% set show_photos = photos if (is_own or can_view_photos) else [] %}
 
   {% if not is_own and not can_view_photos %}
-    <div class="photo-locked">Photos unlock once you both continue the match.</div>
+    <div class="photo-locked">{{ t("profile.photos_locked") }}</div>
   {% else %}
     {# One photo at a time. Six is the cap (PHOTO_MAX_PER_USER), so a bar
        per photo is always wide enough to see. #}
@@ -54,18 +54,18 @@
         {% endif %}
         {% if show_photos | length > 1 %}
           <button type="button" class="pro-tap is-prev is-spent" data-step="-1"
-                  aria-label="Previous photo"></button>
+                  aria-label="{{ t('profile.prev_photo') }}"></button>
           <button type="button" class="pro-tap is-next" data-step="1"
-                  aria-label="Next photo"></button>
+                  aria-label="{{ t('profile.next_photo') }}"></button>
           <button type="button" class="pro-arrow is-prev is-spent" data-step="-1"
-                  aria-label="Previous photo">
+                  aria-label="{{ t('profile.prev_photo') }}">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
           <button type="button" class="pro-arrow is-next" data-step="1"
-                  aria-label="Next photo">
+                  aria-label="{{ t('profile.next_photo') }}">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round"/>
@@ -86,7 +86,7 @@
           <circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.7"/>
           <circle cx="12" cy="12" r="0.2" stroke="currentColor" stroke-width="2"/>
         </svg>
-        Looking for
+        {{ t("form.seeking") }}
       </p>
       {% if profile['relationship_type'] %}
         <div class="pro-lead">
@@ -130,7 +130,7 @@
           <path d="M9 6c-2.5 1-4 3.2-4 6h3.4V18H4v-6M20 6c-2.5 1-4 3.2-4 6h3.4V18H15v-6"
                 stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
         </svg>
-        About me
+        {{ t("profile.about") }}
       </p>
       <p class="profile-quote">{{ profile['bio'] }}</p>
     </div>
@@ -176,7 +176,7 @@
         <path d="M6 16.2c.6-1.4 1.7-2 3-2s2.4.6 3 2M14.5 10h4M14.5 13.5h4"
               stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
       </svg>
-      In short
+      {{ t("profile.in_short") }}
     </p>
     <div class="pro-facts">
       {% for icon, text in facts %}
@@ -252,7 +252,7 @@
                 stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
           <circle cx="8.2" cy="8.2" r="1.3" stroke="currentColor" stroke-width="1.6"/>
         </svg>
-        Interests
+        {{ t("crit.interests") }}
       </p>
       <div class="pillset">
         {% for word in profile['interests'].split(',') %}
@@ -278,7 +278,7 @@
           <circle cx="8" cy="10" r="1.1" stroke="currentColor" stroke-width="1.5"/>
           <circle cx="12.6" cy="7.6" r="1.1" stroke="currentColor" stroke-width="1.5"/>
         </svg>
-        Hobbies
+        {{ t("form.hobbies") }}
       </p>
       {% if as_pills %}
         <div class="pillset">
@@ -303,7 +303,7 @@
           <path d="m15.6 8.4-2 5.2-5.2 2 2-5.2Z"
                 stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
         </svg>
-        What I’m hoping to find…
+        {{ t("profile.wants_ph") }}
       </p>
       <p class="pro-prompt">{{ profile['wants'] }}</p>
     </div>
@@ -318,7 +318,7 @@
                 stroke="currentColor" stroke-width="1.7"
                 stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        What matters most to me…
+        {{ t("profile.needs_ph") }}
       </p>
       <p class="pro-prompt">{{ profile['needs'] }}</p>
     </div>
@@ -342,30 +342,30 @@
             <circle cx="15" cy="12" r="1.9" stroke="currentColor" stroke-width="1.7"/>
             <circle cx="8" cy="17" r="1.9" stroke="currentColor" stroke-width="1.7"/>
           </svg>
-          Looking for (physical)
+          {{ t("profile.prefs_label") }}
         </p>
         <dl class="facts">
           {% if profile['pref_height_min'] and profile['pref_height_max'] %}
-            <div><dt>Height</dt>
+            <div><dt>{{ t("profile.height") }}</dt>
             <dd>{{ profile['pref_height_min'] }}–{{ profile['pref_height_max'] }} cm</dd></div>
           {% endif %}
           {% if profile['pref_body_types'] %}
-            <div><dt>Body types</dt><dd>{{ profile['pref_body_types'].replace(',', ', ') }}</dd></div>
+            <div><dt>{{ t("crit.body_types") }}</dt><dd>{{ profile['pref_body_types'].replace(',', ', ') }}</dd></div>
           {% endif %}
           {% if profile['pref_fitness_level'] %}
-            <div><dt>Fitness</dt><dd>{{ profile['pref_fitness_level'] }}</dd></div>
+            <div><dt>{{ t("profile.fitness") }}</dt><dd>{{ profile['pref_fitness_level'] }}</dd></div>
           {% endif %}
           {% if profile['pref_hair_color'] %}
-            <div><dt>Hair</dt><dd>{{ profile['pref_hair_color'] }}</dd></div>
+            <div><dt>{{ t("profile.hair") }}</dt><dd>{{ profile['pref_hair_color'] }}</dd></div>
           {% endif %}
           {% if profile['pref_eye_color'] %}
-            <div><dt>Eyes</dt><dd>{{ profile['pref_eye_color'] }}</dd></div>
+            <div><dt>{{ t("form.eyes") }}</dt><dd>{{ profile['pref_eye_color'] }}</dd></div>
           {% endif %}
           {% if profile['pref_tattoos'] %}
-            <div><dt>Tattoos</dt><dd>{{ profile['pref_tattoos'] }}</dd></div>
+            <div><dt>{{ t("crit.tattoos") }}</dt><dd>{{ profile['pref_tattoos'] }}</dd></div>
           {% endif %}
         </dl>
-        <p class="pro-note">Only you can see this. It counts both ways when ranking matches.</p>
+        <p class="pro-note">{{ t("profile.prefs_note") }}</p>
       </div>
     {% endif %}
   {% endif %}
@@ -374,7 +374,7 @@
 
   {% if is_own %}
     <div class="wiz-nav">
-      <a class="btn btn-secondary" href="{{ url_for('edit_profile') }}">Edit profile</a>
+      <a class="btn btn-secondary" href="{{ url_for('edit_profile') }}">{{ t("edit.heading") }}</a>
     </div>
   {% else %}
     {# Reachable from any profile, not only a current match: the person you

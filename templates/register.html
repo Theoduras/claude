@@ -1,60 +1,60 @@
 {% extends "base.html" %}
-{% block title %}Create account — Velvt{% endblock %}
+{% block title %}{{ t("register.title") }}{% endblock %}
 {% block content %}
 {# Sign-in's twin -- same column, same slots -- so the pair reads as two
    steps of one flow rather than two different pages. #}
 <form method="post" action="{{ url_for('register') }}" class="wiz auth-screen wiz-fit">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="wiz-body wiz-scroll">
-    <p class="wiz-count">Join Velvt</p>
-    <h1 class="wiz-q">Make your<br>entrance.</h1>
-    <p class="wiz-hint">A few details and a password. Your profile comes next.</p>
+    <p class="wiz-count">{{ t("register.eyebrow") }}</p>
+    <h1 class="wiz-q">{{ t("register.heading") | br }}</h1>
+    <p class="wiz-hint">{{ t("register.subtitle") }}</p>
 
     <div class="wiz-field">
-      <label for="username">Username</label>
+      <label for="username">{{ t("register.username") }}</label>
       <input id="username" name="username" type="text" autocomplete="username"
              minlength="3" value="{{ form.username }}" required autofocus>
 
-      <label for="email">Email</label>
+      <label for="email">{{ t("register.email") }}</label>
       <input id="email" name="email" type="email" autocomplete="email"
              value="{{ form.email }}" required>
-      <p class="hint">We'll send a confirmation link. It's also the only way to
-        get back in if you forget your password.</p>
+      <p class="hint">{{ t("register.email_hint") }}</p>
 
-      <label for="dob">Date of birth</label>
+      <label for="dob">{{ t("register.dob") }}</label>
       <input id="dob" name="dob" type="date" autocomplete="bday"
              value="{{ form.dob }}" required>
-      <p class="hint">You must be {{ age_min }} or over to use Velvt.</p>
+      <p class="hint">{{ t("register.dob_hint", age=age_min) }}</p>
 
-      <label for="password">Password</label>
+      <label for="password">{{ t("login.password") }}</label>
       <input id="password" name="password" type="password" autocomplete="new-password"
              minlength="8" required>
-      <p class="hint">At least 8 characters. Longer beats complicated, and
-        we check it hasn't turned up in a known breach.</p>
+      <p class="hint">{{ t("register.password_hint_long") }}</p>
 
-      <label for="confirm">Confirm password</label>
+      <label for="confirm">{{ t("register.confirm") }}</label>
       <input id="confirm" name="confirm" type="password" autocomplete="new-password"
              minlength="8" required>
     </div>
 
     <label class="switch-row" for="accept_terms">
       <input id="accept_terms" name="accept_terms" type="checkbox" value="1" required>
-      <span>I agree to the <a href="{{ url_for('terms') }}" target="_blank">terms</a>
-        and the <a href="{{ url_for('privacy') }}" target="_blank">privacy policy</a>.</span>
+      {# One sentence with two slots rather than four fragments: word order
+         and the article each link takes are the translator's to decide. #}
+      {%- set terms_link %}<a href="{{ url_for('terms') }}" target="_blank">{{ t("register.terms_link") }}</a>{% endset -%}
+      {%- set privacy_link %}<a href="{{ url_for('privacy') }}" target="_blank">{{ t("register.privacy_link") }}</a>{% endset -%}
+      <span>{{ t("register.terms", terms=terms_link, privacy=privacy_link) | safe }}</span>
     </label>
 
     <label class="switch-row" for="accept_sensitive">
       <input id="accept_sensitive" name="accept_sensitive" type="checkbox" value="1" required>
-      <span>Velvt may use my gender and who I'm looking for to find me matches.</span>
+      <span>{{ t("register.sensitive") }}</span>
     </label>
-    <p class="hint">These can reveal your sexual orientation, so we ask separately.
-      You can withdraw this at any time in settings.</p>
+    <p class="hint">{{ t("register.sensitive_hint") }}</p>
   </div>
 
   <div class="wiz-nav wiz-nav-block">
-    <button class="btn btn-block" type="submit">Create account</button>
+    <button class="btn btn-block" type="submit">{{ t("register.submit") }}</button>
     <p class="auth-alt">
-      Already a member? <a href="{{ url_for('login') }}">Sign in</a>
+      {{ t("register.have_account") }} <a href="{{ url_for('login') }}">{{ t("login.submit") }}</a>
     </p>
   </div>
 </form>

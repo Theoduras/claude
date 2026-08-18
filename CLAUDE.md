@@ -21,6 +21,7 @@ python smoke.py           # hit every GET route, report 5xxs
 python check_auth.py      # 66 behaviour checks: auth, CSRF, safety, deletion, widening
 python check_bots.py      # demo members never reach a real person's search pool
 python check_presence.py  # a search leaves the pool when its browser stops polling
+python check_i18n.py      # both languages complete, and they still match each other
 ```
 
 `smoke.py` proves routes render; `check_auth.py` proves the security-relevant ones
@@ -85,6 +86,8 @@ line or it is nothing, and there is no fractional version to ramp to.
 - `check_retention.py` — behaviour checks for the retention schedule
 - `check_onboarding.py` — behaviour checks for the first-search gate and the explainer
 - `check_presence.py` — behaviour checks for the search heartbeat and ghost matches
+- `translations.py` — every user-facing string, `en` + `nl`; `check_i18n.py` and
+  `tools/check_translations.py` guard it
 - `seed_demo.py` — 40 demo members, all live-searching and `is_bot=TRUE` so they reply in
   chat. Idempotent; `--reset` to rebuild
 - `smoke.py`, `dev.ps1`, `docker-compose.yml` — local dev only, not deployed
@@ -216,13 +219,42 @@ the strip into three hidden fields — `remove_photo_ids`, `photo_order`, `prima
 `apply_photo_edits()` (`app.py:~1228`) re-checks every id against ownership and writes
 `photos.sort_order`. Reads are `ORDER BY is_primary DESC, sort_order, id` everywhere.
 
+## Languages
+
+Two, `en` and `nl`, in `translations.py` — plain dicts, no gettext and no build step,
+because the app is one module with no compile stage and 1,300 words of copy does not
+justify an extraction toolchain. `translate()` falls back requested → English → the key
+itself, so a gap is a wrong word rather than a 500. Templates get `t()`, `opt_label()`
+and `interest_text()` from the context processor; `app.py` has the same `t()` for the
+copy it produces itself.
+
+**Adding a third language is a `LANGUAGES` entry and a copied block** — the switcher,
+`/lang/<code>` and the validation all read that list. A partial language ships safely.
+
+**Option values are never translated.** `GENDERS`, `SEEKING_OPTIONS`,
+`RELATIONSHIP_TYPES`, `BODY_TYPES` and friends are stored in `searches`/`profiles` and
+compared as strings by `searches_compatible()` and `SEEKING_MATCHES`. Translating a
+stored value would stop a Dutch member matching an English one and nothing would look
+broken — so the value stays canonical English and only its *label* is translated, via
+`OPTION_LABELS`. `check_i18n.py` pairs a Dutch reader with an English one to hold that.
+
+`current_language()` prefers the session, then `Accept-Language`, then English, so a
+Dutch speaker's first visit is already Dutch. The choice survives sign-in and sign-out:
+`reset_session_keeping_language()` replaces `session.clear()` there, since clearing it
+sent someone who had just chosen Dutch back to English at the moment they committed.
+`/lang/<code>` is a plain link (GET) and only ever redirects to a same-site path.
+
+The legal pages, `/settings` and `/admin` are still English only: their copy is long,
+and the terms and privacy text is not something to machine-translate without a human
+signing it off.
+
 ## Route map (`app.py`)
 
 Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on every edit.
 
 | Area | Routes |
 |---|---|
-| misc | `/lab` (admin), `/`, `/healthz`, `/how-matching-works`, `/tasks/purge-deletions` |
+| misc | `/lab` (admin), `/`, `/healthz`, `/how-matching-works`, `/lang/<code>`, `/tasks/purge-deletions` |
 | auth | `/register`, `/login`, `/logout`, `/verify/<token>`, `/verify/resend`, `/forgot`, `/reset/<token>` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
 | legal | `/terms`, `/privacy`, `/imprint`, `/safety`, `/faq` |

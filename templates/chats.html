@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Chats — Velvt{% endblock %}
+{% block title %}{{ t("chats.title") }}{% endblock %}
 {% block content %}
 {# The room's shape one level up: head pinned at the top, the list taking
    the slack and scrolling inside itself. Nothing but the rows moves. #}
 <div class="wiz chats-screen wiz-fit">
-  <p class="wiz-count">Chats</p>
-  <h1 class="wiz-q">Your matches</h1>
+  <p class="wiz-count">{{ t("chats.heading") }}</p>
+  <h1 class="wiz-q">{{ t("chats.heading") }}</h1>
 
   <div class="wiz-body wiz-scroll">
     {% if rooms %}
@@ -27,13 +27,13 @@
                   {% else %}{{ room['other_name'] }}{% endif %}
                 </strong>
                 {% if room['phase'] == 'reveal' %}
-                  <span class="tag">It's a match</span>
+                  <span class="tag">{{ t("chats.tag_match") }}</span>
                 {% elif room['phase'] == 'timed' %}
-                  <span class="tag tag-timed">Timed chat</span>
+                  <span class="tag tag-timed">{{ t("chats.tag_timed") }}</span>
                 {% elif room['phase'] == 'deciding' %}
-                  <span class="tag tag-timed">Awaiting decision</span>
+                  <span class="tag tag-timed">{{ t("chats.tag_deciding") }}</span>
                 {% elif room['phase'] == 'ended' %}
-                  <span class="tag tag-ended">Ended</span>
+                  <span class="tag tag-ended">{{ t("chats.tag_ended") }}</span>
                 {% endif %}
               </div>
               <div class="chat-row-bottom">
@@ -49,8 +49,8 @@
       </div>
     {% else %}
       <p class="chats-empty">
-        No chats yet. Start a <a href="{{ url_for('live_search') }}">live search</a>
-        and we'll pair you the moment someone is looking for you too.
+        {%- set search_link %}<a href="{{ url_for('live_search') }}">{{ t("chats.empty_link") }}</a>{% endset -%}
+        {{ t("chats.empty", link=search_link) | safe }}
       </p>
     {% endif %}
   </div>

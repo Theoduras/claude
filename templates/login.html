@@ -1,39 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Sign in — Velvt{% endblock %}
+{% block title %}{{ t("login.title") }}{% endblock %}
 {% block content %}
 {# A step, not a panel: the form itself is the column, so the fields sit
    under the question and the submit lands where Next does. #}
 <form method="post" action="{{ url_for('login') }}" class="wiz auth-screen wiz-fit">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="wiz-body">
-    <p class="wiz-count">Velvt</p>
-    <h1 class="wiz-q">Something softer<br>than swiping.</h1>
+    <p class="wiz-count">{{ t("login.eyebrow") }}</p>
+    <h1 class="wiz-q">{{ t("login.heading") | br }}</h1>
     <p class="wiz-hint">
-      Sign in and search — we pair you the moment someone is looking for you too.
+      {{ t("landing.lede") }}
     </p>
 
     <div class="wiz-field">
-      <label for="username">Username or email</label>
+      <label for="username">{{ t("login.username_or_email") }}</label>
       <input id="username" name="username" type="text" autocomplete="username" required autofocus>
 
-      <label for="password">Password</label>
+      <label for="password">{{ t("login.password") }}</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required>
     </div>
 
     <label class="switch-row" for="remember">
       <input id="remember" name="remember" type="checkbox" value="1" checked>
-      <span>Keep me signed in</span>
+      <span>{{ t("login.remember") }}</span>
     </label>
-    <p class="hint">Leave this off on a shared computer.</p>
+    <p class="hint">{{ t("login.remember_hint") }}</p>
   </div>
 
   <div class="wiz-nav wiz-nav-block">
-    <button class="btn btn-block" type="submit">Sign in</button>
+    <button class="btn btn-block" type="submit">{{ t("login.submit") }}</button>
     <p class="auth-alt">
-      <a href="{{ url_for('forgot_password') }}">Forgot your password?</a>
+      <a href="{{ url_for('forgot_password') }}">{{ t("login.forgot") }}</a>
     </p>
     <p class="auth-alt">
-      New to Velvt? <a href="{{ url_for('register') }}">Create an account</a>
+      {{ t("login.no_account") }} <a href="{{ url_for('register') }}">{{ t("login.create") }}</a>
     </p>
   </div>
 </form>
