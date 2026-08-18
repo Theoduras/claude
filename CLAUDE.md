@@ -23,6 +23,7 @@ python check_bots.py      # demo members never reach a real person's search pool
 python check_presence.py  # a search leaves the pool when its browser stops polling
 python check_i18n.py      # both languages complete, and they still match each other
 python check_pin.py       # every profile and search lands in the one city
+python check_landing.py   # the landing page's busyness line is true at every tier
 ```
 
 `smoke.py` proves routes render; `check_auth.py` proves the security-relevant ones
@@ -107,6 +108,7 @@ line or it is nothing, and there is no fractional version to ramp to.
 - `check_onboarding.py` — behaviour checks for the first-search gate and the explainer
 - `check_presence.py` — behaviour checks for the search heartbeat and ghost matches
 - `check_pin.py` — behaviour checks for the single-city pin
+- `check_landing.py` — behaviour checks for the landing page's member/searcher line
 - `translations.py` — every user-facing string, `en` + `nl`; `check_i18n.py` and
   `tools/check_translations.py` guard it
 - `seed_demo.py` — 40 demo members, all live-searching and `is_bot=TRUE` so they reply in
@@ -264,6 +266,25 @@ the strip into three hidden fields — `remove_photo_ids`, `photo_order`, `prima
 `apply_photo_edits()` (`app.py:~1228`) re-checks every id against ownership and writes
 `photos.sort_order`. Reads are `ORDER BY is_primary DESC, sort_order, id` everywhere.
 
+## What the landing page claims
+
+`landing_pulse()` builds the one line under the headline from four tiers, tried in
+order: people searching this minute (the only tier that earns the pulsing dot),
+searches started today, members registered, and — below `MEMBER_COUNT_FLOOR` (25) —
+no number at all, just an invitation. **Every tier is a fact.**
+
+A launching product has a thin first week and "3 members" reads worse than saying
+nothing, but the fix for a number you don't want to show is to not show it, not to
+print a different one: a visitor decides whether to sign up partly on how many people
+are already here, so a figure that isn't true is a false answer to the question they
+are actually asking — and in the EU that is a misleading commercial practice, not a
+growth tactic. `MEMBER_COUNT_FLOOR` therefore governs *when* the true count appears,
+never what it says. Demo members are excluded from every tier.
+
+`/admin/members` is where the real figure lives, with demo accounts counted separately
+rather than folded in, and every member's profile one click away. `check_landing.py`
+holds each tier to the database.
+
 ## Languages
 
 Two, `en` and `nl`, in `translations.py` — plain dicts, no gettext and no build step,
@@ -305,7 +326,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 | legal | `/terms`, `/privacy`, `/imprint`, `/safety`, `/faq` |
 | settings | `/settings`, `…/password`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/export`, `…/delete`, `…/delete/cancel` |
 | safety | `/report/<id>`, `/block/<id>`, `/unblock/<id>` |
-| moderation | `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate` |
+| moderation | `/admin/members`, `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate` |
 | search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/chips` (GET+POST), `/search/status`, `/search/cancel` |
 | match lifecycle | `/match/<id>/state`, `/match/<id>/decide`, `/match/<id>/skip-reveal` |
 | chat | `/chats`, `/chat/<id>`, `…/messages`, `…/send` |

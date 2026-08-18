@@ -88,6 +88,10 @@
       <a class="tab-dup" href="{{ url_for('chats') }}">{{ t("nav.chats") }}</a>
       <a class="tab-dup" href="{{ url_for('view_profile', user_id=current_user['id']) }}">{{ t("nav.profile") }}</a>
       {% if current_user['is_admin'] %}
+        {#- Admin screens are English-only (see CLAUDE.md), so these are the
+            one part of the nav that is not translated. -#}
+        <a href="{{ url_for('admin_members') }}">Members</a>
+        <a href="{{ url_for('admin_reports') }}">Reports</a>
         <a href="{{ url_for('admin_new_profile') }}">{{ t("nav.new_profile") }}</a>
       {% endif %}
       {#- Signing out lives in the tab bar's Info sheet on a phone and in the

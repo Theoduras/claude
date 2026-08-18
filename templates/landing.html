@@ -23,10 +23,13 @@
   </div>
 
   <div class="wiz-nav wiz-nav-block landing-actions">
-    {# the count is the whole promise of the product: people are waiting now #}
+    {# The strongest true thing we can say about how busy it is -- see
+       landing_pulse(). The pulsing dot is reserved for the tier that has
+       actual live searchers behind it; the quieter tiers are still facts,
+       but they are not "someone is here right now" and must not look it. #}
     <p class="landing-live">
-      <span class="live-dot"></span>
-      {{ t("pulse.live_one") if searching_now == 1 else t("pulse.live_many", n=searching_now) }}
+      {% if pulse.live %}<span class="live-dot"></span>{% endif %}
+      {{ pulse.text }}
     </p>
     <a class="btn btn-block" href="{{ url_for('register') }}">{{ t("landing.cta_start") }}</a>
     <a class="btn btn-secondary btn-block" href="{{ url_for('login') }}">{{ t("landing.cta_signin") }}</a>

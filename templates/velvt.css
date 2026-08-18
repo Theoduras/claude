@@ -2114,6 +2114,63 @@
       color: var(--text-faint);
     }
 
+    /* ---------- admin: members ---------------------------------------
+       Admin screens are English-only and desktop-first (see CLAUDE.md), so
+       this borrows the card and hint styles rather than introducing a look
+       of its own. */
+    .admin-tally {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin: 0 0 1rem;
+    }
+    .admin-tally-item {
+      flex: 1 1 7rem;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--ink-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--ink-raised);
+    }
+    /* the real number, given the weight the fabricated one would have had */
+    .admin-tally-item.is-headline { border-color: rgba(168, 85, 247, 0.42); }
+    .admin-tally-item.is-muted { opacity: 0.62; }
+    .admin-tally-n {
+      display: block;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 1.6rem;
+      line-height: 1.1;
+      color: var(--champagne);
+    }
+    .admin-tally-label {
+      display: block;
+      margin-top: 0.2rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .admin-filter {
+      display: flex;
+      gap: 0.5rem;
+      margin: 0 0 0.9rem;
+    }
+    .admin-filter input[type="search"] { flex: 1; margin: 0; }
+    .admin-member {
+      border-top: 1px solid var(--ink-hairline);
+      padding: 0.85rem 0;
+    }
+    .admin-member-head {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .admin-member-head h2 { font-size: 1.02rem; margin: 0; }
+    .admin-member-meta { margin: 0.2rem 0 0; word-break: break-word; }
+    .admin-badges { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .tag.is-live { color: var(--teal-crest); border-color: rgba(29, 166, 162, 0.5); }
+
     /* ---------- searching state -------------------------------------- */
     /* Hand-rolled rather than a Lottie. The dotLottie player was loaded from
        unpkg.com, which this app's own CSP forbids, so the animation never

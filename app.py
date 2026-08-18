@@ -2000,21 +2000,64 @@ def design_lab():
     return send_from_directory(MOCKUPS_DIR, "velvet-lab.html")
 
 
-@app.route("/")
-def index():
-    if current_uid():
-        return redirect(url_for("live_search"))
-    # Counts only searchers who could actually be paired with. The landing
-    # page shows this number to logged-out visitors, so counting demo members
-    # here would be advertising a pool that does not exist.
-    searching_now = get_db().execute(
+# Below this, the member count is not shown at all -- not replaced with a
+# bigger one. A launching product has a thin first week and "3 members" reads
+# worse than saying nothing, but the fix for a number you don't want to show
+# is to not show it, not to print a different one: every visitor decides
+# whether to sign up partly on how many people are already here, so a figure
+# that isn't true is a false answer to the question they are actually asking.
+MEMBER_COUNT_FLOOR = 25
+
+
+def landing_pulse():
+    """One true line about how busy Velvt is, for logged-out visitors.
+
+    Four tiers, tried in order, and every one of them is a fact:
+      1. people searching this minute -- the strongest thing we can say, and
+         the only tier that earns the live dot
+      2. searches started today, when nobody is mid-search right now
+      3. members registered, once there are enough for the number to invite
+         rather than deter
+      4. no number at all -- an invitation instead
+
+    Demo members are excluded throughout by CANDIDATE_ELIGIBLE_SQL and the
+    is_bot check: counting them would advertise a pool that does not exist.
+    """
+    db = get_db()
+    live = db.execute(
         f"""
         SELECT COUNT(*) AS n FROM searches s
         JOIN users u ON u.id = s.user_id
         WHERE s.status = 'waiting' {CANDIDATE_ELIGIBLE_SQL}
         """
     ).fetchone()["n"]
-    return render_template("landing.html", searching_now=searching_now)
+    if live:
+        return {"live": True,
+                "text": t("pulse.live_one") if live == 1 else t("pulse.live_many", n=live)}
+
+    row = db.execute(
+        """
+        SELECT
+          (SELECT COUNT(*) FROM searches s JOIN users u ON u.id = s.user_id
+             WHERE u.is_bot = FALSE AND s.created_at >= NOW() - INTERVAL '1 day') AS today,
+          (SELECT COUNT(*) FROM users
+             WHERE is_bot = FALSE AND status = 'active') AS members
+        """
+    ).fetchone()
+    if row["today"]:
+        return {"live": False,
+                "text": t("pulse.today_one") if row["today"] == 1
+                        else t("pulse.today_many", n=row["today"])}
+    if row["members"] >= MEMBER_COUNT_FLOOR:
+        return {"live": False, "text": t("pulse.members", n=row["members"])}
+    return {"live": False, "text": t("pulse.be_first")}
+
+
+@app.route("/")
+def index():
+    if current_uid():
+        return redirect(url_for("live_search"))
+    return render_template("landing.html", pulse=landing_pulse())
 
 
 @app.route("/help")
@@ -3646,6 +3689,70 @@ def log_admin_action(actor_id, target_id, action, reason=""):
         (actor_id, target_id, action, reason),
     )
     db.commit()
+
+
+@app.route("/admin/members")
+@admin_required
+def admin_members():
+    """Who has actually signed up, and what their profile looks like.
+
+    The landing page deliberately shows a member count only once it is worth
+    showing (see landing_pulse()), which leaves nowhere to read the real
+    figure. This is that place: the true totals, and every member's profile
+    one click away.
+
+    Demo members are counted separately rather than folded in or hidden --
+    seeing "40 demo" next to "3 real" is the whole point of the distinction,
+    and a total that quietly included them would be the same lie the landing
+    page refuses to tell.
+    """
+    show = request.args.get("show", "real")
+    query = (request.args.get("q") or "").strip()
+
+    db = get_db()
+    totals = db.execute(
+        """
+        SELECT
+          COUNT(*) FILTER (WHERE is_bot = FALSE)                        AS real_all,
+          COUNT(*) FILTER (WHERE is_bot = FALSE AND status = 'active')  AS real_active,
+          COUNT(*) FILTER (WHERE is_bot = FALSE AND status = 'suspended') AS suspended,
+          COUNT(*) FILTER (WHERE is_bot = FALSE AND status = 'banned')  AS banned,
+          COUNT(*) FILTER (WHERE is_bot = FALSE AND status = 'pending_deletion') AS pending_deletion,
+          COUNT(*) FILTER (WHERE is_bot = FALSE AND status = 'deleted') AS deleted,
+          COUNT(*) FILTER (WHERE is_bot = TRUE)                         AS demo,
+          COUNT(*) FILTER (WHERE is_bot = FALSE AND created_at >= NOW() - INTERVAL '7 days') AS week,
+          COUNT(*) FILTER (WHERE is_bot = FALSE AND created_at >= NOW() - INTERVAL '1 day')  AS today
+        FROM users
+        """
+    ).fetchone()
+
+    # LEFT JOIN: an account can exist before its profile does, and those are
+    # exactly the rows worth seeing here -- someone who signed up and stalled.
+    rows = db.execute(
+        """
+        SELECT u.id, u.username, u.email, u.status, u.is_bot,
+               u.created_at, u.email_verified_at,
+               -- last_seen_at lives on sessions, not users: it is a property
+               -- of a signed-in device, and someone can have several.
+               (SELECT MAX(se.last_seen_at) FROM sessions se
+                  WHERE se.user_id = u.id) AS last_seen_at,
+               p.name, p.age, p.gender, p.location,
+               (SELECT COUNT(*) FROM photos ph WHERE ph.user_id = u.id) AS photos,
+               (SELECT COUNT(*) FROM searches s
+                  WHERE s.user_id = u.id AND s.status = 'waiting') AS searching
+        FROM users u
+        LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE (? = 'all' OR (? = 'real' AND u.is_bot = FALSE)
+                         OR (? = 'demo' AND u.is_bot = TRUE))
+          AND (? = '' OR u.username ILIKE ? OR p.name ILIKE ? OR u.email ILIKE ?)
+        ORDER BY u.created_at DESC
+        LIMIT 500
+        """,
+        (show, show, show, query, f"%{query}%", f"%{query}%", f"%{query}%"),
+    ).fetchall()
+
+    return render_template("admin_members.html", totals=totals, members=rows,
+                           show=show, query=query, floor=MEMBER_COUNT_FLOOR)
 
 
 @app.route("/admin/reports")
