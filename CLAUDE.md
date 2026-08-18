@@ -113,9 +113,13 @@ line or it is nothing, and there is no fractional version to ramp to.
   chat. Idempotent; `--reset` to rebuild
 - `smoke.py`, `dev.ps1`, `docker-compose.yml` — local dev only, not deployed
 - `vastai_client.py` — standalone Vast.ai GPU-rental CLI, **not imported by the app**
-- `make_search_avatars.py` — regenerates the four placeholder-avatar PNGs inside
-  `static/velvet-searching.lottie` (the `/search/waiting` animation) in the app's
-  palette; standalone, **not imported by the app**
+- `static/velvt-icon.svg` — the square tab mark; also served as `/favicon.ico`, since
+  browsers ask for that whether or not a `<link rel="icon">` tells them to
+- `make_search_avatars.py`, `static/velvet-searching.lottie` — **both dead now.** The
+  searching animation is hand-rolled CSS: the dotLottie player was fetched from
+  unpkg.com, which the app's own CSP forbids, so it never ran in production, and
+  vendoring a ~250KB renderer onto the lightest screen in the app was the wrong
+  trade. Kept on disk rather than deleted in case the artwork is wanted elsewhere
 
 ## Database
 

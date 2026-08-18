@@ -9,10 +9,13 @@
 <div class="wiz waiting">
 
   <div class="wiz-body">
-    <div class="search-anim" id="search-anim">
-      <dotlottie-wc id="search-lottie"
-                    src="{{ url_for('static', filename='velvet-searching.lottie') }}"
-                    autoplay loop></dotlottie-wc>
+    {# Three rings and a core, all CSS -- see the note in velvt.css. Decorative
+       and wholly redundant with the heading below it, so it is hidden from
+       assistive tech rather than described. #}
+    <div class="search-anim" id="search-anim" aria-hidden="true">
+      <span class="search-ping"></span>
+      <span class="search-ping"></span>
+      <span class="search-ping"></span>
       <div class="pulse-heart"></div>
     </div>
 
@@ -112,31 +115,10 @@
   var statusUrl = "{{ url_for('search_status') }}";
   var chipsUrl = "{{ url_for('search_chips_get') }}";
 
-  // ---- searching animation (see the note in the wizard: the dotLottie
-  // player is the app's only external dependency, injected rather than
-  // sitting in the markup so reduced-motion never fetches it) ----
-  (function () {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    var wrap = document.getElementById("search-anim");
-    var player = document.createElement("script");
-    player.type = "module";
-    player.src = "https://unpkg.com/@lottiefiles/dotlottie-wc@0.9.4/dist/dotlottie-wc.js";
-    document.head.appendChild(player);
-
-    var revealed = false;
-    function reveal() {
-      if (revealed) return;
-      revealed = true;
-      wrap.classList.add("anim-ready");
-    }
-    customElements.whenDefined("dotlottie-wc").then(function () {
-      var el = document.getElementById("search-lottie");
-      if (el && el.dotLottie && el.dotLottie.addEventListener) {
-        el.dotLottie.addEventListener("load", reveal);
-      }
-      setTimeout(reveal, 1200);
-    });
-  })();
+  // The searching animation used to be injected here: a script element
+  // pointing at unpkg.com, which the CSP blocks, so it never ran. It is
+  // pure CSS now and needs no JavaScript at all -- prefers-reduced-motion
+  // is handled in the stylesheet where the animation lives.
 
   // One honest number, so a screen that is otherwise motionless reads as
   // running rather than stuck. Counts from page load, which is when this

@@ -6305,6 +6305,19 @@ def _render_stylesheet():
     return _STYLESHEET
 
 
+@app.get("/favicon.ico")
+def favicon():
+    """Browsers ask for this whether or not a <link rel="icon"> says to.
+
+    Without it every page view logged a 404. Serving the SVG under the .ico
+    name is fine -- the content type is what a browser reads, not the
+    extension -- and it saves carrying a second copy of the mark in a format
+    nothing has needed since IE.
+    """
+    return send_from_directory(app.static_folder, "velvt-icon.svg",
+                               mimetype="image/svg+xml")
+
+
 @app.route("/velvt.<digest>.css")
 def stylesheet(digest):
     """The whole design system, at a URL that changes when it does.

@@ -1061,7 +1061,10 @@
     /* smaller than the wizard's, so the summary below it clears the fold */
     /* the animation is the first thing that can afford to give: min() keeps
        the width response and the token adds the height one */
-    .waiting .search-anim dotlottie-wc { width: min(58%, clamp(96px, 33.53vh - 91.8px, 210px)); }
+    .waiting .search-anim {
+      width: min(58%, clamp(96px, 33.53vh - 91.8px, 210px));
+      aspect-ratio: 1;
+    }
     .waiting .pulse-heart {
       width: clamp(2.6rem, 4.923vh + 0.6308rem, 3.4rem);
       height: clamp(2.6rem, 4.923vh + 0.6308rem, 3.4rem);
@@ -2112,27 +2115,43 @@
     }
 
     /* ---------- searching state -------------------------------------- */
-    /* The lottie and the pulse-heart share one grid cell so the animation
-       fades in over the fallback instead of the card jumping when it
-       arrives. The heart shows first and stays put if the CDN player
-       never loads -- see the swap in search_waiting.html. */
+    /* Hand-rolled rather than a Lottie. The dotLottie player was loaded from
+       unpkg.com, which this app's own CSP forbids, so the animation never
+       actually ran in production -- every visitor saw the fallback. Playing
+       the file instead would have meant vendoring ~250KB of third-party
+       renderer onto the one screen whose whole job is to feel light.
+
+       So: three rings going out from a core, on one grid cell. It reads as
+       listening rather than loading -- nothing here is a progress bar,
+       because there is no progress to report; someone either turns up or
+       they don't. */
     .search-anim {
       display: grid;
       justify-items: center;
+      align-items: center;
       margin: 0 auto 0.5rem;
     }
     .search-anim > * { grid-area: 1 / 1; }
-    .search-anim dotlottie-wc {
-      display: block;
-      /* The artwork is 1024x655, so a square box would letterbox it. */
-      width: min(300px, 70%);
-      aspect-ratio: 1024 / 655;
+
+    /* The rings are one element each so they can be staggered; a single
+       element with three box-shadows could not travel independently. */
+    .search-ping {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 1.5px solid var(--violet-crest);
       opacity: 0;
-      transition: opacity 0.4s ease;
+      /* transform and opacity only, so each ring is a compositor job and
+         the phone is not repainting a 200px circle sixty times a second. */
+      animation: ping 3s cubic-bezier(0.22, 1, 0.36, 1) infinite;
     }
-    .search-anim .pulse-heart { transition: opacity 0.4s ease; }
-    .search-anim.anim-ready dotlottie-wc { opacity: 1; }
-    .search-anim.anim-ready .pulse-heart { opacity: 0; }
+    .search-ping:nth-of-type(2) { animation-delay: 1s; border-color: var(--teal-crest); }
+    .search-ping:nth-of-type(3) { animation-delay: 2s; }
+    @keyframes ping {
+      0%   { transform: scale(0.42); opacity: 0; }
+      12%  { opacity: 0.55; }
+      100% { transform: scale(1); opacity: 0; }
+    }
 
     .pulse-heart {
       width: 4.5rem;
@@ -2149,6 +2168,8 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .pulse-heart { animation: none; }
+      /* the core alone still reads as live; only the travel is dropped */
+      .search-ping { animation: none; opacity: 0; }
       .btn::before { transition: none; }
       .btn:hover, .profile-card:hover, .tile:hover .tile-face { transform: none; }
       /* colour still marks the selected tile; only the nudge is dropped */

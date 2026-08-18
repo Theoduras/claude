@@ -6,6 +6,12 @@
   <title>{% block title %}Velvt{% endblock %}</title>
   {# Same token the forms carry, for the fetch-based endpoints. #}
   <meta name="csrf-token" content="{{ csrf_token() }}">
+  {# A square mark rather than the wordmark, which is 753x391 and would
+     letterbox into nothing at 16px. SVG only: every browser that gets this
+     far supports it, and /favicon.ico is served the same file for the bare
+     request browsers make regardless of what is declared here. #}
+  <link rel="icon" href="{{ url_for('static', filename='velvt-icon.svg') }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='velvt-icon.svg') }}">
   {# The stylesheet is 134KB and identical on every page. Inlined, it was
      re-sent on every navigation and could never be cached; as its own URL,
      carrying a hash of its contents, it is fetched once and then served
