@@ -126,10 +126,21 @@
 </div>
 
 
-{% with loc_label = 'Location', loc_value = profile['location'] or '',
-        loc_placeholder = 'e.g. Berlin, Germany' %}
-  {% include "_location_field.html" with context %}
-{% endwith %}
+{% if single_city %}
+  {# One city for now, so this is stated rather than asked. No input at all --
+     a disabled field would still read as "something I might change later" --
+     and the server ignores a posted location regardless (pinned_place()). #}
+  <label>{{ t("form.location") }}</label>
+  <p class="field-fixed">
+    {{ single_city }}
+    <span class="field-fixed-note">{{ t("form.city_only", city=single_city) }}</span>
+  </p>
+{% else %}
+  {% with loc_label = 'Location', loc_value = profile['location'] or '',
+          loc_placeholder = 'e.g. Berlin, Germany' %}
+    {% include "_location_field.html" with context %}
+  {% endwith %}
+{% endif %}
 
 <label for="relationship_type">{{ t("form.relationship_type") }}
   {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="relationship_type">{{ t("form.fill") }}</button></span>{% endif %}

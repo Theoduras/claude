@@ -463,6 +463,23 @@ CITY_CHOICES = [
 
 RADIUS_MAX_KM = 500  # slider maximum; at the top it means "anywhere"
 
+# Velvt is launching in one city, so "where are you?" is not a question anyone
+# is asked yet: every profile and every search is pinned here, server-side, no
+# matter what a form posts. Asking would be worse than pointless -- it would
+# invite someone in Berlin to sign up and search a pool that cannot contain
+# anybody.
+#
+# This is the single switch for that. Set it to None to go multi-city again:
+# the location pickers, the wizard's location step, the distance filter and
+# /api/places are all still present and wired, just not rendered while a city
+# is pinned here. Whatever is named here must exist in CITY_COORDS, or distance
+# filtering silently reads as "anywhere" -- hence the assert.
+SINGLE_CITY = "Maastricht"
+
+assert SINGLE_CITY is None or SINGLE_CITY.lower() in CITY_COORDS, (
+    f"SINGLE_CITY {SINGLE_CITY!r} is missing from CITY_COORDS"
+)
+
 AGE_MIN_YEARS, AGE_MAX_YEARS = 18, 39
 
 # How long a search must run before it can be paired. The demo pool is
@@ -1738,6 +1755,10 @@ def inject_user():
         # A callable, not a value: base.html is rendered for every response,
         # and the sheet only needs rendering once per process.
         "css_digest": lambda: _render_stylesheet()["digest"],
+        # Global rather than passed per-route: whether a location control
+        # renders at all comes up in the profile form, the search wizard and
+        # the criteria screen alike.
+        "single_city": SINGLE_CITY,
     }
 
 
@@ -2802,6 +2823,9 @@ def edit_profile():
         values[PREF_BODY_TYPES_FIELD] = ",".join(
             request.form.getlist(PREF_BODY_TYPES_FIELD)
         )
+        # Pinned to one city for now, so the form has no location control and
+        # whatever arrives under that name is ignored rather than trusted.
+        values["location"], _, _ = pinned_place(values["location"])
         error, age = validate_profile(values)
         phys_error, phys = validate_physical(values)
         error = error or phys_error
@@ -3739,6 +3763,9 @@ def admin_new_profile():
         values[PREF_BODY_TYPES_FIELD] = ",".join(
             request.form.getlist(PREF_BODY_TYPES_FIELD)
         )
+        # Same pin as the member-facing form -- an admin-created profile has to
+        # land in the same city, or it is unmatchable.
+        values["location"], _, _ = pinned_place(values["location"])
 
         error = None
         phys = None
@@ -3887,6 +3914,20 @@ def city_coords(location):
         return None
     key = location.split(",")[0].strip().lower()
     return CITY_COORDS.get(key)
+
+
+def pinned_place(posted_location="", posted_lat=None, posted_lng=None):
+    """Resolve the location a submission should be stored with.
+
+    While SINGLE_CITY is set this ignores the form entirely and returns the
+    pinned city with its own coordinates -- the field is not rendered, so
+    anything arriving under those names is either a stale draft or someone
+    posting by hand. Returns (location, lat, lng).
+    """
+    if SINGLE_CITY:
+        lat, lng = CITY_COORDS[SINGLE_CITY.lower()]
+        return SINGLE_CITY, lat, lng
+    return posted_location, posted_lat, posted_lng
 
 
 def distance_km(loc_a, loc_b):
@@ -4396,6 +4437,9 @@ def live_search():
             except ValueError:
                 pass
 
+        # Pinned city wins over anything posted (the step is not rendered).
+        location, lat, lng = pinned_place(location, lat, lng)
+
         # Left at the full span, the slider is saying "no preference" rather
         # than "18 to 39": AGE_MAX_YEARS is the slider's own ceiling, so a
         # range that reaches it cannot be expressing an upper bound. That has
@@ -4531,6 +4575,9 @@ def search_criteria():
             except ValueError:
                 pass
 
+        # Pinned city wins over anything posted (the step is not rendered).
+        location, lat, lng = pinned_place(location, lat, lng)
+
         error = None
         if seeking and seeking not in SEEKING_OPTIONS:
             error = t("msg.choose_seeking")
@@ -4598,15 +4645,21 @@ def search_criteria():
     # complete form. The draft wins over the saved row, which is only a
     # fallback for landing here directly (a bookmark, or a browser back).
     draft = session.get("search_draft") or {}
-    place = {
-        "location": draft.get("location")
-            or (existing["location"] if existing else "")
-            or me["location"],
-        "lat": draft.get("location_lat")
-            or (existing["lat"] if existing and existing["lat"] is not None else ""),
-        "lng": draft.get("location_lng")
-            or (existing["lng"] if existing and existing["lng"] is not None else ""),
-    }
+    if SINGLE_CITY:
+        # Nothing upstream can have chosen anything else, so don't let a stale
+        # draft or an old row show a place this search will not be saved with.
+        pinned, pin_lat, pin_lng = pinned_place()
+        place = {"location": pinned, "lat": pin_lat, "lng": pin_lng}
+    else:
+        place = {
+            "location": draft.get("location")
+                or (existing["location"] if existing else "")
+                or me["location"],
+            "lat": draft.get("location_lat")
+                or (existing["lat"] if existing and existing["lat"] is not None else ""),
+            "lng": draft.get("location_lng")
+                or (existing["lng"] if existing and existing["lng"] is not None else ""),
+        }
     try:
         place["radius_km"] = int(
             draft.get("radius_km")
@@ -4730,6 +4783,10 @@ def search_preview():
         lng = float(request.form.get("location_lng", "")) if request.form.get("location_lng") else None
     except ValueError:
         lat = lng = None
+
+    # Same pin the real save applies, so the preview count cannot be computed
+    # against a place the saved search will not actually use.
+    location, lat, lng = pinned_place(location, lat, lng)
 
     try:
         age_min = int(request.form.get("age_min", AGE_MIN_YEARS))
@@ -5016,7 +5073,9 @@ def search_chips(search):
         "label": f"{search['age_min']}–{search['age_max']}" if search["use_age"] else t("chip.any_age"),
         "off": not search["use_age"],
     })
-    if search["location"]:
+    # While there is only one city, naming it says nothing about what this
+    # search is looking for -- it is true of everyone by construction.
+    if search["location"] and not SINGLE_CITY:
         chips.append({"key": "location", "label": search["location"], "off": False})
     for part in (search["interests"] or "").split(","):
         part = part.strip()

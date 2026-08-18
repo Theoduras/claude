@@ -80,6 +80,10 @@
     </div>
 
     {# ---- 3. distance — the value itself is set on screen 1 ---- #}
+    {# Hidden while one city is pinned: everybody shares a set of coordinates,
+       so this switch cannot change who fits, and its help text pointed at the
+       location step that no longer exists. #}
+    {% if not single_city %}
     <div class="toggle-row">
       <div class="toggle-head">
         <label class="switch">
@@ -102,6 +106,7 @@
         <a href="{{ url_for('live_search') }}">{{ t("crit.distance_change") }}</a>.
       </p>
     </div>
+    {% endif %}
 
     {# ---- 4. physical ---- #}
     <div class="toggle-row">
@@ -408,10 +413,16 @@
             } else if (s.key === "distance") {
               // The radius lives on screen 1; relaxing it here means dropping
               // the filter, which is the one thing this screen can do to it.
+              // The control is absent while one city is pinned, and a search
+              // saved before the pin can still carry another city and so still
+              // produce this suggestion. Without the guard the throw would
+              // take every other suggestion down with it.
               var sw = form.querySelector('input[name="use_distance"]');
-              sw.checked = false;
-              syncPanels();
-              row = sw.closest(".toggle-row");
+              if (sw) {
+                sw.checked = false;
+                syncPanels();
+                row = sw.closest(".toggle-row");
+              }
             }
             if (row) {
               row.classList.remove("flash");

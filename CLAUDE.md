@@ -22,6 +22,7 @@ python check_auth.py      # 66 behaviour checks: auth, CSRF, safety, deletion, w
 python check_bots.py      # demo members never reach a real person's search pool
 python check_presence.py  # a search leaves the pool when its browser stops polling
 python check_i18n.py      # both languages complete, and they still match each other
+python check_pin.py       # every profile and search lands in the one city
 ```
 
 `smoke.py` proves routes render; `check_auth.py` proves the security-relevant ones
@@ -105,6 +106,7 @@ line or it is nothing, and there is no fractional version to ramp to.
 - `check_retention.py` — behaviour checks for the retention schedule
 - `check_onboarding.py` — behaviour checks for the first-search gate and the explainer
 - `check_presence.py` — behaviour checks for the search heartbeat and ghost matches
+- `check_pin.py` — behaviour checks for the single-city pin
 - `translations.py` — every user-facing string, `en` + `nl`; `check_i18n.py` and
   `tools/check_translations.py` guard it
 - `seed_demo.py` — 40 demo members, all live-searching and `is_bot=TRUE` so they reply in
@@ -179,6 +181,26 @@ and a stale page can't apply a number that has stopped making sense. It writes o
 with a targeted `UPDATE` — **not `save_search()`**, which resets `created_at` and would
 drop the searcher back below `MIN_SEARCH_SECONDS` and to the back of `try_pair()`'s
 longest-wait ordering as a penalty for adjusting.
+
+**One city, and nobody is asked.** `SINGLE_CITY = "Maastricht"` is the whole switch.
+`pinned_place()` applies it server-side at all five entry points that could otherwise
+store a location — the profile form, the admin profile form, both search screens and
+the search preview — and it *ignores* the form rather than trusting it, because the
+field is no longer rendered and anything arriving under that name is a stale draft or
+a hand-rolled POST. The value is asserted against `CITY_COORDS` at import, or distance
+filtering would silently degrade to "anywhere".
+
+Gone from the UI as a consequence: the profile form's location picker (replaced by a
+plain statement of the city — a disabled input would still read as "changeable
+later"), the wizard's "Where are you searching?" step, the criteria screen's Distance
+switch (it cannot change who fits when everyone shares one set of coordinates), and
+the city chip on the waiting screen (true of everyone by construction). The stepper
+walks `.wiz-step` in DOM order and sizes its bar from the count, so the wizard
+renumbered itself from six steps to five with no other change.
+
+`_location_field.html` and `/api/places` are left intact but unreached, so
+`SINGLE_CITY = None` restores the multi-city flow in full. `check_pin.py` posts
+Berlin, Vienna and Zurich at every entry point and asserts Maastricht is what lands.
 
 Starting a search is **two screens**: `/search` picks the connection type and the location
 + radius (carried to screen 2 in `session["search_draft"]`), `/search/criteria` asks which
