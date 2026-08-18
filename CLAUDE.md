@@ -64,6 +64,25 @@ Keep replies concise; prefer the smallest diff that does the job.
 
 - `app.py` — **~5,000 lines**, single module: all routes, DB access, and helpers
 - `templates/` — 27 Jinja templates, all extending `base.html`
+- `templates/velvt.css` — the whole design system, a Jinja template of its own
+
+**The stylesheet is not in the page.** It is 134KB — inlined in `base.html` it was
+re-sent on every navigation and could never be cached, which made every page a 142KB
+download. `/velvt.<digest>.css` renders `templates/velvt.css` once per process and
+serves it `immutable` for a year; the digest is a hash of the rendered bytes, so a
+changed colour is a new URL and a stale page's request 302s to the current one. It
+stays a *template* rather than a static file because it interpolates `url_for()` for
+the wordmark mask. Landing page: 142KB → 5.6KB, or 1.9KB gzipped.
+
+**Responses are gzipped by `compress_response()`**, stdlib rather than a dependency —
+nothing in front of the app compresses, so an uncompressed page stayed uncompressed
+over the wire. It skips streamed responses (`direct_passthrough`, or a `send_file`
+would be buffered into memory), anything already encoded, non-text types and bodies
+under 1KB, and sets `Vary: Accept-Encoding` either way.
+
+**Photos carry an ETag**, so a revisit is a 304 with no body rather than up to
+`PHOTO_MAX_BYTES` again — six of those to a profile is the heaviest thing the app
+serves, and it comes out of Postgres through the app with no CDN in front of it.
 
 **Height is fluid, not stepped.** A step screen must never scroll, which used to be
 held with `@media (max-height: 740px/700px)` blocks — two phones a pixel apart in

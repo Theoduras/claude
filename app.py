@@ -20,6 +20,7 @@ register an account and log in. Set AUTO_LOGIN=1 to skip the login page
 during local development and browse as admin automatically.
 """
 
+import gzip
 import hashlib
 import json
 import math
@@ -103,6 +104,12 @@ def _required_secret(name, dev_fallback):
 
 
 app = Flask(__name__)
+# Flask defaults static files to no-cache, which costs a revalidation round
+# trip per asset per navigation -- for the wordmark and the search animation
+# that is two, on every page. An hour is short enough that replacing an asset
+# in place still lands the same day, and these are the only assets not served
+# from a content-addressed URL.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 3600
 app.secret_key = _required_secret("APP_SECRET_KEY", "dev-only-insecure-key")
 
 
@@ -1728,6 +1735,9 @@ def inject_user():
         "lang": lang,
         "languages": LANGUAGES,
         "language_short": LANGUAGE_SHORT,
+        # A callable, not a value: base.html is rendered for every response,
+        # and the sheet only needs rendering once per process.
+        "css_digest": lambda: _render_stylesheet()["digest"],
     }
 
 
@@ -1877,6 +1887,51 @@ def _br(text):
 @app.context_processor
 def expose_csp_nonce():
     return {"csp_nonce": lambda: getattr(g, "csp_nonce", "")}
+
+
+# Text compresses to about a quarter of its size and nothing in front of
+# this app does it: Cloud Run's frontend passes the body through untouched,
+# so an uncompressed 142KB page stayed 142KB over the wire. stdlib gzip
+# rather than a dependency -- this is one hook, and requirements.txt is
+# deliberately short.
+COMPRESSIBLE = ("text/html", "text/css", "text/plain",
+                "application/json", "application/javascript", "image/svg+xml")
+COMPRESS_MIN_BYTES = 1024
+
+
+@app.after_request
+def compress_response(response):
+    """gzip a text response when the client said it could take one.
+
+    Skips anything already encoded, anything streamed (direct_passthrough --
+    touching .data there would buffer a file into memory), and anything small
+    enough that the header overhead outweighs the saving. Vary is set either
+    way, so a shared cache cannot hand a gzipped body to a client that did
+    not ask for one.
+    """
+    response.headers.add("Vary", "Accept-Encoding")
+    if (
+        response.direct_passthrough
+        or response.status_code < 200
+        or response.status_code >= 300
+        or "Content-Encoding" in response.headers
+        or "gzip" not in request.headers.get("Accept-Encoding", "")
+    ):
+        return response
+    if response.mimetype not in COMPRESSIBLE:
+        return response
+    body = response.get_data()
+    if len(body) < COMPRESS_MIN_BYTES:
+        return response
+    # mtime=0 so the same body always produces the same bytes, which keeps
+    # any ETag downstream stable across restarts.
+    packed = gzip.compress(body, compresslevel=6, mtime=0)
+    if len(packed) >= len(body):
+        return response
+    response.set_data(packed)
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers["Content-Length"] = str(len(packed))
+    return response
 
 
 @app.after_request
@@ -6106,13 +6161,25 @@ def photo(photo_id):
     if not can_view_photos(row["user_id"], user["id"], user["is_admin"]):
         abort(404)
 
+    data = bytes(row["data"])
+    # Photos are the heaviest thing the app serves -- up to PHOTO_MAX_BYTES
+    # each, straight out of Postgres, six to a profile. An ETag turns every
+    # revisit into a 304 with no body, which is the difference between a
+    # profile costing megabytes each time and costing it once. Weak-free and
+    # content-derived, so replacing a photo at the same id still busts it.
+    etag = '"%s"' % hashlib.sha256(data).hexdigest()[:16]
+    if request.headers.get("If-None-Match") == etag:
+        return Response(status=304, headers={"ETag": etag,
+                                             "Cache-Control": "private, max-age=3600"})
+
     return Response(
-        bytes(row["data"]),
+        data,
         mimetype=row["mime"],
         headers={
             "X-Content-Type-Options": "nosniff",
             "Content-Disposition": "inline",
             "Cache-Control": "private, max-age=3600",
+            "ETag": etag,
         },
     )
 
@@ -6161,6 +6228,43 @@ def run_purge_deletions():
     # being enforced.
     expired = purge_expired_data()
     return {"purged": purged, "expired": expired}, 200
+
+
+# Rendered once per process and held here. The stylesheet is a Jinja
+# template (it interpolates url_for() for the wordmark mask) but it depends
+# on nothing request-specific, so re-rendering 134KB on every page view was
+# work with no result. The digest is of the rendered bytes, so a deploy that
+# changes a colour changes the URL and nobody serves a stale sheet.
+_STYLESHEET = {}
+
+
+def _render_stylesheet():
+    if not _STYLESHEET:
+        body = render_template("velvt.css")
+        _STYLESHEET["body"] = body
+        _STYLESHEET["digest"] = hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
+    return _STYLESHEET
+
+
+@app.route("/velvt.<digest>.css")
+def stylesheet(digest):
+    """The whole design system, at a URL that changes when it does.
+
+    Immutable for a year: the digest is in the path, so a changed sheet is a
+    different URL and there is nothing to revalidate. This is the single
+    biggest thing the app sends -- inlined into every page it was 134KB of
+    every navigation, uncacheable by construction.
+    """
+    sheet = _render_stylesheet()
+    if digest != sheet["digest"]:
+        # An old digest is a stale page asking for a sheet that no longer
+        # exists. Send the current one rather than 404ing an unstyled page.
+        return redirect(url_for("stylesheet", digest=sheet["digest"]))
+    return Response(
+        sheet["body"],
+        mimetype="text/css",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 
 @app.route("/lang/<code>", methods=["GET", "POST"])
