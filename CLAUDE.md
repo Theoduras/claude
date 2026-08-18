@@ -24,6 +24,7 @@ python check_presence.py  # a search leaves the pool when its browser stops poll
 python check_i18n.py      # both languages complete, and they still match each other
 python check_pin.py       # every profile and search lands in the one city
 python check_landing.py   # the landing page's busyness line is true at every tier
+python tools/check_hero_fits.py   # landing hero fits above the buttons (needs a browser)
 ```
 
 `smoke.py` proves routes render; `check_auth.py` proves the security-relevant ones
@@ -85,6 +86,16 @@ under 1KB, and sets `Vary: Accept-Encoding` either way.
 **Photos carry an ETag**, so a revisit is a 304 with no body rather than up to
 `PHOTO_MAX_BYTES` again — six of those to a profile is the heaviest thing the app
 serves, and it comes out of Postgres through the app with no CDN in front of it.
+
+**`overflow: hidden` hides bugs, not just content.** `.wiz-fit` clips rather than
+scrolls, which is right for a step whose contents are known — but it means a box
+whose content outgrows it paints *over* what follows instead of scrolling, and
+`document.scrollHeight` never changes. Every check that measured document overflow
+called the page clean while the landing lede was drawn across the buttons on a real
+phone. `tools/check_hero_fits.py` measures what a person would notice instead: the
+hero's content against its own box, the lede inside it, and a hit-test on the first
+button. `getBoundingClientRect()` is not enough on its own — it ignores ancestor
+clipping, so it reports an overlap for content that is merely scrolled out of sight.
 
 **Height is fluid, not stepped.** A step screen must never scroll, which used to be
 held with `@media (max-height: 740px/700px)` blocks — two phones a pixel apart in
