@@ -63,6 +63,20 @@ Keep replies concise; prefer the smallest diff that does the job.
 
 - `app.py` — **~5,000 lines**, single module: all routes, DB access, and helpers
 - `templates/` — 27 Jinja templates, all extending `base.html`
+
+**Height is fluid, not stepped.** A step screen must never scroll, which used to be
+held with `@media (max-height: 740px/700px)` blocks — two phones a pixel apart in
+height got visibly different type, and every trimmed value had to be restated by hand.
+`--fit` and `--fit-tight` in `:root` replace them: rems that shrink continuously with
+viewport height (1rem at 740px and above, easing to 0.70/0.52rem at 540px), so
+`calc(N * var(--fit))` keeps its full-height value and finds its own trim on the way
+down. `--tabbar-h` states the fixed bar's height from the same token, and `main`
+reserves exactly that — the old flat 7rem reserve and the flat `-1.25rem` pull-up that
+clawed it back were two constants in an unstated relationship, and on a short screen
+the pull-up won and slid the wizard's Next row under the bar. `.match` redefines
+`--fit-tight` locally with a higher knee, because at full size the reveal does not fit
+an 812px phone. One height query survives, in `.match-note.is-aside`: an aside is a
+line or it is nothing, and there is no fractional version to ramp to.
 - `docs/style-guide.html` — velvet-textured design system; `docs/deploy-gcp.md` — Cloud Run
 - `docs/launch-readiness.html` — the pre-launch audit these changes came from, with what
   is still outstanding (image scanning, passkeys, selfie verification, stepped

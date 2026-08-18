@@ -46,6 +46,44 @@
       /* numbers that must not reflow as they tick: timers, counts, readouts */
       --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
+      /* ---------- height-fluid sizing ------------------------------
+         The flow's promise is that a step never scrolls, which used to be
+         kept with stepped @media (max-height) blocks: full size above
+         740px tall, a trim below it, a harder trim below 700. Those are
+         cliffs -- two phones 1px apart in height got visibly different
+         type -- and every trimmed value had to be restated by hand, so the
+         two sets drifted.
+
+         --fit is a rem that shrinks with the viewport's height instead: it
+         is exactly 1rem on a 740px-tall screen and above, and eases down to
+         0.70rem at 540px, continuously. Anything sized in calc(N *
+         var(--fit)) therefore keeps its old full-height value and finds its
+         own trim on the way down, with no breakpoint to land on.
+
+         --fit-tight is the same curve, steeper (0.52 at 540px), for the
+         screens that carry more than a step does -- the reveal's two
+         portraits, chips and countdown -- and for decoration that should
+         yield before content does.
+
+         The floors are set by the shortest screen the flow has to hold
+         without scrolling, not by taste: below them a step spills, which is
+         the one thing this whole scale exists to prevent.
+
+         The vh coefficient is the whole trick: 1vh is height/100, so a
+         coefficient of N vh moves the value by exactly N px across a 100px
+         change in viewport height. */
+      --fit: clamp(0.7rem, 2.4vh - 0.11rem, 1rem);
+      --fit-tight: clamp(0.52rem, 4.267vh - 1.038rem, 1rem);
+
+      /* The bar is fixed, so main has to reserve its height by hand -- and
+         every part of the bar is now sized in --fit, which makes that height
+         one expression rather than a number someone has to remember to keep
+         in step. 4.875 is measured, not guessed: it is what the padding,
+         the 21px icon, the gap, the label and the border come to at --fit
+         = 1rem. Reserve it plus a small gap and the step's last row sits
+         just above the bar at every height, with no fixed pull-up. */
+      --tabbar-h: calc(4.875 * var(--fit) + env(safe-area-inset-bottom, 0px));
+
       --measure: 62rem;
       --radius: 18px;
       --radius-sm: 11px;
@@ -187,7 +225,9 @@
          a nav with no flex-basis would rather shrink its own padding than
          let main give up the space, squashing the bar down to a sliver. */
       flex: none;
-      padding: 0.85rem clamp(1rem, 4vw, 2.5rem);
+      /* the chrome above the step gives height back too, or the step alone
+         carries the whole trim on a short screen */
+      padding: calc(0.85 * var(--fit)) clamp(1rem, 4vw, 2.5rem);
       background: linear-gradient(180deg, rgba(21, 12, 34, 0.92), rgba(11, 7, 19, 0.72));
       border-bottom: 1px solid var(--ink-hairline);
       backdrop-filter: blur(14px);
@@ -666,19 +706,12 @@
        changing. Anchoring the top makes the question the fixed point and
        lets only what is below it move. */
     .wiz-steady .wiz-body { justify-content: flex-start; }
-    /* main reserves 7rem at the bottom on phones, which is more than the tab
-       bar actually occupies -- fine for a scrolling page, but it leaves the
-       wizard's back/next row floating short of the bottom. Reclaim the
-       difference so the row sits just above the bar, keeping a few px so a
-       device with a home indicator (safe-area inset) cannot overlap it. */
-    @media (max-width: 720px) {
-      html:not([data-viewport="desktop"]) .wiz { margin-bottom: -1.25rem; }
-    }
-    /* The opt-in twin every other phone rule has (see the pair at the foot of
-       this sheet): without it the forced-mobile preview on a wide monitor
-       loses the reclaim and the nav row sits short of the bar, so the frame
-       stops telling the truth about the phone it is previewing. */
-    html[data-viewport="mobile"] .wiz { margin-bottom: -1.25rem; }
+    /* main's bottom reserve used to be a flat 7rem -- more than the bar
+       occupies -- and .wiz pulled a flat 1.25rem back so its nav row did not
+       float short of the bottom. Two constants that had to stay in a
+       relationship neither of them stated, and on a short screen the pull-up
+       won and slid the row under the bar. The reserve is now the bar's own
+       height, so there is nothing to claw back. */
     /* past phone widths the bleed stops earning its keep: cap it and centre.
        Guarded on the preview too: the media query matches the real window, so
        inside the 375px frame on a desktop this would otherwise cap the column
@@ -752,29 +785,31 @@
       transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .wiz-count {
-      margin: 1.1rem 0 0;
+      margin: calc(1.1 * var(--fit)) 0 0;
       text-align: center;
-      font-size: 0.72rem;
+      font-size: calc(0.72 * var(--fit));
       font-weight: 700;
       letter-spacing: 0.13em;
       text-transform: uppercase;
       color: var(--text-faint);
     }
     .wiz-q {
-      margin: 0.4rem 0 1.2rem;
+      margin: calc(0.4 * var(--fit)) 0 calc(1.2 * var(--fit));
       text-align: center;
-      font-size: clamp(1.6rem, 6vw, 2.1rem);
+      /* the width clamp still sets it; the height token only caps it, so a
+         narrow-and-tall screen is unaffected and a short one gives type back */
+      font-size: min(clamp(1.6rem, 6vw, 2.1rem), calc(2.1 * var(--fit)));
       line-height: 1.18;
     }
     .wiz-hint {
-      margin: -0.8rem 0 1.1rem;
+      margin: calc(-0.8 * var(--fit)) 0 calc(1.1 * var(--fit));
       text-align: center;
-      font-size: 0.85rem;
+      font-size: calc(0.85 * var(--fit));
       color: var(--text-muted);
     }
     .wiz-field { margin-bottom: 0.5rem; }
     .wiz-readout {
-      margin: 0 0 1.4rem;
+      margin: 0 0 calc(1.4 * var(--fit));
       text-align: center;
       font-family: var(--mono);
       font-variant-numeric: tabular-nums;
@@ -815,7 +850,7 @@
       60% { transform: translateX(5px); }
     }
 
-    .opt-list { display: flex; flex-direction: column; gap: 0.6rem; }
+    .opt-list { display: flex; flex-direction: column; gap: calc(0.6 * var(--fit)); }
     /* six short labels stack too tall for a phone screen in one column, so
        the multi-select step pairs them up instead of scrolling */
     .opt-list-2col {
@@ -823,10 +858,10 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.55rem;
     }
-    .opt-list-2col .opt { padding: 0.7rem 0.75rem; gap: 0.55rem; }
-    .opt-list-2col .opt-icon { width: 2rem; height: 2rem; }
-    .opt-list-2col .opt-icon svg { width: 1.05rem; height: 1.05rem; }
-    .opt-list-2col .opt-label { font-size: 0.88rem; }
+    .opt-list-2col .opt { padding: calc(0.7 * var(--fit)) 0.75rem; gap: 0.55rem; }
+    .opt-list-2col .opt-icon { width: calc(2 * var(--fit)); height: calc(2 * var(--fit)); }
+    .opt-list-2col .opt-icon svg { width: calc(1.05 * var(--fit)); height: calc(1.05 * var(--fit)); }
+    .opt-list-2col .opt-label { font-size: calc(0.88 * var(--fit)); }
     .opt-list-2col .opt-mark { width: 1rem; height: 1rem; }
     /* .opt is a <label>, so the global field-caption rule above would
        otherwise render every option uppercase, tracked out and faint. */
@@ -839,7 +874,7 @@
       text-transform: none;
       letter-spacing: normal;
       font-weight: 400;
-      padding: 0.8rem 1.05rem;
+      padding: calc(0.8 * var(--fit)) 1.05rem;
       border-radius: 1.15rem;
       border: 1.5px solid transparent;
       background: var(--ink-raised);
@@ -856,8 +891,8 @@
       flex: none;
       display: grid;
       place-items: center;
-      width: 2.4rem;
-      height: 2.4rem;
+      width: calc(2.4 * var(--fit));
+      height: calc(2.4 * var(--fit));
       border-radius: 50%;
       color: #FFF;
       background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
@@ -869,10 +904,10 @@
     .opt-4 .opt-icon { background-image: linear-gradient(150deg, #FF9DAA, var(--danger)); }
     .opt-5 .opt-icon { background-image: linear-gradient(150deg, #8FA6FF, #4356C4); }
     .opt-6 .opt-icon { background-image: linear-gradient(150deg, #6FE3C4, #169B7C); }
-    .opt-icon svg { width: 1.25rem; height: 1.25rem; }
+    .opt-icon svg { width: calc(1.25 * var(--fit)); height: calc(1.25 * var(--fit)); }
     .opt-label {
       flex: 1;
-      font-size: 0.98rem;
+      font-size: calc(0.98 * var(--fit));
       color: var(--text);
       transition: color 0.16s ease;
     }
@@ -911,7 +946,7 @@
       display: flex;
       align-items: center;
       gap: 0.9rem;
-      margin-top: 1.5rem;
+      margin-top: calc(1.5 * var(--fit));
       padding-top: 0.25rem;
     }
     .wiz-nav-end {
@@ -959,8 +994,8 @@
     }
     .wiz-skip:hover { color: var(--text); background: rgba(168, 133, 247, 0.12); }
     .wiz-next {
-      width: 3.4rem;
-      height: 3.4rem;
+      width: calc(3.4 * var(--fit));
+      height: calc(3.4 * var(--fit));
       border: none;
       color: #FFF;
       background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
@@ -974,8 +1009,8 @@
       border-radius: 999px;
       padding: 0 1.5rem;
       /* same height as the chevron it replaces, so the row does not shift
-         by a few pixels on the last step */
-      height: 3.4rem;
+         by a few pixels on the last step -- so it tracks the same token */
+      height: calc(3.4 * var(--fit));
       background-image: linear-gradient(150deg, var(--teal-crest), var(--teal));
       box-shadow: 0 10px 26px -12px rgba(29, 166, 162, 0.9);
     }
@@ -1023,26 +1058,33 @@
        step chrome (.wiz-count/.wiz-q/.wiz-hint) is reused verbatim and only
        the parts unique to waiting are defined here. Everything is stated
        rather than editable -- the filters were set on the previous screen. */
-    .waiting .wiz-body { justify-content: flex-start; padding-top: 0.5rem; }
-    .waiting .wiz-q { margin-bottom: 0.7rem; }
+    .waiting .wiz-body { justify-content: flex-start; padding-top: calc(0.5 * var(--fit)); }
+    .waiting .wiz-q { margin-bottom: calc(0.7 * var(--fit-tight)); }
     /* Four phrases of different lengths cycle through here every 2.6s and
        the longest wraps to two lines. Reserving both means the swap is a
        word change rather than the rest of the screen moving up and down. */
-    .waiting #status-line { min-height: 2.9em; }
-    .waiting .search-anim { margin-bottom: 0.2rem; }
+    /* two lines above 700px tall; on a short screen the reserve itself
+       eases down, since a half-line of jump costs less than a spill */
+    .waiting #status-line { min-height: clamp(1.7em, 0.6vh + 0.2em, 2.9em); }
+    .waiting .search-anim { margin-bottom: calc(0.2 * var(--fit)); }
     /* smaller than the wizard's, so the summary below it clears the fold */
-    .waiting .search-anim dotlottie-wc { width: min(210px, 58%); }
-    .waiting .pulse-heart { width: 3.4rem; height: 3.4rem; }
+    /* the animation is the first thing that can afford to give: min() keeps
+       the width response and the token adds the height one */
+    .waiting .search-anim dotlottie-wc { width: min(58%, clamp(96px, 33.53vh - 91.8px, 210px)); }
+    .waiting .pulse-heart {
+      width: clamp(2.6rem, 4.923vh + 0.6308rem, 3.4rem);
+      height: clamp(2.6rem, 4.923vh + 0.6308rem, 3.4rem);
+    }
 
     .waiting-meta {
       display: flex;
       justify-content: center;
       flex-wrap: wrap;
       gap: 0.45rem;
-      margin: 0 0 1.1rem;
+      margin: 0 0 calc(1.1 * var(--fit-tight));
       font-family: var(--mono);
       font-variant-numeric: tabular-nums;
-      font-size: 0.82rem;
+      font-size: calc(0.82 * var(--fit));
       color: var(--text-muted);
     }
     .waiting-fits { color: var(--teal-crest); }
@@ -1061,7 +1103,7 @@
        "STEP 3 OF 6", so every screen names its parts the same way. */
     .waiting-recap-label,
     .section-label {
-      margin: 0 0 0.55rem;
+      margin: 0 0 calc(0.55 * var(--fit));
       text-align: center;
       font-size: 0.7rem;
       font-weight: 700;
@@ -1071,6 +1113,15 @@
     }
     .waiting-recap .pillset,
     .filters-fold .pillset { justify-content: center; margin-bottom: 0; }
+    /* the recap and the reveal both stack several rows of these, so their
+       pills ramp harder than a lone pill elsewhere does */
+    .waiting .pillset,
+    .match .pillset { gap: calc(0.5 * var(--fit-tight)); }
+    .waiting .pill,
+    .match .pill {
+      padding: calc(0.5 * var(--fit-tight)) calc(0.875 * var(--fit-tight));
+      font-size: calc(0.845 * var(--fit-tight));
+    }
 
     /* ---------- the filter fold -------------------------------------
        Sixteen pills is five rows on a phone. Folded, the same information
@@ -1188,11 +1239,13 @@
        button after 45s especially. One reserved slot for the pair, sized to
        the taller state, so they fade in against a space already held for
        them. */
-    .waiting-fix { min-height: 7.2rem; }
+    /* the reserve tracks the pair it holds room for, or it stops being a
+       reserve and starts being padding on a short screen */
+    .waiting-fix { min-height: calc(7.2 * var(--fit-tight)); }
     .waiting-none {
-      margin: 1.1rem 0 0;
+      margin: calc(1.1 * var(--fit)) 0 0;
       text-align: center;
-      font-size: 0.84rem;
+      font-size: calc(0.84 * var(--fit));
       line-height: 1.5;
       color: var(--text-muted);
     }
@@ -1202,7 +1255,7 @@
        no new component, and nothing that reads as a second filter form. */
     .waiting-options {
       justify-content: center;
-      margin: 0.85rem 0 0;
+      margin: calc(0.85 * var(--fit)) 0 0;
     }
     .waiting-options form { display: contents; }
     .waiting-options .pill {
@@ -1349,20 +1402,6 @@
       .sheet-opt:hover { transform: none; }
     }
 
-    /* the waiting screen carries an animation the wizard steps do not, so
-       it needs its own trim to clear a short screen without scrolling */
-    @media (max-height: 740px) {
-      .waiting .search-anim dotlottie-wc { width: min(150px, 44%); }
-      .waiting .pulse-heart { width: 2.6rem; height: 2.6rem; }
-      .waiting .wiz-q { margin-bottom: 0.5rem; }
-      .waiting-meta { margin-bottom: 0.7rem; }
-      .waiting-recap-label { margin-bottom: 0.4rem; }
-      .waiting-none { margin-top: 0.7rem; font-size: 0.78rem; }
-      .waiting .pillset { gap: 0.35rem; }
-      .waiting .pill { padding: 0.35rem 0.7rem; font-size: 0.78rem; }
-      .waiting-options { margin-top: 0.6rem; }
-      .waiting-options .pill { font-size: 0.78rem; }
-    }
 
     /* ---------- bottom sheet (the wizard's "More" overlay) ------------
        Anchored to the bottom of the screen and scrollable inside, so the
@@ -1478,26 +1517,6 @@
       .sheet-backdrop, .sheet-panel { transition: none; }
     }
 
-    /* short screens: the flow's promise is that a step never scrolls, so
-       trade type scale and padding for height rather than let it spill. */
-    @media (max-height: 740px) {
-      .wiz-count { margin-top: 0.7rem; font-size: 0.68rem; }
-      .wiz-q { font-size: clamp(1.35rem, 5.4vw, 1.7rem); margin-bottom: 0.9rem; }
-      .wiz-hint { margin: -0.6rem 0 0.85rem; font-size: 0.8rem; }
-      .opt-list { gap: 0.45rem; }
-      .opt { padding: 0.62rem 0.9rem; }
-      .opt-icon { width: 2.1rem; height: 2.1rem; }
-      .opt-icon svg { width: 1.1rem; height: 1.1rem; }
-      .opt-label { font-size: 0.92rem; }
-      .wiz-nav { margin-top: 1rem; }
-      .wiz-next { width: 3rem; height: 3rem; }
-      /* .is-final pins itself to the chevron's height so the row doesn't
-         shift on the last step -- which only holds if it follows the
-         chevron down here too. Without this the nav sat 6px higher on
-         step 6 of the search wizard on a short screen. */
-      .wiz-next.is-final { height: 3rem; }
-      .wiz-readout { margin-bottom: 1rem; }
-    }
     @media (prefers-reduced-motion: reduce) {
       .wiz-in .wiz-q, .wiz-in .wiz-hint, .wiz-in .wiz-field, .wiz-in .opt {
         animation: none;
@@ -1968,16 +1987,51 @@
        stated in the middle (eyebrow, question, chips) and the two answers
        sit in the nav row at the foot, always at the same y. */
     .match .wiz-body { gap: 0; }
-    .match .pair { margin: 0 0 1.2rem; }
-    .match .pair > * { width: 5.2rem; height: 5.2rem; }
-    .match .ring { margin: 0.2rem auto 0; }
+    .match .pair { margin: 0 0 calc(1.2 * var(--fit-tight)); }
+    .match .pair > * {
+      width: calc(5.65 * var(--fit-tight));
+      height: calc(5.65 * var(--fit-tight));
+    }
+    /* Everything on the reveal rides --fit-tight, and the reveal redefines
+       it: the ordinary curve tops out at 740px tall, which leaves an 812px
+       phone at full size -- and at full size this screen, with a full row of
+       shared-interest chips, does not fit one. The knee moves to 900px so a
+       tall phone still gets some give, and the ceiling drops to 0.92 so what
+       it renders at 900 is what the old tall layout was. */
+    .match { --fit-tight: clamp(0.52rem, 1.778vh - 0.08rem, 0.92rem); }
+
+    /* The reveal stacks more than a step does -- two portraits, a kicker, a
+       countdown, the shared-interest chips -- so its share of the step
+       chrome rides the steeper curve rather than the ordinary one. */
+    .match .wiz-count { margin-top: calc(1.1 * var(--fit-tight)); }
+    .match .wiz-q {
+      font-size: min(clamp(1.6rem, 6vw, 2.1rem), calc(2.1 * var(--fit-tight)));
+      margin-bottom: calc(1.2 * var(--fit-tight));
+    }
+    .match .wiz-hint {
+      margin-bottom: calc(1.1 * var(--fit-tight));
+      font-size: calc(0.85 * var(--fit-tight));
+    }
+    .match .wiz-nav { margin-top: calc(1.5 * var(--fit-tight)); }
+    .match .pair { margin-top: calc(1.4 * var(--fit-tight)); }
+    .match .ring {
+      margin: calc(0.2 * var(--fit)) auto 0;
+      width: calc(6.52 * var(--fit-tight));
+      height: calc(6.52 * var(--fit-tight));
+    }
+    .match .ring .ring-num { font-size: calc(1.76 * var(--fit-tight)); }
+    /* the unit sits inside the disc, so it has to shrink with it or it
+       runs out over the stroke on a short screen */
+    .match .ring-unit { font-size: calc(0.54 * var(--fit-tight)); }
+    /* the inner disc tracks the ring, or the stroke thickens as it shrinks */
+    .match .ring::after { inset: calc(0.48 * var(--fit-tight)); }
     .match .pillset { justify-content: center; margin-bottom: 0; }
     .match-line {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 0.35rem;
-      margin: 0 0 1rem;
+      margin: 0 0 calc(1 * var(--fit));
       font-weight: 700;
       font-size: 0.59rem;
       letter-spacing: 0.16em;
@@ -1989,9 +2043,9 @@
        .section-label, so it does not carry the leading gap. */
     .match-note,
     .section-note {
-      margin: 1rem 0 0;
+      margin: calc(1 * var(--fit-tight)) 0 0;
       text-align: center;
-      font-size: 0.84rem;
+      font-size: calc(0.84 * var(--fit-tight));
       line-height: 1.5;
       color: var(--text-muted);
     }
@@ -2007,33 +2061,10 @@
       max-height: none;
       margin: 1rem 0 0;
     }
-    @media (max-height: 740px) {
-      .match .pair > * { width: 4.2rem; height: 4.2rem; }
-      .match .pair { margin-bottom: 0.8rem; }
-      .match .ring { width: 4.6rem; height: 4.6rem; }
-      .match .ring .ring-num { font-size: 1.25rem; }
-      .match-note { margin-top: 0.7rem; font-size: 0.78rem; }
-    }
-    /* the reveal carries more than a step does -- two portraits, chips, a
-       countdown -- so a 640-tall screen needs a second, harder trim to
-       clear the fold without scrolling */
+    /* The one height rule left. An aside is a line of text or it is nothing:
+       there is no fractional version to ramp to, so below the height where
+       everything else has finished shrinking, the optional line goes. */
     @media (max-height: 700px) {
-      .match .pair > * { width: 3.4rem; height: 3.4rem; }
-      .match .pair { margin-bottom: 0.55rem; }
-      .match .wiz-q { font-size: clamp(1.2rem, 5vw, 1.45rem); margin-bottom: 0.7rem; }
-      .match .wiz-hint { margin-bottom: 0.7rem; font-size: 0.78rem; }
-      .match-line { margin-bottom: 0.7rem; }
-      .match .ring { width: 3.9rem; height: 3.9rem; }
-      .match .ring::after { inset: 0.3rem; }
-      .match .ring .ring-num { font-size: 1rem; }
-      .match .ring-unit { font-size: 0.44rem; }
-      .match .pillset { gap: 0.35rem; }
-      .match .pill { padding: 0.32rem 0.65rem; font-size: 0.76rem; }
-      .match-note { margin-top: 0.5rem; font-size: 0.75rem; }
-      .match .section-label { margin-bottom: 0.4rem; }
-      .match .wiz-count { margin-top: 0.4rem; }
-      .match .wiz-nav { margin-top: 0.7rem; }
-      /* the ring and the two buttons already say this */
       .match-note.is-aside { display: none; }
     }
     .tag-ended {
@@ -2690,13 +2721,13 @@
     .pillset {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
+      gap: calc(0.5 * var(--fit));
+      margin-bottom: calc(1 * var(--fit));
     }
     .pill {
-      padding: 0.5rem 0.875rem;
+      padding: calc(0.5 * var(--fit)) 0.875rem;
       font-family: var(--sans);
-      font-size: 0.845rem;
+      font-size: calc(0.845 * var(--fit));
       color: var(--text-muted);
       background: none;
       border: 1px solid var(--ink-hairline);
@@ -2948,9 +2979,12 @@
       text-transform: uppercase;
       color: var(--text-faint);
     }
-    .ring-sm { width: 4.5rem; height: 4.5rem; }
+    .ring-sm {
+      width: clamp(3.6rem, 5.538vh + 1.385rem, 4.5rem);
+      height: clamp(3.6rem, 5.538vh + 1.385rem, 4.5rem);
+    }
     .ring-sm::after { inset: 0.33rem; }
-    .ring-sm .ring-num { font-size: 1.19rem; }
+    .ring-sm .ring-num { font-size: clamp(1rem, 1.169vh + 0.5323rem, 1.19rem); }
 
     /* the two of you, overlapping: violet on one side, teal on the other */
     .pair {
@@ -2985,7 +3019,7 @@
     }
     .room-timer p {
       margin: 0.35rem 0 0;
-      font-size: 0.845rem;
+      font-size: calc(0.845 * var(--fit));
       line-height: 1.5;
       color: var(--text-muted);
     }
@@ -3144,16 +3178,10 @@
       display: flex;
       align-items: center;
       gap: 0.9rem;
-      padding: 0.7rem 0.9rem;
-      margin-bottom: 0.75rem;
+      padding: calc(0.7 * var(--fit)) 0.9rem;
+      margin-bottom: calc(0.75 * var(--fit));
       border-radius: 1.15rem;
       background: rgba(59, 11, 102, 0.42);
-    }
-    @media (max-height: 740px) {
-      .room .room-timer { padding: 0.55rem 0.8rem; }
-      .room .ring-sm { width: 3.6rem; height: 3.6rem; }
-      .room .ring-sm .ring-num { font-size: 1rem; }
-      .room .room-timer p { font-size: 0.78rem; }
     }
 
     /* live telemetry: counts that tick while you watch. Monospace and
@@ -3203,7 +3231,9 @@
          (753:391 is wide), so this needs enough room for 80% to be real
          rather than an unreachable ceiling. `contain` keeps the mask centred
          and undistorted inside whatever box survives both limits. */
-      max-height: 22vh;
+      /* Decoration yields before content does: 22vh of a tall screen, easing
+         to the 11vh the 700px block used to drop straight to. */
+      max-height: clamp(11vh, 22vh - 4.2rem + 4.2vh, 22vh);
       /* Breathing room under the nav. This used to be 3.6rem purely to pass
          under the fixed preview-toggle pill; with the pill gone the logo can
          sit where the layout actually wants it, and the top gap flexes with
@@ -3246,12 +3276,6 @@
     }
     @media (min-width: 721px) {
       html:not([data-viewport="mobile"]) .landing-actions { padding-top: 2.5rem; }
-    }
-    /* Short screens: the wordmark is decoration and yields first. */
-    @media (max-height: 700px) {
-      /* Still clearing the fixed toggle pill (see above) -- short screens
-         can't give up that top margin the way they give up logo height. */
-      .landing-logo { max-height: 11vh; margin-top: 3.6rem; margin-bottom: 0.5rem; }
     }
     .landing-live {
       display: flex;
@@ -3379,7 +3403,8 @@
       z-index: 3;
       display: none;
       align-items: center;
-      padding: 0.7rem 0.9rem calc(1rem + env(safe-area-inset-bottom, 0px));
+      padding: calc(0.7 * var(--fit)) 0.9rem
+               calc(1 * var(--fit) + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid var(--ink-hairline);
       background: rgba(8, 5, 14, 0.86);
       backdrop-filter: blur(14px);
@@ -3389,8 +3414,8 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 0.32rem;
-      padding: 0.15rem 0;
+      gap: calc(0.32 * var(--fit));
+      padding: calc(0.15 * var(--fit)) 0;
       color: var(--text-faint);
       transition: color 0.18s ease;
     }
@@ -3402,8 +3427,8 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 0.32rem;
-      padding: 0.15rem 0;
+      gap: calc(0.32 * var(--fit));
+      padding: calc(0.15 * var(--fit)) 0;
       border: none;
       background: none;
       font: inherit;
@@ -3493,10 +3518,12 @@
     }
     /* the icons are drawn with stroke="currentColor" so one rule tints both
        the glyph and its label as the tab lights up */
-    .tabbar svg { display: block; }
+    /* the attributes on these SVGs are 21x21; the rule overrides both so the
+       bar's height is a single function of --fit and can be stated as one */
+    .tabbar svg { display: block; width: calc(1.3125 * var(--fit)); height: calc(1.3125 * var(--fit)); }
     .tabbar .tab-label {
       font-weight: 700;
-      font-size: 0.5625rem;
+      font-size: calc(0.5625 * var(--fit));
       letter-spacing: 0.14em;
       text-transform: uppercase;
       line-height: 1;
@@ -3530,7 +3557,11 @@
       html:not([data-viewport="desktop"]) .brand { margin-right: 0.6rem; }
       html:not([data-viewport="desktop"]) nav a:not(.brand) { white-space: nowrap; }
       html:not([data-viewport="desktop"]) main {
-        padding: 1.5rem 1.5rem 7rem;
+        /* the bottom figure is the reserve for the fixed tab bar, which is
+           itself sized in --fit -- they shrink together, so the slack
+           between them never closes and the bar never covers a step's
+           last row */
+        padding: calc(1.5 * var(--fit)) 1.5rem calc(var(--tabbar-h) + 0.6 * var(--fit));
         gap: 1rem;
       }
     }
@@ -3547,7 +3578,7 @@
     html[data-viewport="mobile"] .brand { margin-right: 0.6rem; }
     html[data-viewport="mobile"] nav a:not(.brand) { white-space: nowrap; }
     html[data-viewport="mobile"] main {
-      padding: 1.5rem 1.5rem 7rem;
+      padding: calc(1.5 * var(--fit)) 1.5rem calc(var(--tabbar-h) + 0.6 * var(--fit));
       gap: 1rem;
     }
 
