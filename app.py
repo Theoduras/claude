@@ -119,7 +119,7 @@ def refuse_when_misconfigured():
 
     Registered first so it runs before anything else can act on a request.
     """
-    if CONFIG_ERROR and request.path != "/healthz":
+    if CONFIG_ERROR and request.path not in HEALTH_PATHS:
         return Response(f"Server misconfigured: {CONFIG_ERROR}\n", status=503,
                         mimetype="text/plain")
 
@@ -357,7 +357,14 @@ CSRF_MAX_AGE_SECONDS = 60 * 60 * 12
 # Neither caller is a browser with a session: the Cloud Run startup probe,
 # and the scheduler that drives the deletion purge (which authenticates with
 # a shared secret of its own instead).
-CSRF_EXEMPT_PATHS = {"/healthz", "/tasks/purge-deletions"}
+# The health check answers on two paths for one reason: Google's frontend
+# swallows the literal /healthz before it reaches the container, so that path
+# works for Cloud Run's startup probe (which dials the container directly) and
+# 404s for anything asking through velvt.nl. /-/health is the same handler on a
+# path nothing upstream claims, so external uptime monitoring can see it.
+HEALTH_PATHS = ("/healthz", "/-/health")
+
+CSRF_EXEMPT_PATHS = {*HEALTH_PATHS, "/tasks/purge-deletions"}
 CSRF_SERIALIZER = URLSafeTimedSerializer(app.secret_key, salt="velvt-csrf")
 
 # --- outbound mail ------------------------------------------------------
@@ -1766,15 +1773,15 @@ def inject_user():
 def force_canonical_host():
     """Send every request to CANONICAL_HOST over https, if one is configured.
 
-    /healthz is exempt: Cloud Run's startup probe reaches the container
-    directly, not through the mapped domain, so redirecting it would fail
-    every deploy.
+    The health paths are exempt: Cloud Run's startup probe reaches the
+    container directly, not through the mapped domain, so redirecting it would
+    fail every deploy.
 
     308 rather than 301 -- a 301 lets the browser turn a POST into a GET and
     drop the body, which would quietly break a login or a sent message posted
     to the wrong host.
     """
-    if not CANONICAL_HOST or request.path == "/healthz":
+    if not CANONICAL_HOST or request.path in HEALTH_PATHS:
         return
     host = (request.host or "").lower()
     if not host or host == CANONICAL_HOST:
@@ -6367,8 +6374,17 @@ def set_language(code):
 
 
 @app.get("/healthz")
+@app.get("/-/health")
 def healthz():
-    """Readiness for Cloud Run's startup probe.
+    """Readiness, for Cloud Run's startup probe and for anything watching.
+
+    Two paths, same answer. The probe is configured against /healthz and
+    reaches the container directly, so that one has always worked -- this
+    revision going live at all is the proof, since a failing probe is what
+    stops one being promoted. But Google's frontend intercepts the literal
+    /healthz on the way in, so through velvt.nl it answers with Google's own
+    404 page and never reaches Flask. /-/health is the path to point an
+    external monitor at.
 
     Retries the schema init, so a database that was merely slow to accept
     connections recovers on its own rather than needing a redeploy.

@@ -134,6 +134,13 @@ retries the schema init, so a database that was merely slow recovers on its
 own) until the app can actually query, which turns that silent failure into a
 failed deploy.
 
+**Watch `/-/health`, not `/healthz`, from outside.** The probe path works
+because Cloud Run dials the container directly. Google's frontend intercepts
+the literal `/healthz` on the way in, so through the mapped domain it answers
+with Google's own 404 page and never reaches the app — every other path,
+including `/healthz/` and `/health`, gets through fine. `/-/health` is the same
+handler on a path nothing upstream claims. Point uptime monitoring at that.
+
 Deploy again with the same command to ship changes — Cloud Run keeps the
 URL and rolls traffic to the new revision.
 

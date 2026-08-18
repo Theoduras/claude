@@ -843,6 +843,32 @@ except Exception as exc:
 finally:
     A.get_db = _broken
 
+# --- the health check ------------------------------------------------------
+# Two paths on purpose: Google's frontend eats the literal /healthz before it
+# reaches the container, so /healthz serves Cloud Run's startup probe (which
+# dials the container directly) and /-/health is what anything watching from
+# outside can actually reach. Both must answer, and both must sit outside the
+# machinery that would otherwise redirect or refuse them.
+for path in A.HEALTH_PATHS:
+    r = app.test_client().get(path)
+    check(f"{path} answers", r.status_code == 200 and b"ok" in r.data, str(r.status_code))
+    check(f"{path} is exempt from CSRF", path in A.CSRF_EXEMPT_PATHS)
+
+# A configured canonical host must not redirect them: the probe arrives on the
+# container's own hostname, so a 308 here would fail every deploy.
+_host = A.CANONICAL_HOST
+try:
+    A.CANONICAL_HOST = "velvt.nl"
+    client = app.test_client()
+    for path in A.HEALTH_PATHS:
+        r = client.get(path, base_url="http://some-revision.a.run.app")
+        check(f"{path} is not redirected to the canonical host",
+              r.status_code == 200, str(r.status_code))
+    r = client.get("/", base_url="http://some-revision.a.run.app")
+    check("...while an ordinary path still is", r.status_code == 308, str(r.status_code))
+finally:
+    A.CANONICAL_HOST = _host
+
 failed = [n for n, ok, _ in RESULTS if not ok]
 print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
 if failed:
