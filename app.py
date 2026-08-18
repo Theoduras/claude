@@ -477,10 +477,26 @@ ALLOW_BOT_MATCHES = os.environ.get("ALLOW_BOT_MATCHES", "0") not in ("0", "false
 #
 # The fragment is built from constants only, never from request data, and it
 # assumes the queries it lands in have joined `users` as `u`.
+# How long a waiting search stays in the pool without hearing from the
+# browser. The waiting screen polls /search/status every few seconds, so a
+# minute is many missed ticks -- long enough to ride out a tunnel or a
+# backgrounded tab, short enough that a closed laptop stops being offered
+# to people as a live person to talk to.
+SEARCH_ALIVE_SECONDS = 60
+
+
 def _candidate_eligible_sql():
     clauses = ["u.status = 'active'"]
     if not ALLOW_BOT_MATCHES:
         clauses.append("u.is_bot = FALSE")
+    # Demo members have no browser to poll with, so they would go stale
+    # within the minute and make local testing impossible. The exemption is
+    # dead weight in production, where the is_bot clause above has already
+    # removed them.
+    clauses.append(
+        "(u.is_bot = TRUE OR s.last_seen > NOW() - "
+        f"({SEARCH_ALIVE_SECONDS} * INTERVAL '1 second'))"
+    )
     return "".join(f" AND {c}" for c in clauses)
 
 
@@ -870,7 +886,13 @@ CREATE TABLE IF NOT EXISTS searches (
     use_relationship BOOLEAN NOT NULL DEFAULT TRUE,
     use_distance BOOLEAN NOT NULL DEFAULT TRUE,
     use_physical BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Last sign of life from the waiting page. created_at cannot stand in
+    -- for this: a searcher who closes the tab leaves a row that still says
+    -- 'waiting' forever, and pairing with it produces a five-minute room
+    -- with nobody in it. The waiting screen already polls, so every poll
+    -- rewrites this and going quiet is what drops you out of the pool.
+    last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Bring databases created before the per-filter toggles existed up to date.
@@ -882,6 +904,10 @@ ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_distance BOOLEAN NOT NULL DEFA
 -- a whole panel in the UI, and DEFAULT TRUE keeps every pre-existing row filtering
 -- exactly as it did before the switch existed.
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS use_physical BOOLEAN NOT NULL DEFAULT TRUE;
+-- Pre-heartbeat rows default to NOW(), which grants them one grace window
+-- rather than dropping every live searcher out of the pool at deploy time.
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW();
+CREATE INDEX IF NOT EXISTS searches_waiting_idx ON searches (status, last_seen);
 
 -- Bring searches created before the physical-trait step existed up to date.
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS pref_height_min INTEGER;
@@ -4106,9 +4132,9 @@ def save_search(
              pref_height_min, pref_height_max, pref_body_types,
              pref_fitness_level, pref_hair_color, pref_eye_color,
              pref_tattoos, use_gender, use_age, use_distance,
-             use_physical, status, match_id, created_at)
+             use_physical, status, match_id, created_at, last_seen)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                'waiting', NULL, NOW())
+                'waiting', NULL, NOW(), NOW())
         ON CONFLICT(user_id) DO UPDATE SET
             seeking = excluded.seeking,
             age_min = excluded.age_min,
@@ -4138,7 +4164,8 @@ def save_search(
             use_physical = excluded.use_physical,
             status = 'waiting',
             match_id = NULL,
-            created_at = NOW()
+            created_at = NOW(),
+            last_seen = NOW()
         """,
         (
             user_id, seeking, age_min, age_max, relationship_type, interests,
@@ -4147,6 +4174,22 @@ def save_search(
             pref_fitness_level, pref_hair_color, pref_eye_color, pref_tattoos,
             use_gender, use_age, use_distance, use_physical,
         ),
+    )
+    db.commit()
+
+
+def touch_search(user_id):
+    """Mark this searcher as still here.
+
+    Called from every request the waiting screen makes -- the page itself
+    and both of its polls -- so the heartbeat survives a poll failing or a
+    tab being reloaded. Scoped to 'waiting' rows so it can never resurrect
+    a cancelled or matched search.
+    """
+    db = get_db()
+    db.execute(
+        "UPDATE searches SET last_seen = NOW() WHERE user_id = ? AND status = 'waiting'",
+        (user_id,),
     )
     db.commit()
 
@@ -5038,6 +5081,7 @@ def chip_state(mine, others):
 @login_required
 def search_waiting():
     user_id = current_uid()
+    touch_search(user_id)
     mine, others = _search_pool(user_id)
 
     if mine is None or mine["status"] == "cancelled":
@@ -5055,6 +5099,7 @@ def search_chips_get():
     pills as the pool changes -- same JSON shape POST returns below, so
     the browser redraws from either one identically."""
     user_id = current_uid()
+    touch_search(user_id)
     mine, others = _search_pool(user_id)
     if mine is None:
         return {"error": "not searching"}, 404
@@ -5169,6 +5214,7 @@ def search_status():
     instead (see templates/search_waiting.html).
     """
     user_id = current_uid()
+    touch_search(user_id)
 
     # Retry pairing on each poll so a searcher who arrived since the last
     # tick still gets picked up.

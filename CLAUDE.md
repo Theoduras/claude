@@ -20,6 +20,7 @@ docker compose up -d      # Postgres, once per boot
 python smoke.py           # hit every GET route, report 5xxs
 python check_auth.py      # 66 behaviour checks: auth, CSRF, safety, deletion, widening
 python check_bots.py      # demo members never reach a real person's search pool
+python check_presence.py  # a search leaves the pool when its browser stops polling
 ```
 
 `smoke.py` proves routes render; `check_auth.py` proves the security-relevant ones
@@ -69,6 +70,7 @@ Keep replies concise; prefer the smallest diff that does the job.
 - `check_auth.py` — behaviour checks for auth, CSRF, safety and deletion
 - `check_retention.py` — behaviour checks for the retention schedule
 - `check_onboarding.py` — behaviour checks for the first-search gate and the explainer
+- `check_presence.py` — behaviour checks for the search heartbeat and ghost matches
 - `seed_demo.py` — 40 demo members, all live-searching and `is_bot=TRUE` so they reply in
   chat. Idempotent; `--reset` to rebuild
 - `smoke.py`, `dev.ps1`, `docker-compose.yml` — local dev only, not deployed
@@ -116,6 +118,17 @@ Three queries select the waiting search pool — `try_pair()`, `_search_pool()` 
 `search_preview()` — plus the landing page's count. They all interpolate
 `CANDIDATE_ELIGIBLE_SQL` and `NOT_BLOCKED_SQL`. **Keep them in step:** if the preview and
 the matcher disagree, the preview promises candidates the matcher then refuses.
+
+**A waiting search is only in the pool while its browser is still there.** Nothing marks
+a row cancelled when someone closes the tab, so without a heartbeat the matcher pairs
+live people with ghosts — an "it's a match", a five-minute room, and nobody on the other
+side. `searches.last_seen` is rewritten by `touch_search()` from every request the
+waiting screen makes (`/search/waiting` and both of its polls, `/search/status` and
+`/search/chips`), and `SEARCH_ALIVE_SECONDS` (60s, many missed ticks) of silence drops
+the row out of *every* pool query at once, because the liveness predicate lives inside
+`CANDIDATE_ELIGIBLE_SQL` rather than in each query. Demo members are exempt — they have
+no browser to poll with — which is dead weight in production, where `u.is_bot = FALSE`
+has already excluded them. `check_presence.py` covers it.
 
 `search_blockers()` explains *why* a search isn't matching — a count per filter of who
 would fit without it, plus a concrete suggested value for each, every one verified through
