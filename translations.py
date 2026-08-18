@@ -517,7 +517,7 @@ TRANSLATIONS = {
 
         # --- landing ---
         "landing.title": "Velvt",
-        "landing.headline": "Iets zachters\ndan swipen.",
+        "landing.headline": "Niet swipen,\nmaar matchen!",
         "landing.lede": "Meld je aan en zoek — we koppelen je zodra iemand anders ook naar jou zoekt.",
         "landing.cta_start": "Begin met zoeken",
         "landing.cta_signin": "Ik heb al een account",
