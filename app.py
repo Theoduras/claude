@@ -373,6 +373,12 @@ CSRF_SERIALIZER = URLSafeTimedSerializer(app.secret_key, salt="velvt-csrf")
 # transport, and this keeps the dependency list where CLAUDE.md pins it.
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
 MAIL_FROM = os.environ.get("MAIL_FROM", "Velvt <onboarding@resend.dev>")
+# Where a reply goes. Transactional mail is sent from a noreply address so a
+# person cannot start a conversation with the sending system, but people do
+# reply to it anyway -- often to ask for help, sometimes to report someone --
+# and without this that reply bounces into nothing. Defaults to whatever the
+# app already publishes as its point of contact.
+MAIL_REPLY_TO = os.environ.get("MAIL_REPLY_TO", "").strip()
 # Needed to build absolute links in email; falls back to CANONICAL_HOST.
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
 
@@ -1476,7 +1482,18 @@ def send_email(to, subject, html):
         resp = requests.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
-            json={"from": MAIL_FROM, "to": [to], "subject": subject, "html": html},
+            json={
+                "from": MAIL_FROM,
+                "to": [to],
+                "subject": subject,
+                "html": html,
+                # SUPPORT_EMAIL is the published point of contact, so it is the
+                # honest fallback: a reply reaches the same humans the imprint
+                # promises. Omitted entirely if neither is configured, rather
+                # than pointing replies at a placeholder.
+                **({"reply_to": MAIL_REPLY_TO or SUPPORT_EMAIL}
+                   if (MAIL_REPLY_TO or SUPPORT_EMAIL) else {}),
+            },
             timeout=10,
         )
     except requests.RequestException as exc:
