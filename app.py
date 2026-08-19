@@ -24,6 +24,7 @@ import gzip
 import hashlib
 import json
 import math
+import mimetypes
 import os
 import re
 import secrets
@@ -102,6 +103,15 @@ def _required_secret(name, dev_fallback):
         return secrets.token_hex(32)  # never actually used to serve a request
     return dev_fallback
 
+
+# Flask types static files from the stdlib's table, which is seeded from
+# /etc/mime.types -- and the slim runtime image has no entry for .webp, so in
+# production the hero still went out as application/octet-stream while it was
+# image/webp on a dev box with a fuller mime database. Nothing broke (nosniff
+# only enforces the type for scripts and stylesheets, so the image decoder
+# sniffs it anyway), but the correct type should not depend on which packages
+# the base image happens to carry. State it here instead.
+mimetypes.add_type("image/webp", ".webp")
 
 app = Flask(__name__)
 # Flask defaults static files to no-cache, which costs a revalidation round
