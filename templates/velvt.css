@@ -3276,6 +3276,127 @@
        tabular so a changing digit never reflows the line. */
     /* tabular-nums so the ticking seconds don't shift the line's width */
 
+    /* ---------- landing: the film behind the hero ---------------------
+       The pair crossing the gap, in the gap the hero deliberately leaves
+       between the headline and the buttons.
+
+       z-index 0 puts it in the same layer as body::before and body::after,
+       and tree order does the rest: the conic-gradient folds paint under it,
+       the nap weave over it. That over-weave is the point -- it is what makes
+       two rendered characters read as part of the same bolt of cloth as the
+       rest of the page rather than a video pasted behind it. */
+    .hero-film {
+      position: fixed;
+      /* A band at the foot of the screen, not the whole viewport: they are
+         standing figures, so they need floor, and the headline needs the air
+         above them. Full-bleed put their faces behind the h1. */
+      /* Phone: the whole screen. The film is the page's ground here, not an
+         ornament in a corner of it. */
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+      /* The still is the floor of this layer, not a fallback bolted on: the
+         markup ships no <source>, so on a reduced-motion visit this is the
+         whole treatment and nothing is downloaded to cover it up. */
+      background:
+        url("{{ url_for('static', filename='velvt-hero.webp') }}")
+        50% 16% / cover no-repeat;
+    }
+    /* Once the reel is up, the still has to go. Both are bottom-anchored but
+       they scale differently, and the video is transparent above the figures'
+       heads -- so leaving the still underneath showed a second, larger pair
+       through that gap. */
+    .hero-film:has(.hero-film-reel.is-running) { background-image: none; }
+    /* Full-bleed, a scrim is the right tool and a mask is not: the layer covers
+       every pixel, so darkening it darkens the page uniformly with no band edge
+       to give away a seam -- and unlike a flat opacity it can be strong exactly
+       where the type sits and get out of the way in the middle. The headline
+       and the "people searching" line are both low-contrast by design, and they
+       are what this is protecting. */
+    .hero-film::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg,
+          rgba(11, 7, 19, 0.90) 0%,
+          rgba(11, 7, 19, 0.74) 30%,
+          rgba(11, 7, 19, 0.34) 54%,
+          rgba(11, 7, 19, 0.52) 80%,
+          rgba(11, 7, 19, 0.82) 100%),
+        /* The type is left-aligned, so the left third carries more of it. */
+        linear-gradient(92deg,
+          rgba(11, 7, 19, 0.52) 0%,
+          rgba(11, 7, 19, 0.16) 46%,
+          rgba(11, 7, 19, 0.00) 80%);
+    }
+    .hero-film-reel {
+      width: 100%;
+      height: 100%;
+      /* cover to fill the screen. Anchored near the top rather than the bottom,
+         because the shot pushes in as they come together: the frame it rests on
+         is a head-and-shoulders embrace, and bottom-anchoring cropped both
+         their faces off the top of the screen. Biased a little down from 0 so
+         the earlier, full-body part of the run still keeps its feet. */
+      object-fit: cover;
+      object-position: 50% 16%;
+      display: block;
+      /* Held back until the first painted frame, so the swap from still to
+         video is a fade rather than a flash of an empty black box. */
+      opacity: 0;
+      transition: opacity 700ms ease;
+    }
+    .hero-film-reel.is-running { opacity: 1; }
+    @media (prefers-reduced-motion: reduce) {
+      /* Nothing was fetched, so there is nothing to fade in -- but a browser
+         that ignores the script must not leave an empty box over the still. */
+      .hero-film-reel { display: none; }
+    }
+    /* Side by side the treatment inverts. Filling a 1440px screen with two
+       portrait figures means cropping them to a chest, and the layout already
+       has a genuinely empty quarter at the bottom right -- copy left, wordmark
+       upper right. So on desktop they get that corner, whole, at their own
+       size. Not a scaled-up phone: a different composition for a different
+       shape of screen. */
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .hero-film {
+        /* Held off the right edge, because the pair stands near the edge of
+           their own frame -- flush to the viewport the purple one loses his
+           shoulder to the window. */
+        inset: auto clamp(0px, 2vw, 34px) 0 auto;
+        width: min(42vw, 480px);
+        height: min(62svh, 600px);
+        background-position: 100% 100%;
+        background-size: contain;
+        opacity: 0.7;
+      }
+      html:not([data-viewport="mobile"]) .hero-film-reel {
+        /* contain here: a corner box has no business cropping them, and there
+           is no screen to fill any more. */
+        object-fit: contain;
+        object-position: 100% 100%;
+      }
+      /* The scrim goes with the full-bleed layout that needed it. A box this
+         size would darken its own rectangle and nothing else, which is the
+         visible-seam bug in a smaller frame -- so out here the edges are
+         feathered with a mask instead, on two sides, or the box's left edge
+         cuts a straight line down the gold character. */
+      html:not([data-viewport="mobile"]) .hero-film::after { content: none; }
+      html:not([data-viewport="mobile"]) .hero-film {
+        -webkit-mask-image:
+          linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.55) 12%,
+            #000 32%, #000 84%, transparent 100%),
+          linear-gradient(90deg, transparent 0%, #000 22%);
+        mask-image:
+          linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.55) 12%,
+            #000 32%, #000 84%, transparent 100%),
+          linear-gradient(90deg, transparent 0%, #000 22%);
+        -webkit-mask-composite: source-in;
+        mask-composite: intersect;
+      }
+    }
+
     /* ---------- landing: the logged-out hero -------------------------
        The hero sits high and the actions sink to the bottom of the fold,
        so the fabric shows through the gap between them at any height.

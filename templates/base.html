@@ -79,6 +79,13 @@
       {% endfor %}
     </div>
   {% endmacro %}
+  {# A full-viewport decorative layer, behind the frame and outside it. It sits
+     here rather than inside {% block content %} because body::after's nap
+     texture must fall *over* it -- both are z-index 0, and a pseudo-element
+     only paints above a sibling that comes earlier in tree order. Inside
+     `main` (z-index 1) the layer would sit on top of the weave instead of
+     under it, and the characters would look pasted on rather than woven in. #}
+  {% block backdrop %}{% endblock %}
   <div class="app-shell">
   <nav>
     <a class="brand" href="{{ url_for('index') }}"><span class="brand-logo"></span><span class="brand-word">Velvt</span></a>
