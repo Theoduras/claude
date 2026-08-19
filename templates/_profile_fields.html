@@ -157,16 +157,6 @@
 </label>
 <textarea id="hobbies" name="hobbies" placeholder="{{ t('form.hobbies_ph') }}">{{ profile['hobbies'] or '' }}</textarea>
 
-<label for="wants">{{ t("form.wants") }}
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="wants">{{ t("form.fill") }}</button></span>{% endif %}
-</label>
-<textarea id="wants" name="wants" placeholder="{{ t('form.wants_ph') }}">{{ profile['wants'] or '' }}</textarea>
-
-<label for="needs">{{ t("form.needs") }}
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="needs">{{ t("form.fill") }}</button></span>{% endif %}
-</label>
-<textarea id="needs" name="needs" placeholder="{{ t('form.needs_ph') }}">{{ profile['needs'] or '' }}</textarea>
-
 {# ---- physical -------------------------------------------------------- #}
 <div class="field-group">
   <h2>{{ t("form.physical") }}</h2>
@@ -206,61 +196,6 @@
   </label>
   <select id="{{ field }}" name="{{ field }}">
     <option value="">{{ t("form.select") }}</option>
-    {% for opt in options %}
-      <option value="{{ opt }}" {% if profile[field] == opt %}selected{% endif %}>{{ opt_label(opt) }}</option>
-    {% endfor %}
-  </select>
-{% endfor %}
-
-{# ---- what you're looking for ----------------------------------------- #}
-<div class="field-group">
-  <h2>{{ t("form.prefs_heading") }}</h2>
-  <p class="subtitle">{{ t("form.pref_note") }}</p>
-</div>
-
-<div class="field-pair">
-  <div>
-    <label for="pref_height_min">{{ t("form.height_from") }}</label>
-    <input id="pref_height_min" name="pref_height_min" type="number"
-           min="{{ height_min }}" max="{{ height_max }}"
-           value="{{ profile['pref_height_min'] or '' }}" placeholder="{{ height_min }}">
-  </div>
-  <div>
-    <label for="pref_height_max">{{ t("form.height_to") }}</label>
-    <input id="pref_height_max" name="pref_height_max" type="number"
-           min="{{ height_min }}" max="{{ height_max }}"
-           value="{{ profile['pref_height_max'] or '' }}" placeholder="{{ height_max }}">
-  </div>
-</div>
-<p class="hint">{{ t("form.height_note") }}</p>
-
-{% set chosen_body_types = (profile['pref_body_types'] or '').split(',') %}
-<label>Body types I'm drawn to
-  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="pref_body_types">{{ t("form.fill") }}</button></span>{% endif %}
-</label>
-<div class="checkgroup">
-  {% for bt in body_types %}
-    <label for="pref_body_types_{{ loop.index }}">
-      <input type="checkbox" id="pref_body_types_{{ loop.index }}"
-             name="pref_body_types" value="{{ bt }}"
-             {% if bt in chosen_body_types %}checked{% endif %}>
-      {{ bt }}
-    </label>
-  {% endfor %}
-</div>
-<p class="hint">{{ t("form.tick_note") }}</p>
-
-{% for field, label, options in [
-     ('pref_fitness_level', 'Preferred fitness level', fitness_levels),
-     ('pref_hair_color', 'Preferred hair colour', hair_colors),
-     ('pref_eye_color', 'Preferred eye colour', eye_colors),
-     ('pref_tattoos', 'Preferred tattoos', tattoo_levels),
-   ] %}
-  <label for="{{ field }}">{{ label }}
-    {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="{{ field }}">{{ t("form.fill") }}</button></span>{% endif %}
-  </label>
-  <select id="{{ field }}" name="{{ field }}">
-    <option value="">{{ t("crit.no_preference") }}</option>
     {% for opt in options %}
       <option value="{{ opt }}" {% if profile[field] == opt %}selected{% endif %}>{{ opt_label(opt) }}</option>
     {% endfor %}
@@ -559,32 +494,6 @@
   function fillField(name, force) {
     var data = sample[name];
     if (data === undefined) return;
-
-    if (name === "pref_height_min" || name === "pref_height_max") {
-      var minEl = document.getElementById("pref_height_min");
-      var maxEl = document.getElementById("pref_height_max");
-      if (!minEl || !maxEl) return;
-      if ((minEl.value || maxEl.value) && !force) return;
-      var minData = sample.pref_height_min, maxData = sample.pref_height_max;
-      var lo = Math.floor(minData.min + Math.random() * (minData.max - minData.min + 1));
-      var hi = Math.floor(lo + Math.random() * (maxData.max - lo + 1));
-      minEl.value = lo;
-      maxEl.value = hi;
-      return;
-    }
-
-    if (name === "pref_body_types") {
-      var boxes = document.querySelectorAll('input[name="pref_body_types"]');
-      var already = Array.prototype.some.call(boxes, function (b) { return b.checked; });
-      if (already && !force) return;
-      boxes.forEach(function (b) { b.checked = false; });
-      var subset = data.filter(function () { return Math.random() < 0.4; });
-      if (subset.length === 0) subset = [pick(data)];
-      boxes.forEach(function (b) {
-        if (subset.indexOf(b.value) !== -1) b.checked = true;
-      });
-      return;
-    }
 
     var el = document.getElementById(name);
     if (!el) return;

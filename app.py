@@ -648,16 +648,6 @@ SAMPLE_BIOS = [
     "Spends most weekends outdoors, the rest catching up on films.",
     "Firm believer that a good playlist fixes most problems.",
 ]
-SAMPLE_WANTS = [
-    "Someone easy to talk to who's up for spontaneous plans.",
-    "A genuine connection built on honesty and a shared sense of humour.",
-    "Someone who's as curious about the world as I am.",
-]
-SAMPLE_NEEDS = [
-    "Honesty and good communication, above everything else.",
-    "Someone who makes time, even when life gets busy.",
-    "Kindness — to me and to everyone else around them.",
-]
 SAMPLE_INTERESTS = [
     "music, travel, cooking", "hiking, photography, films", "yoga, reading, coffee",
     "gaming, cycling, cooking",
@@ -719,21 +709,14 @@ PROFILE_FIELDS = [
     "hair_color",
     "eye_color",
     "tattoos",
-    "pref_height_min",
-    "pref_height_max",
-    "pref_fitness_level",
-    "pref_hair_color",
-    "pref_eye_color",
-    "pref_tattoos",
     "bio",
     "interests",
     "hobbies",
-    "wants",
-    "needs",
     "relationship_type",
 ]
-# Handled separately via request.form.getlist() — a checkbox group, not a
-# single value, so it doesn't fit the uniform PROFILE_FIELDS .get() loop.
+# Used by the search wizard's step-3 physical filters (searches.pref_body_types),
+# a checkbox group that arrives as repeated fields rather than one value, so it
+# doesn't fit the uniform .get() loop those routes build from.
 PREF_BODY_TYPES_FIELD = "pref_body_types"
 
 
@@ -754,8 +737,6 @@ def sample_profile_data():
         "bio": SAMPLE_BIOS,
         "interests": SAMPLE_INTERESTS,
         "hobbies": SAMPLE_HOBBIES,
-        "wants": SAMPLE_WANTS,
-        "needs": SAMPLE_NEEDS,
         "relationship_type": RELATIONSHIP_TYPES,
         "height_cm": {"min": HEIGHT_MIN_CM, "max": HEIGHT_MAX_CM},
         "body_type": BODY_TYPES,
@@ -763,13 +744,6 @@ def sample_profile_data():
         "hair_color": HAIR_COLORS,
         "eye_color": EYE_COLORS,
         "tattoos": TATTOO_LEVELS,
-        "pref_height_min": {"min": HEIGHT_MIN_CM, "max": HEIGHT_MAX_CM},
-        "pref_height_max": {"min": HEIGHT_MIN_CM, "max": HEIGHT_MAX_CM},
-        "pref_body_types": BODY_TYPES,
-        "pref_fitness_level": FITNESS_LEVELS,
-        "pref_hair_color": HAIR_COLORS,
-        "pref_eye_color": EYE_COLORS,
-        "pref_tattoos": TATTOO_LEVELS,
     }
 
 
@@ -2410,7 +2384,8 @@ def validate_physical(values):
             return f"Invalid {field.replace('_', ' ')}.", None
         coerced[field] = val
 
-    # Preferences: height range
+    # Preferences (search wizard's step-3 physical filters, stored on
+    # searches, not profiles)
     pref_h_min_str = values.get("pref_height_min", "").strip()
     pref_h_max_str = values.get("pref_height_max", "").strip()
 
@@ -2895,11 +2870,6 @@ def edit_profile():
 
     if request.method == "POST":
         values = {f: request.form.get(f, "").strip() for f in PROFILE_FIELDS}
-        # A checkbox group, so it arrives as repeated fields rather than one
-        # value; stored as CSV.
-        values[PREF_BODY_TYPES_FIELD] = ",".join(
-            request.form.getlist(PREF_BODY_TYPES_FIELD)
-        )
         # Pinned to one city for now, so the form has no location control and
         # whatever arrives under that name is ignored rather than trusted.
         values["location"], _, _ = pinned_place(values["location"])
@@ -2966,13 +2936,10 @@ def edit_profile():
                     (user_id, name, age, gender, seeking, location,
                      height_cm, body_type, fitness_level,
                      hair_color, eye_color, tattoos,
-                     pref_height_min, pref_height_max,
-                     pref_body_types, pref_fitness_level,
-                     pref_hair_color, pref_eye_color, pref_tattoos,
-                     bio, interests, hobbies, wants, needs,
+                     bio, interests, hobbies,
                      relationship_type, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, ?, NOW())
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, NOW())
                 ON CONFLICT (user_id) DO UPDATE SET
                     name = excluded.name, age = excluded.age,
                     gender = excluded.gender, seeking = excluded.seeking,
@@ -2983,16 +2950,8 @@ def edit_profile():
                     hair_color = excluded.hair_color,
                     eye_color = excluded.eye_color,
                     tattoos = excluded.tattoos,
-                    pref_height_min = excluded.pref_height_min,
-                    pref_height_max = excluded.pref_height_max,
-                    pref_body_types = excluded.pref_body_types,
-                    pref_fitness_level = excluded.pref_fitness_level,
-                    pref_hair_color = excluded.pref_hair_color,
-                    pref_eye_color = excluded.pref_eye_color,
-                    pref_tattoos = excluded.pref_tattoos,
                     bio = excluded.bio, interests = excluded.interests,
-                    hobbies = excluded.hobbies, wants = excluded.wants,
-                    needs = excluded.needs,
+                    hobbies = excluded.hobbies,
                     relationship_type = excluded.relationship_type,
                     updated_at = NOW()
                 """,
@@ -3001,13 +2960,8 @@ def edit_profile():
                     values["location"],
                     phys["height_cm"], phys["body_type"], phys["fitness_level"],
                     phys["hair_color"], phys["eye_color"], phys["tattoos"],
-                    phys["pref_height_min"], phys["pref_height_max"],
-                    phys[PREF_BODY_TYPES_FIELD], phys["pref_fitness_level"],
-                    phys["pref_hair_color"], phys["pref_eye_color"],
-                    phys["pref_tattoos"],
                     values["bio"], values["interests"],
-                    values["hobbies"], values["wants"], values["needs"],
-                    values["relationship_type"],
+                    values["hobbies"], values["relationship_type"],
                 ),
             )
             apply_photo_edits(db, user_id, removals, uploads, posted_order, posted_primary)
@@ -3025,9 +2979,7 @@ def edit_profile():
         # admin_new_profile() both insert one), so this is a defensive
         # fallback rather than the normal path — but the edit form should
         # render blank and let a save recreate the row instead of 500ing.
-        profile = dict(row) if row is not None else {f: "" for f in PROFILE_FIELDS} | {
-            PREF_BODY_TYPES_FIELD: ""
-        }
+        profile = dict(row) if row is not None else {f: "" for f in PROFILE_FIELDS}
 
     # Shown as tiles so you can see what you already have while editing.
     photos = db.execute(
@@ -3901,9 +3853,6 @@ def admin_new_profile():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         values = {f: request.form.get(f, "").strip() for f in PROFILE_FIELDS}
-        values[PREF_BODY_TYPES_FIELD] = ",".join(
-            request.form.getlist(PREF_BODY_TYPES_FIELD)
-        )
         # Same pin as the member-facing form -- an admin-created profile has to
         # land in the same city, or it is unmatchable.
         values["location"], _, _ = pinned_place(values["location"])
@@ -3937,12 +3886,9 @@ def admin_new_profile():
                     INSERT INTO profiles
                         (user_id, name, age, gender, seeking, location,
                          height_cm, body_type, fitness_level, hair_color,
-                         eye_color, tattoos, pref_height_min, pref_height_max,
-                         pref_body_types, pref_fitness_level, pref_hair_color,
-                         pref_eye_color, pref_tattoos, bio,
-                         interests, hobbies, wants, needs, relationship_type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                            ?, ?, ?, ?, ?, ?, ?, ?)
+                         eye_color, tattoos, bio,
+                         interests, hobbies, relationship_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         new_id, values["name"], age, values["gender"],
@@ -3950,13 +3896,9 @@ def admin_new_profile():
                         phys["height_cm"], phys["body_type"],
                         phys["fitness_level"], phys["hair_color"],
                         phys["eye_color"], phys["tattoos"],
-                        phys["pref_height_min"], phys["pref_height_max"],
-                        phys[PREF_BODY_TYPES_FIELD],
-                        phys["pref_fitness_level"], phys["pref_hair_color"],
-                        phys["pref_eye_color"], phys["pref_tattoos"],
                         values["bio"],
-                        values["interests"], values["hobbies"], values["wants"],
-                        values["needs"], values["relationship_type"],
+                        values["interests"], values["hobbies"],
+                        values["relationship_type"],
                     ),
                 )
                 db.commit()
@@ -3972,7 +3914,6 @@ def admin_new_profile():
         profile["username"] = username
     else:
         profile = {f: "" for f in PROFILE_FIELDS}
-        profile[PREF_BODY_TYPES_FIELD] = ""
         profile["username"] = ""
 
     chips, chosen = interest_choices(profile.get("interests"))
@@ -4379,8 +4320,6 @@ PROFILE_OPTIONAL = (
     ("interests", "A few interests"),
     ("hobbies", "What you do for fun"),
     ("relationship_type", "What you're looking for"),
-    ("wants", "What you want"),
-    ("needs", "What you need"),
 )
 
 
