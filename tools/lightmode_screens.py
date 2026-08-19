@@ -88,6 +88,117 @@ def landing(brand):
 </div>""" % {"film": brand["film"], "still": brand["still"]}
 
 
+def intro():
+    """Screen 2: the "how a match works" explainer, ahead of a first search.
+
+    Post-login, so ch.03 left-aligns it -- the one structural difference
+    from the landing. Numbered steps here are a real sequence (reveal, then
+    timed chat, then decide), which is what earns a 1/2/3 marker rather than
+    decorating one on.
+    """
+    return """
+<div class="vl" data-screen="intro">
+  <div class="vl-top">
+    <span class="vl-word">Velvt</span>
+    <span></span><span></span>
+  </div>
+  <div class="vl-main vl-scroll">
+    <p class="t-over">Before you start</p>
+    <h1 class="t-h1">How a match<br>works here.</h1>
+    <p class="t-body measure intro-lede">Velvt doesn't hand you a stack of
+      profiles to swipe. You search, and you're paired the moment someone
+      is looking for you too.</p>
+
+    <ol class="intro-steps">
+      <li><span class="intro-n">1</span>
+        <div><h2 class="t-h3">You both get 20 seconds</h2>
+          <p class="t-body">When you're paired, a card tells you who it is
+            and what you have in common. Photos stay hidden for now.</p></div></li>
+      <li><span class="intro-n">2</span>
+        <div><h2 class="t-h3">Then 5 minutes to talk</h2>
+          <p class="t-body">A real conversation on a clock. Long enough to
+            find out whether there's anything there, short enough that
+            neither of you is stuck being polite.</p></div></li>
+      <li><span class="intro-n">3</span>
+        <div><h2 class="t-h3">You both decide</h2>
+          <p class="t-body">Go on, and the chat stays open and photos
+            unlock. Either of you says no, and it ends there.</p></div></li>
+    </ol>
+  </div>
+  <div class="vl-foot">
+    <button class="btn btn-block btn-primary">Got it &mdash; start searching</button>
+  </div>
+</div>"""
+
+
+def match_reveal():
+    """Screen 3: the 20s reveal. The moment a search resolves into a person.
+
+    ch.06's mascot pair would stand in for the two profile photos here --
+    they're still locked at this phase -- but the pair needs the design
+    guide's own art (see lightmode_assets.mascots) and isn't wired in yet,
+    so this draws the app's own hatched stand-ins instead.
+    """
+    return """
+<div class="vl" data-screen="reveal">
+  <div class="vl-top">
+    <span class="vl-word">Velvt</span>
+    <span></span><span></span>
+  </div>
+  <div class="vl-main vl-scroll pre-login">
+    <p class="t-over">Match found</p>
+    <div class="pair"><span class="ph"></span><span class="ph"></span></div>
+    <h1 class="t-h1">You matched with<br>Sanne, 27</h1>
+    <p class="t-body measure">You were both looking for each other. Photos
+      unlock once you both continue.</p>
+    <p class="t-body live"><i class="live-dot"></i><span>Sanne is already in the room</span></p>
+
+    <p class="t-over reveal-label">You both said</p>
+    <div class="chipset reveal-chips">
+      <span class="chip is-on">Live music</span>
+      <span class="chip is-on">Hiking</span>
+      <span class="chip">Long-term relationship</span>
+    </div>
+    <p class="t-caption">Ask her about <b>live music</b>.</p>
+
+    <div class="ring" style="--deg: 252deg;">
+      <div class="ring-inner">
+        <span class="ring-num">14</span>
+        <span class="ring-unit">seconds</span>
+      </div>
+    </div>
+    <p class="t-caption">Say yes to start now &mdash; or wait, and the chat opens on its own.</p>
+  </div>
+  <div class="vl-foot reveal-foot">
+    <button class="btn btn-quiet reveal-no">Not this one</button>
+    <button class="btn btn-primary reveal-yes">Yes, start chatting</button>
+  </div>
+</div>"""
+
+
+def chats_empty():
+    """Screen 4: the chats list with nothing in it yet.
+
+    An empty state earns exactly one thing to do next, stated once -- not a
+    dead end and not a second competing CTA alongside the tab bar's own
+    search icon.
+    """
+    return """
+<div class="vl" data-screen="empty">
+  <div class="vl-top">
+    <span class="vl-word">Velvt</span>
+    <span></span><span></span>
+  </div>
+  <div class="vl-main empty-main">
+    <div class="empty-badge">%(icon)s</div>
+    <h1 class="t-h2">No chats yet</h1>
+    <p class="t-body measure">Start a search and we'll pair you the moment
+      someone is looking for you too.</p>
+    <button class="btn btn-primary empty-cta">Start a search</button>
+  </div>
+</div>""" % {"icon": icon("tab.chats", size=28)}
+
+
 LANDING_CSS = """
 /* ---- landing ------------------------------------------------------ */
 /* The film is the ground, so it covers every pixel and the scrim can be a
@@ -143,4 +254,49 @@ LANDING_CSS = """
 .vl .live { justify-content: center; color: var(--body); }
 .vl .live b { font-weight: 600; color: var(--ink); }   /* ch.03: step through 600 */
 .vl .fine { margin-top: var(--space-4); }
+
+/* ---- shared: scrolling body, post-login shell ---------------------- */
+/* Only .vl-main scrolls -- the wordmark row and the foot button stay put,
+   same rule the app's own .wiz-fit/.wiz-scroll split follows. */
+.vl .vl-scroll { overflow-y: auto; }
+.vl .vl-word { flex: none; }
+
+/* ---- intro (ch.05 numbered list -- a real sequence, so it earns 1/2/3) */
+.vl .intro-lede { color: var(--body); margin: var(--space-3) 0 var(--space-6); }
+.vl .intro-steps { list-style: none; margin: 0 0 var(--space-4); padding: 0;
+                    display: flex; flex-direction: column; gap: var(--space-5); }
+.vl .intro-steps li { display: flex; gap: var(--space-4); align-items: flex-start; }
+.vl .intro-n { flex: none; width: 28px; height: 28px; border-radius: var(--r-pill);
+               background: var(--action-wash); color: var(--ink-accent);
+               display: inline-flex; align-items: center; justify-content: center;
+               font-size: 13px; font-weight: 700; font-family: var(--code, inherit); }
+.vl .intro-steps h2 { margin-bottom: 2px; }
+.vl .intro-steps p { color: var(--body); }
+
+/* ---- match reveal --------------------------------------------------- */
+.vl .pair { display: flex; align-items: center; justify-content: center; margin: var(--space-5) 0; }
+.vl .pair .ph { width: 92px; height: 92px; border-radius: var(--r-pill); flex: none;
+                background: var(--field); box-shadow: 0 0 0 3px var(--surface), var(--e2); }
+.vl .pair .ph + .ph { margin-left: -20px; }
+.vl .reveal-label { margin-top: var(--space-5); }
+.vl .reveal-chips { margin: var(--space-2) 0 var(--space-3); }
+.vl .ring { position: relative; flex: none; width: 96px; height: 96px; border-radius: var(--r-pill);
+            margin: var(--space-6) auto var(--space-3);
+            background: conic-gradient(var(--action) 0deg var(--deg, 0deg), var(--hairline) var(--deg, 0deg) 360deg); }
+.vl .ring::after { content: ""; position: absolute; inset: 7px; border-radius: var(--r-pill); background: var(--surface); }
+.vl .ring-inner { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column;
+                   align-items: center; justify-content: center; gap: 1px; }
+.vl .ring-num { font-weight: 700; font-size: 26px; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+.vl .ring-unit { font-weight: 600; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--quiet); }
+.vl .reveal-foot { display: flex; gap: var(--space-3); }
+.vl .reveal-no { flex: 1; }
+.vl .reveal-yes { flex: 2; }
+
+/* ---- chats empty ----------------------------------------------------- */
+.vl .empty-main { display: flex; flex-direction: column; align-items: center; justify-content: center;
+                   text-align: center; gap: var(--space-3); flex: 1; }
+.vl .empty-badge { width: 64px; height: 64px; border-radius: var(--r-pill); background: var(--field);
+                    color: var(--quiet); display: flex; align-items: center; justify-content: center;
+                    margin-bottom: var(--space-2); }
+.vl .empty-cta { margin-top: var(--space-3); }
 """

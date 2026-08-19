@@ -68,6 +68,28 @@ h2.sec { font-size: .7rem; font-weight: 700; letter-spacing: .14em; text-transfo
 .note { border-left: 2px solid var(--c-accent); padding: .1rem 0 .1rem .9rem; margin: 0 0 1rem; }
 .note b { display: block; font-size: .85rem; margin-bottom: .1rem; }
 .note span { font-size: .82rem; color: var(--c-muted); }
+
+/* ==== Stage B: screen switcher + live token rail ===================== */
+.tabs { display: flex; gap: .4rem; margin: 0 0 1rem; flex-wrap: wrap; }
+.tab { border: 1px solid var(--c-line); background: var(--c-raised); color: var(--c-muted);
+       border-radius: 999px; padding: .4rem .9rem; font: inherit; font-size: .78rem;
+       font-weight: 600; cursor: pointer; }
+.tab.is-on { background: var(--c-accent); color: #fff; border-color: var(--c-accent); }
+.device .vl { display: none; }
+.device .vl.is-on { display: flex; }
+
+.rail-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 .9rem; }
+.rail-reset { border: 1px solid var(--c-line); background: transparent; color: var(--c-muted);
+              border-radius: 8px; padding: .3rem .7rem; font: inherit; font-size: .74rem; cursor: pointer; }
+.rail-reset:hover { color: var(--c-text); border-color: var(--c-line-firm); }
+.rail-group { margin: 0 0 1.1rem; }
+.rail-group h3 { font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+                  color: var(--c-faint); margin: 0 0 .5rem; }
+.rail-row { display: flex; align-items: center; gap: .6rem; padding: .35rem 0; }
+.rail-row input[type=color] { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--c-line-firm);
+                               padding: 0; background: none; cursor: pointer; flex: none; }
+.rail-row label { flex: 1; font-size: .82rem; color: var(--c-text); }
+.rail-row code { display: block; font-family: var(--code); font-size: .7rem; color: var(--c-faint); margin-top: 1px; }
 """
 
 
@@ -75,10 +97,38 @@ def build():
     import lightmode_assets as assets
 
     brand = assets.brand()
-    body = screens.landing(brand)
+    screen_list = [
+        ("landing", "Landing", screens.landing(brand)),
+        ("intro", "How it works", screens.intro()),
+        ("reveal", "Match reveal", screens.match_reveal()),
+        ("empty", "Chats, empty", screens.chats_empty()),
+    ]
     art = (
         "  --film-still: url(%s);\n"
         "  --logo-art: url(%s);" % (brand["still"], brand["logo"])
+    )
+
+    tabs_html = "\n".join(
+        '<button class="tab%s" data-target="%s">%s</button>'
+        % (" is-on" if i == 0 else "", key, label)
+        for i, (key, label, _html) in enumerate(screen_list))
+    screens_html = "\n".join(
+        html.replace('<div class="vl', '<div class="vl%s' % (" is-on" if i == 0 else ""), 1)
+        for i, (_key, _label, html) in enumerate(screen_list))
+
+    rail_groups = {}
+    for name, label, group, value in theme.PALETTE:
+        rail_groups.setdefault(group, []).append((name, label, value))
+    rail_html = "\n".join(
+        '<div class="rail-group"><h3>%s</h3>\n%s\n</div>' % (
+            group,
+            "\n".join(
+                '<div class="rail-row"><input type="color" value="%s" '
+                'data-token="--%s"><label>%s<code>--%s</code></label></div>'
+                % (value, name, label, name)
+                for name, label, value in rows),
+        )
+        for group, rows in rail_groups.items()
     )
 
     legend = [
@@ -158,6 +208,12 @@ def build():
          "block and the first draft's standing mascot pair. The felt "
          "characters already carry the guide's texture and its mascots "
          "principle at once, so nothing invented was needed on top."),
+        ("The match-reveal pair is a placeholder",
+         "Two hatched circles stand in for the felt mascots ch.06 puts here. "
+         "Reading them out of the guide needs its HTML re-uploaded and "
+         "<code>LIGHTMODE_GUIDE_HTML</code> pointed at it &mdash; the guide "
+         "isn't in this session, so this build shipped without them rather "
+         "than inventing art in their place."),
     ]
     dep_html = "\n".join(
         '<div class="note"><b>%s</b><span>%s</span></div>' % (t, d)
@@ -183,33 +239,71 @@ def build():
 <div class="page">
   <header class="top">
     <p class="word">Velvt <span>Light</span></p>
-    <p>One screen, built from the design system's elements rather than from the
-      mockup's surface &mdash; the velvet treatment, the radius and elevation
-      scales, Inter's type scale, and the mascots, all where chapter and verse
-      put them. The colours are the mockup's, and every one of them becomes
-      editable next. This stage only asks: is this the look?</p>
+    <p>Four screens, built from the design system's elements rather than from
+      the mockup's surface &mdash; the velvet treatment, the radius and
+      elevation scales, Inter's type scale, all where chapter and verse put
+      them. Every colour on the right is now live: drag a swatch and every
+      screen repaints from the same token, because that is what "editable"
+      is supposed to mean.</p>
   </header>
 
   <div class="split">
     <div>
-      <div class="device">%(body)s</div>
+      <div class="tabs">%(tabs)s</div>
+      <div class="device">%(screens)s</div>
       <p class="device-cap">390 &times; 844 &mdash; the guide's baseline viewport</p>
+      <h2 class="sec" style="margin-top:2rem;">Where it departs from the mockup</h2>
+      %(dep)s
     </div>
     <div>
-      <h2 class="sec">Where it departs from the mockup</h2>
-      %(dep)s
-      <h2 class="sec">Every element on this screen, and the chapter it comes from</h2>
+      <div class="rail-head">
+        <h2 class="sec" style="margin:0;">Palette &mdash; edit live</h2>
+        <button class="rail-reset" id="rail-reset" type="button">Reset</button>
+      </div>
+      %(rail)s
+      <h2 class="sec">Every element, and the chapter it comes from</h2>
       <div class="leg">%(leg)s</div>
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  var root = document.documentElement.style;
+  var defaults = {};
+  document.querySelectorAll(".rail-row input[type=color]").forEach(function (input) {
+    var token = input.dataset.token;
+    defaults[token] = input.value;
+    input.addEventListener("input", function () {
+      root.setProperty(token, input.value);
+    });
+  });
+  document.getElementById("rail-reset").addEventListener("click", function () {
+    document.querySelectorAll(".rail-row input[type=color]").forEach(function (input) {
+      var token = input.dataset.token;
+      root.removeProperty(token);
+      input.value = defaults[token];
+    });
+  });
+  document.querySelectorAll(".tab").forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      document.querySelectorAll(".tab").forEach(function (t) { t.classList.remove("is-on"); });
+      document.querySelectorAll(".device .vl").forEach(function (s) { s.classList.remove("is-on"); });
+      tab.classList.add("is-on");
+      document.querySelector('.device .vl[data-screen="' + tab.dataset.target + '"]').classList.add("is-on");
+    });
+  });
+})();
+</script>
 """ % {
         "chrome": CHROME,
         "art": art,
         "root": theme.root_block(),
         "screen": theme.screen_css(),
         "landing": screens.LANDING_CSS,
-        "body": body,
+        "tabs": tabs_html,
+        "screens": screens_html,
+        "rail": rail_html,
         "leg": leg_html,
         "dep": dep_html,
     }
