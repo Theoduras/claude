@@ -181,6 +181,31 @@ EDITOR_CSS = """
 /* The sliders and checkboxes were still painting in the browser's own blue,
    which is the one colour on this page that belongs to neither palette. */
 .insp input[type=range] { accent-color: var(--c-accent); }
+/* ---- saving ---------------------------------------------------------- */
+.save { border: 1px solid var(--c-line); border-radius: 14px; background: var(--c-raised);
+        padding: .9rem 1rem; margin: 0 0 1.4rem; }
+/* An author `display` beats the UA stylesheet's `[hidden] { display: none }`,
+   so any element given a display here needs the attribute honoured explicitly
+   -- otherwise `hidden` sets the property and nothing happens on screen. */
+[hidden] { display: none !important; }
+.save-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.save-row + .save-row { margin-top: .6rem; }
+.save-state { font-size: .74rem; color: var(--c-faint); font-family: var(--code); flex: 1; min-width: 8rem; }
+.save-state.is-dirty { color: #E8C27A; }
+.save-state.is-ok { color: #7BE0A8; }
+.kept { list-style: none; margin: .7rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+.kept li { display: flex; align-items: center; gap: .5rem; background: var(--c-sunken);
+           border-radius: 8px; padding: .4rem .55rem; }
+.kept b { flex: 1; min-width: 0; font-size: .78rem; font-weight: 600; overflow: hidden;
+          text-overflow: ellipsis; white-space: nowrap; }
+.kept time { font-size: .68rem; color: var(--c-faint); font-family: var(--code); flex: none; }
+.kept button { border: 1px solid var(--c-line); background: transparent; color: var(--c-muted);
+               border-radius: 6px; padding: .2rem .5rem; font: inherit; font-size: .7rem;
+               font-weight: 600; cursor: pointer; flex: none; }
+.kept button:hover { color: var(--c-text); border-color: var(--c-line-firm); }
+.kept button.del:hover { color: #FF8A8F; border-color: #FF8A8F; }
+.save-none { font-size: .74rem; color: var(--c-faint); margin: .7rem 0 0; }
+
 .f-scope { margin-bottom: .45rem; }
 .f-head { font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
           color: var(--c-faint); margin: 1rem 0 .45rem; display: flex; gap: .5rem; align-items: baseline; }
@@ -254,6 +279,36 @@ EDITOR_CSS = """
 
 def _opts(pairs):
     return "".join('<option value="%s">%s</option>' % (v, l) for v, l in pairs)
+
+
+def save_html():
+    """Two ways to save, because they answer different questions.
+
+    A *draft* is the one you are in the middle of: a single slot, overwritten
+    each time, restored automatically next visit. That is what stops a closed
+    tab costing an afternoon.
+
+    A *kept* version is one you decided about: named, listed, and never
+    overwritten by ordinary work. Collapsing the two into a single "save"
+    forces every autosave to either destroy a version you liked or prompt you
+    for a name you do not have yet.
+    """
+    return """
+<div class="save" id="save">
+  <div class="save-row">
+    <button class="btn-tool" id="save-draft" type="button">Save draft</button>
+    <button class="btn-tool" id="save-keep" type="button">Keep as&hellip;</button>
+    <span class="save-state" id="save-state">nothing changed yet</span>
+  </div>
+  <div class="save-row" id="draft-row" hidden>
+    <button class="btn-tool" id="draft-restore" type="button">Restore draft</button>
+    <button class="btn-tool" id="draft-discard" type="button">Discard draft</button>
+  </div>
+  <ul class="kept" id="kept-list"></ul>
+  <p class="save-none" id="kept-none">Nothing kept yet. &ldquo;Keep as&hellip;&rdquo;
+    names a version and parks it here; the draft is overwritten every time you
+    save it, a kept version never is.</p>
+</div>"""
 
 
 def inspector_html():
@@ -540,11 +595,28 @@ def script():
      export is the CSS you would have written by hand either way. */
   var rules = { light: {}, dark: {}, shared: {} };  /* store -> "sel|state" -> {prop: value} */
   var texts = {};                        /* "el-3" -> original textContent */
+  /* Text and icons change the DOM rather than the stylesheet, so a saved
+     state cannot be rebuilt from `rules` alone -- what was typed and
+     which mark was picked have to be recorded as they happen. */
+  var domEdits = { text: {}, icon: {} };
   var scope = "";                        /* "" = this element, else a class name */
 
   function storeFor(prop) { return COLOR_PROPS[prop] ? mode : "shared"; }
   var seq = 0;
   var sel = null;
+
+  /* Ids are stamped once, in document order, rather than handed out lazily as
+     things get clicked. Lazy ids depend on the order *you* worked in, which
+     means the same edit saved today and reloaded tomorrow lands on a
+     different element -- so a saved draft was worthless until these became a
+     property of the build instead of the session. */
+  Array.prototype.forEach.call(
+    document.querySelectorAll(".device [data-screen], .device [data-screen] *"),
+    function (node) {
+      if (node.tagName.toLowerCase() !== "svg" && !node.closest("svg")) {
+        node.dataset.el = "el-" + (++seq);
+      }
+    });
 
   function idOf(node) {
     if (!node.dataset.el) { node.dataset.el = "el-" + (++seq); }
@@ -814,6 +886,7 @@ def script():
     var id = idOf(sel);
     if (!(id in texts)) { texts[id] = sel.textContent; }
     sel.textContent = this.value;
+    domEdits.text[id] = this.value;
   });
 
   document.querySelectorAll("[data-set]").forEach(function (input) {
@@ -943,6 +1016,7 @@ def script():
       svg.setAttribute("stroke-width", (stroke * box / 24).toFixed(2));
       svg.dataset.icon = name;
       svg.innerHTML = g.d;
+      domEdits.icon[idOf(node)] = { name: name, size: size, stroke: stroke };
     });
     syncIconPane();
   }
@@ -964,6 +1038,9 @@ def script():
     matched(sel).forEach(function (node) {
       var svg = node.querySelector("svg");
       if (svg) { svg.remove(); }
+      /* null, not delete: "this element had its icon taken away" is a real
+         edit to restore, and dropping the key would restore the original. */
+      domEdits.icon[idOf(node)] = null;
     });
     syncIconPane();
   });
@@ -1051,6 +1128,7 @@ def script():
       if (node) { node.textContent = texts[id]; }
     });
     texts = {};
+    domEdits = { text: {}, icon: {} };
     scope = "";
     render();
     document.querySelectorAll("[data-sel]").forEach(function (n) { delete n.dataset.sel; });
@@ -1100,10 +1178,221 @@ def script():
     }
   });
 
+  /* ---- saving: a draft you are in, and versions you decided about ----- */
+  /* localStorage can be unavailable outright -- a sandboxed frame, or storage
+     switched off -- and it throws on access rather than returning null, so
+     every touch goes through here. When it is missing the buttons say so
+     instead of silently doing nothing, and the export panes remain the way
+     out. */
+  var DRAFT = "velvt-light:draft";
+  var KEPT = "velvt-light:kept";
+  var store = (function () {
+    try {
+      window.localStorage.setItem("velvt-light:probe", "1");
+      window.localStorage.removeItem("velvt-light:probe");
+      return window.localStorage;
+    } catch (e) { return null; }
+  })();
+
+  var dirty = false;
+  var saveState = document.getElementById("save-state");
+
+  function snapshot() {
+    return {
+      v: 1,
+      rules: rules,
+      tokens: tokens,
+      dom: domEdits,
+      texts: texts,
+      css: cssBox.value,
+      js: document.getElementById("custom-js").value,
+      mode: mode
+    };
+  }
+
+  function apply(state) {
+    if (!state || state.v !== 1) { return false; }
+    rules = state.rules || { light: {}, dark: {}, shared: {} };
+    tokens = state.tokens || { light: {}, dark: {} };
+    texts = state.texts || {};
+    domEdits = state.dom || { text: {}, icon: {} };
+
+    /* The stylesheet halves restore themselves by being re-rendered. The DOM
+       halves have to be replayed element by element, because nothing in the
+       markup remembers that a button was renamed. */
+    Object.keys(domEdits.text).forEach(function (id) {
+      var el = document.querySelector('[data-el="' + id + '"]');
+      if (el) { el.textContent = domEdits.text[id]; }
+    });
+    Object.keys(domEdits.icon).forEach(function (id) {
+      var el = document.querySelector('[data-el="' + id + '"]');
+      if (!el) { return; }
+      var was = el.querySelector("svg");
+      if (was) { was.remove(); }
+      var spec = domEdits.icon[id];
+      if (!spec || !GLYPHS[spec.name]) { return; }
+      var g = GLYPHS[spec.name];
+      var box = parseFloat(g.box.split(" ")[2]);
+      var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", g.box);
+      svg.setAttribute("width", spec.size);
+      svg.setAttribute("height", spec.size);
+      svg.setAttribute("fill", "none");
+      svg.setAttribute("stroke-linecap", "round");
+      svg.setAttribute("stroke-linejoin", "round");
+      svg.setAttribute("stroke-width", (spec.stroke * box / 24).toFixed(2));
+      svg.dataset.icon = spec.name;
+      svg.innerHTML = g.d;
+      el.insertBefore(svg, el.firstChild);
+    });
+
+    cssBox.value = state.css || "";
+    cssSheet.textContent = state.css || "";
+    document.getElementById("custom-js").value = state.js || "";
+    /* Deliberately not re-run. Restoring a saved script by executing it would
+       make opening the page an act of running whatever was last typed, which
+       is a different and worse thing than restoring a design. */
+
+    if ((state.mode || "light") !== mode) {
+      document.querySelector('#modes button[data-mode="' + (state.mode || "light") + '"]').click();
+    }
+    syncRail();
+    render();
+    renderTokens();
+    if (sel) { syncPanel(); }
+    return true;
+  }
+
+  function mark(what, cls) {
+    saveState.textContent = what;
+    saveState.className = "save-state" + (cls ? " " + cls : "");
+  }
+
+  function touched() {
+    dirty = true;
+    mark("unsaved changes", "is-dirty");
+  }
+
+  function when(ts) {
+    var d = new Date(ts);
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "short" }) +
+      " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function readKept() {
+    if (!store) { return []; }
+    try { return JSON.parse(store.getItem(KEPT) || "[]"); } catch (e) { return []; }
+  }
+
+  function writeKept(list) {
+    if (!store) { return; }
+    try { store.setItem(KEPT, JSON.stringify(list)); }
+    catch (e) { mark("out of storage room", "is-dirty"); }
+  }
+
+  function paintKept() {
+    var list = readKept();
+    var ul = document.getElementById("kept-list");
+    ul.innerHTML = list.map(function (k, i) {
+      return "<li><b></b><time>" + when(k.at) + "</time>" +
+        '<button data-restore="' + i + '">Restore</button>' +
+        '<button class="del" data-del="' + i + '">Delete</button></li>';
+    }).join("");
+    /* Names are user text, so they go in as textContent rather than through
+       innerHTML -- a version called "<img onerror=...>" is not a scenario
+       worth being clever about. */
+    ul.querySelectorAll("li b").forEach(function (b, i) { b.textContent = list[i].name; });
+    document.getElementById("kept-none").hidden = list.length > 0;
+  }
+
+  document.getElementById("save-draft").addEventListener("click", function () {
+    if (!store) { mark("storage unavailable here \\u2014 use the export below", "is-dirty"); return; }
+    try {
+      store.setItem(DRAFT, JSON.stringify(snapshot()));
+      dirty = false;
+      mark("draft saved " + when(Date.now()), "is-ok");
+      document.getElementById("draft-row").hidden = false;
+    } catch (e) { mark("could not save: " + e.name, "is-dirty"); }
+  });
+
+  document.getElementById("save-keep").addEventListener("click", function () {
+    if (!store) { mark("storage unavailable here \\u2014 use the export below", "is-dirty"); return; }
+    var name = window.prompt("Name this version", "Version " + (readKept().length + 1));
+    if (name === null) { return; }
+    name = name.trim() || "Untitled";
+    var list = readKept();
+    list.unshift({ name: name, at: Date.now(), state: snapshot() });
+    writeKept(list);
+    paintKept();
+    dirty = false;
+    mark("kept as \\u201c" + name + "\\u201d", "is-ok");
+  });
+
+  document.getElementById("draft-restore").addEventListener("click", function () {
+    if (!store) { return; }
+    try {
+      if (apply(JSON.parse(store.getItem(DRAFT)))) {
+        dirty = false;
+        mark("draft restored", "is-ok");
+      }
+    } catch (e) { mark("draft could not be read", "is-dirty"); }
+  });
+
+  document.getElementById("draft-discard").addEventListener("click", function () {
+    if (!store) { return; }
+    store.removeItem(DRAFT);
+    document.getElementById("draft-row").hidden = true;
+    mark("draft discarded");
+  });
+
+  document.getElementById("kept-list").addEventListener("click", function (e) {
+    var btn = e.target.closest("button");
+    if (!btn) { return; }
+    var list = readKept();
+    if (btn.dataset.restore !== undefined) {
+      var k = list[+btn.dataset.restore];
+      if (k && apply(k.state)) { dirty = false; mark("restored \\u201c" + k.name + "\\u201d", "is-ok"); }
+    } else if (btn.dataset.del !== undefined) {
+      var gone = list.splice(+btn.dataset.del, 1)[0];
+      writeKept(list);
+      paintKept();
+      mark(gone ? "deleted \\u201c" + gone.name + "\\u201d" : "deleted");
+    }
+  });
+
+  /* Anything that writes through render() or renderTokens() has changed the
+     design, so marking dirty in those two covers every control without each
+     one having to remember to say so. Text and icons go through neither, so
+     they are marked where they happen. */
+  var _render = render, _renderTokens = renderTokens;
+  render = function () { _render(); touched(); };
+  renderTokens = function () { _renderTokens(); touched(); };
+  document.getElementById("insp-text").addEventListener("input", touched);
+  document.getElementById("glyphs").addEventListener("click", touched);
+  document.getElementById("icon-remove").addEventListener("click", touched);
+
+  window.addEventListener("beforeunload", function (e) {
+    if (dirty) { e.preventDefault(); e.returnValue = ""; }
+  });
+
   syncRail();
-  render();
-  renderTokens();
+  _render();
+  _renderTokens();
   filterGlyphs();
+  paintKept();
+
+  /* A draft is offered, not forced. Restoring automatically would mean a
+     visit that only wanted to look at the design silently gets somebody's
+     half-finished experiment instead. */
+  if (store && store.getItem(DRAFT)) {
+    document.getElementById("draft-row").hidden = false;
+    mark("a saved draft is waiting", "is-dirty");
+  } else if (!store) {
+    mark("storage unavailable here \\u2014 export instead");
+  } else {
+    mark("nothing changed yet");
+  }
+  dirty = false;
 })();
 </script>""" % {"glyphs": glyph_json()}
 

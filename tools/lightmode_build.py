@@ -242,6 +242,7 @@ def build():
     </div>
     <div>
       <h2 class="sec">Inspector</h2>
+      %(save)s
       %(insp)s
 
       <div class="rail-head">
@@ -279,6 +280,7 @@ def build():
         "tabs": editor.tabs_html(),
         "screens": screens.render_all(brand),
         "insp": editor.inspector_html(),
+        "save": editor.save_html(),
         "rail": editor.rail_html(),
         "script": editor.script(),
         "leg": leg_html,
