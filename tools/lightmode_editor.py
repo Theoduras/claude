@@ -304,7 +304,14 @@ def save_html():
     <button class="btn-tool" id="draft-restore" type="button">Restore draft</button>
     <button class="btn-tool" id="draft-discard" type="button">Discard draft</button>
   </div>
+  <div class="save-row">
+    <button class="btn-tool" id="state-copy" type="button">Copy state</button>
+    <button class="btn-tool" id="state-paste" type="button">Load state</button>
+  </div>
+  <textarea class="code-area" id="state-box" spellcheck="false" hidden
+    placeholder="Paste a saved state here, then press Load state."></textarea>
   <ul class="kept" id="kept-list"></ul>
+  <p class="save-none" id="save-note" hidden></p>
   <p class="save-none" id="kept-none">Nothing kept yet. &ldquo;Keep as&hellip;&rdquo;
     names a version and parks it here; the draft is overwritten every time you
     save it, a kept version never is.</p>
@@ -1179,20 +1186,112 @@ def script():
   });
 
   /* ---- saving: a draft you are in, and versions you decided about ----- */
-  /* localStorage can be unavailable outright -- a sandboxed frame, or storage
-     switched off -- and it throws on access rather than returning null, so
-     every touch goes through here. When it is missing the buttons say so
-     instead of silently doing nothing, and the export panes remain the way
-     out. */
+  /* The first version of this trusted localStorage, and localStorage lied.
+     Inside the artifact viewer the page runs in a sandboxed frame whose
+     storage is partitioned per load: the write succeeds, the read-back in
+     the same session succeeds, and the next load is empty. A probe that only
+     checks "can I write?" reports everything is fine and the work is gone
+     anyway -- the one failure mode a save feature must not have.
+     So durability comes from the artifact itself. This page can publish a new
+     version of itself, and a version is by definition what survives a reload;
+     the saved state rides along inside the published HTML as a JSON block
+     that the next load reads back. localStorage stays as a fast local cache
+     for the file:// case, but it is no longer what "saved" means. */
   var DRAFT = "velvt-light:draft";
   var KEPT = "velvt-light:kept";
-  var store = (function () {
+  var local = (function () {
     try {
       window.localStorage.setItem("velvt-light:probe", "1");
       window.localStorage.removeItem("velvt-light:probe");
       return window.localStorage;
     } catch (e) { return null; }
   })();
+
+  /* Resolved once, lazily: `use()` answers only "can this view run the
+     capability", so a read-only viewer still gets a namespace and finds out
+     on the first call. */
+  var artifactNs;
+  function durable() {
+    if (artifactNs === undefined) {
+      artifactNs = (window.claude && window.claude.use)
+        ? window.claude.use("artifact").catch(function () { return null; })
+        : Promise.resolve(null);
+    }
+    return artifactNs;
+  }
+
+  /* The state the page was opened with, read out of the published HTML. */
+  var embedded = (function () {
+    var el = document.getElementById("saved-state");
+    if (!el || !el.textContent.trim()) { return null; }
+    try { return JSON.parse(el.textContent); } catch (e) { return null; }
+  })();
+
+  function readAll() {
+    /* The published block is the truth; localStorage only fills in when
+       there is no published state (a local file, or a first run). */
+    if (embedded) { return embedded; }
+    if (!local) { return { draft: null, kept: [] }; }
+    var draft = null, kept = [];
+    try { draft = JSON.parse(local.getItem(DRAFT) || "null"); } catch (e) {}
+    try { kept = JSON.parse(local.getItem(KEPT) || "[]"); } catch (e) {}
+    return { draft: draft, kept: kept };
+  }
+
+  var saved = readAll();
+
+  /* Publishing replaces the whole page, so the replacement has to be the
+     page as authored -- not the live DOM, which carries this session's
+     selection outlines, generated ids and the viewer's injected runtime.
+     Fetching our own URL gets the pristine source without carrying a second
+     copy of an 800KB page around in a string. */
+  function persist() {
+    var payload = JSON.stringify(saved).split("<").join("\\\\u003c");
+    if (local) {
+      try {
+        local.setItem(DRAFT, JSON.stringify(saved.draft));
+        local.setItem(KEPT, JSON.stringify(saved.kept));
+      } catch (e) {}
+    }
+    return durable().then(function (art) {
+      if (!art) { return { where: local ? "local" : "none" }; }
+      return fetch(window.location.href, { cache: "no-store" })
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+          /* Assembled from pieces on purpose. Written as one literal, this
+             script's own source would contain the exact opening tag -- and
+             the first save would find *that* occurrence, splice from inside
+             the running script to the next closing tag, and publish a page
+             whose JavaScript no longer parses. Built at runtime, the needle
+             exists only where a real block has been emitted. */
+          var open = "<scr" + 'ipt type="application/json" id="saved-state">';
+          var close = "</scr" + "ipt>";
+          var block = open + payload + close;
+          /* Every needle used against our own source is assembled the same
+             way, and the document's closing tag is found from the END. This
+             script is part of the page it is editing, so any literal it
+             contains is a decoy occurrence sitting *before* the real one --
+             the first attempt spliced the state block into the middle of
+             this very function and published a page that would not parse. */
+          var headEnd = "</he" + "ad>";
+          var at = html.indexOf(open);
+          var head = html.indexOf(headEnd);
+          if (at !== -1) {
+            var end = html.indexOf(close, at);
+            html = html.slice(0, at) + block + html.slice(end + close.length);
+          } else if (head !== -1) {
+            /* Into the head, not before </body>: this script reads the block
+               as it runs, and a block placed after the script simply is not
+               there yet -- the page published fine, loaded fine, and came up
+               claiming nothing had been saved. */
+            html = html.slice(0, head) + block + html.slice(head);
+          } else {
+            html = block + html;
+          }
+          return art.publish(html).then(function () { return { where: "artifact" }; });
+        });
+    });
+  }
 
   var dirty = false;
   var saveState = document.getElementById("save-state");
@@ -1279,19 +1378,8 @@ def script():
       " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
 
-  function readKept() {
-    if (!store) { return []; }
-    try { return JSON.parse(store.getItem(KEPT) || "[]"); } catch (e) { return []; }
-  }
-
-  function writeKept(list) {
-    if (!store) { return; }
-    try { store.setItem(KEPT, JSON.stringify(list)); }
-    catch (e) { mark("out of storage room", "is-dirty"); }
-  }
-
   function paintKept() {
-    var list = readKept();
+    var list = saved.kept || [];
     var ul = document.getElementById("kept-list");
     ul.innerHTML = list.map(function (k, i) {
       return "<li><b></b><time>" + when(k.at) + "</time>" +
@@ -1305,59 +1393,118 @@ def script():
     document.getElementById("kept-none").hidden = list.length > 0;
   }
 
-  document.getElementById("save-draft").addEventListener("click", function () {
-    if (!store) { mark("storage unavailable here \\u2014 use the export below", "is-dirty"); return; }
-    try {
-      store.setItem(DRAFT, JSON.stringify(snapshot()));
+  /* One place decides what the status line says after a save, so the two
+     buttons cannot drift into describing durability differently. */
+  function report(what) {
+    return function (res) {
       dirty = false;
-      mark("draft saved " + when(Date.now()), "is-ok");
-      document.getElementById("draft-row").hidden = false;
-    } catch (e) { mark("could not save: " + e.name, "is-dirty"); }
-  });
+      if (res.where === "artifact") {
+        mark(what + " \\u2014 published, so it survives a reload", "is-ok");
+      } else if (res.where === "local") {
+        mark(what + " \\u2014 this browser only", "is-ok");
+      } else {
+        mark(what + " \\u2014 in this tab only; copy the state to keep it", "is-dirty");
+      }
+    };
+  }
+
+  function failed(e) {
+    /* `conflict` is routine: something else published first and the shell is
+       already reloading every view to it, so there is nothing to apologise
+       for and nothing to retry. */
+    var code = (e && e.code) || "";
+    if (code === "conflict") { mark("someone else saved first \\u2014 reloading", "is-dirty"); return; }
+    if (code === "not_writer" || code === "not_granted" || code === "consent_required") {
+      mark("read-only view \\u2014 copy the state instead", "is-dirty");
+      return;
+    }
+    if (code === "rate_limited") { mark("saving too fast \\u2014 wait a moment", "is-dirty"); return; }
+    mark("could not save (" + (code || (e && e.name) || "error") + ")", "is-dirty");
+  }
+
+  var busy = false;
+  function guard(fn) {
+    return function () {
+      if (busy) { return; }
+      busy = true;
+      mark("saving\\u2026");
+      var done = function () { busy = false; };
+      try { fn().then(done, function (e) { done(); failed(e); }); }
+      catch (e) { done(); failed(e); }
+    };
+  }
+
+  document.getElementById("save-draft").addEventListener("click", guard(function () {
+    saved.draft = snapshot();
+    document.getElementById("draft-row").hidden = false;
+    return persist().then(report("draft saved"));
+  }));
 
   document.getElementById("save-keep").addEventListener("click", function () {
-    if (!store) { mark("storage unavailable here \\u2014 use the export below", "is-dirty"); return; }
-    var name = window.prompt("Name this version", "Version " + (readKept().length + 1));
+    var name = window.prompt("Name this version", "Version " + ((saved.kept || []).length + 1));
     if (name === null) { return; }
     name = name.trim() || "Untitled";
-    var list = readKept();
-    list.unshift({ name: name, at: Date.now(), state: snapshot() });
-    writeKept(list);
-    paintKept();
-    dirty = false;
-    mark("kept as \\u201c" + name + "\\u201d", "is-ok");
+    guard(function () {
+      saved.kept = saved.kept || [];
+      saved.kept.unshift({ name: name, at: Date.now(), state: snapshot() });
+      paintKept();
+      return persist().then(report("kept as \\u201c" + name + "\\u201d"));
+    })();
   });
 
   document.getElementById("draft-restore").addEventListener("click", function () {
-    if (!store) { return; }
-    try {
-      if (apply(JSON.parse(store.getItem(DRAFT)))) {
-        dirty = false;
-        mark("draft restored", "is-ok");
-      }
-    } catch (e) { mark("draft could not be read", "is-dirty"); }
+    if (apply(saved.draft)) { dirty = false; mark("draft restored", "is-ok"); }
+    else { mark("no draft to restore", "is-dirty"); }
   });
 
-  document.getElementById("draft-discard").addEventListener("click", function () {
-    if (!store) { return; }
-    store.removeItem(DRAFT);
+  document.getElementById("draft-discard").addEventListener("click", guard(function () {
+    saved.draft = null;
     document.getElementById("draft-row").hidden = true;
-    mark("draft discarded");
-  });
+    return persist().then(report("draft discarded"));
+  }));
 
   document.getElementById("kept-list").addEventListener("click", function (e) {
     var btn = e.target.closest("button");
     if (!btn) { return; }
-    var list = readKept();
+    var list = saved.kept || [];
     if (btn.dataset.restore !== undefined) {
       var k = list[+btn.dataset.restore];
       if (k && apply(k.state)) { dirty = false; mark("restored \\u201c" + k.name + "\\u201d", "is-ok"); }
     } else if (btn.dataset.del !== undefined) {
       var gone = list.splice(+btn.dataset.del, 1)[0];
-      writeKept(list);
       paintKept();
-      mark(gone ? "deleted \\u201c" + gone.name + "\\u201d" : "deleted");
+      guard(function () {
+        return persist().then(report(gone ? "deleted \\u201c" + gone.name + "\\u201d" : "deleted"));
+      })();
     }
+  });
+
+  /* The always-available path. Publishing needs the capability and
+     localStorage needs storage that lasts; a block of text needs neither, so
+     this is the one that cannot be taken away. */
+  document.getElementById("state-copy").addEventListener("click", function () {
+    var text = JSON.stringify(snapshot());
+    var box = document.getElementById("state-box");
+    box.hidden = false;
+    box.value = text;
+    box.select();
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(
+        function () { mark("state copied to the clipboard", "is-ok"); },
+        function () { mark("select the text below and copy it"); });
+    } else {
+      mark("select the text below and copy it");
+    }
+  });
+
+  document.getElementById("state-paste").addEventListener("click", function () {
+    var box = document.getElementById("state-box");
+    if (box.hidden) { box.hidden = false; box.value = ""; box.focus();
+                      mark("paste a saved state, then press Load again"); return; }
+    try {
+      if (apply(JSON.parse(box.value))) { dirty = false; mark("state loaded", "is-ok"); }
+      else { mark("that is not a saved state", "is-dirty"); }
+    } catch (e) { mark("that is not a saved state", "is-dirty"); }
   });
 
   /* Anything that writes through render() or renderTokens() has changed the
@@ -1384,15 +1531,25 @@ def script():
   /* A draft is offered, not forced. Restoring automatically would mean a
      visit that only wanted to look at the design silently gets somebody's
      half-finished experiment instead. */
-  if (store && store.getItem(DRAFT)) {
+  if (saved.draft) {
     document.getElementById("draft-row").hidden = false;
     mark("a saved draft is waiting", "is-dirty");
-  } else if (!store) {
-    mark("storage unavailable here \\u2014 export instead");
   } else {
     mark("nothing changed yet");
   }
   dirty = false;
+
+  /* Say where a save will actually go, before one is attempted rather than
+     after it silently fails to last. */
+  durable().then(function (art) {
+    if (art) { return; }
+    var note = document.getElementById("save-note");
+    note.hidden = false;
+    note.textContent = local
+      ? "This copy saves to this browser only. Published on claude.ai, saving "
+      + "writes a new version of the artifact and survives anywhere."
+      : "No storage here \\u2014 use Copy state to keep your work.";
+  });
 })();
 </script>""" % {"glyphs": glyph_json()}
 
