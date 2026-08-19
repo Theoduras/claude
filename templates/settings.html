@@ -36,6 +36,29 @@
       <button class="btn btn-secondary" type="submit">Resend confirmation email</button>
     </form>
     {% endif %}
+
+    {% if me.pending_email %}
+    <p class="hint" style="margin: 0.6rem 0;">
+      Waiting on confirmation to change it to <strong>{{ me.pending_email }}</strong>.
+    </p>
+    <form method="post" action="{{ url_for('cancel_email_change') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-secondary" type="submit">Cancel this change</button>
+    </form>
+    {% else %}
+    <details style="margin-top: 0.6rem;">
+      <summary style="cursor: pointer;">Change email</summary>
+      <form method="post" action="{{ url_for('change_email') }}" style="margin-top: 0.6rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="new_email">New email address</label>
+        <input id="new_email" name="email" type="email" autocomplete="email" required>
+        <label for="email_password">Current password</label>
+        <input id="email_password" name="password" type="password"
+               autocomplete="current-password" required>
+        <button class="btn" type="submit">Send confirmation link</button>
+      </form>
+    </details>
+    {% endif %}
   </section>
 
   <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">

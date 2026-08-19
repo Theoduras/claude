@@ -18,7 +18,7 @@ docker compose up -d      # Postgres, once per boot
 .\dev.ps1                 # venv + seed + Flask with the reloader
 # edit -> save -> refresh the browser. No restart, no git.
 python smoke.py           # hit every GET route, report 5xxs
-python check_auth.py      # 66 behaviour checks: auth, CSRF, safety, deletion, widening
+python check_auth.py      # 84 behaviour checks: auth, CSRF, safety, deletion, widening, email change
 python check_bots.py      # demo members never reach a real person's search pool
 ```
 
@@ -103,6 +103,20 @@ no `session["user_id"]` any more; use `current_uid()`.
 Only `LOGIN_ALLOWED_STATUSES` may hold a session — `pending_deletion` is in that list on
 purpose, since a grace period you can't sign in to cancel is not a grace period.
 
+**Changing your email goes through `pending_email`, not straight into `email`.**
+`POST /settings/email` requires the current password (like `/settings/password` does) and
+writes only `users.pending_email` — `email` and `email_verified_at` stay whatever they
+were. The address only takes effect when its owner opens the link sent to it and hits
+`GET /settings/email/confirm/<token>`, which is what actually moves `pending_email` into
+`email` and stamps `email_verified_at`. That confirm route needs no login, the same as
+`/verify/<token>` and `/reset/<token>` — the token is the proof. A notice also goes to the
+*old* address (no link, nothing to confirm) so a hijacked session doesn't move the
+account's recovery address without its real owner noticing. `pending_email` carries no
+uniqueness of its own — two accounts can point it at the same address — so the confirm
+route's `UPDATE` (which does hit the unique index on `email`) is wrapped for
+`psycopg.errors.UniqueViolation`: whoever confirms first wins the address, the other's
+`pending_email` is cleared, nothing corrupts.
+
 **Deleting an account anonymises the row rather than removing it.** Every foreign key into
 `users` cascades, so a `DELETE` would take the `matches` with it and erase the *other*
 participant's conversation. `purge_due_deletions()` destroys the profile, photos,
@@ -163,7 +177,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 | auth | `/register`, `/login`, `/logout`, `/verify/<token>`, `/verify/resend`, `/forgot`, `/reset/<token>` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
 | legal | `/terms`, `/privacy`, `/imprint`, `/safety` |
-| settings | `/settings`, `…/password`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/export`, `…/delete`, `…/delete/cancel` |
+| settings | `/settings`, `…/password`, `…/email`, `…/email/confirm/<token>`, `…/email/cancel`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/export`, `…/delete`, `…/delete/cancel` |
 | safety | `/report/<id>`, `/block/<id>`, `/unblock/<id>` |
 | moderation | `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate` |
 | search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/status`, `/search/options`, `/search/widen`, `/search/cancel` |

@@ -811,6 +811,11 @@ CREATE INDEX IF NOT EXISTS photos_user_id_idx ON photos (user_id, is_primary);
 -- fields at registration, not at the column level.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+-- Set while a change of address is awaiting confirmation; `email` (and its
+-- verified state) stay untouched until the link is clicked, so a typo or a
+-- hijacked session can't hand the account's recovery address to someone else
+-- without proving they can read mail sent there.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email TEXT;
 -- Date of birth, not age: an age is wrong within a year of storing it, and
 -- the 18+ gate has to keep holding after the account is created.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS dob DATE;
@@ -1229,6 +1234,35 @@ def send_verification_email(user_id, email):
         f"""<p>Welcome to Velvt.</p>
             <p><a href="{link}">Confirm this address</a> to start searching.</p>
             <p>The link expires in {VERIFY_TOKEN_HOURS} hours.</p>""",
+    )
+
+
+def send_email_change_confirmation(user_id, new_email):
+    """To the new address. Nothing about the account changes until this link
+    is clicked -- proof the requester can actually read mail sent there."""
+    token = issue_email_token(user_id, "email_change", VERIFY_TOKEN_HOURS)
+    link = app_url(url_for("confirm_email_change", token=token))
+    return send_email(
+        new_email,
+        "Confirm your new Velvt address",
+        f"""<p>Someone asked to make this the login address for a Velvt account.</p>
+            <p><a href="{link}">Confirm this address</a> to complete the change.</p>
+            <p>The link expires in {VERIFY_TOKEN_HOURS} hours. If this wasn't you,
+               ignore this email — nothing has changed yet.</p>""",
+    )
+
+
+def send_email_change_notice(old_email, new_email):
+    """To the old address, so a hijacked account is noticed by the one
+    person still able to read mail there. No link -- there's nothing to
+    confirm from this side, just something to notice."""
+    return send_email(
+        old_email,
+        "Your Velvt login email is changing",
+        f"""<p>Someone requested to change the login email on your Velvt account
+               to <strong>{new_email}</strong>.</p>
+            <p>Nothing changes until that address is confirmed. If this wasn't you,
+               sign in and change your password right away.</p>""",
     )
 
 
@@ -2511,6 +2545,101 @@ def change_password():
     return redirect(url_for("settings"))
 
 
+@app.route("/settings/email", methods=["POST"])
+@login_required
+@rate_limited("email_change", limit=5, window_seconds=3600, by="user")
+def change_email():
+    """Start a change of login email. Requires the current password, like
+    changing the password itself does -- a hijacked session with no password
+    still can't move the account's recovery address out from under its owner.
+
+    `email` is left untouched here; only `pending_email` moves. The address
+    only takes effect once its owner proves they can read mail sent there,
+    via confirm_email_change().
+    """
+    me = current_user()
+    if not check_password_hash(me["password_hash"], request.form.get("password", "")):
+        flash("Please confirm your password to change your email.")
+        return redirect(url_for("settings"))
+
+    new_email = request.form.get("email", "").strip()
+    if not valid_email(new_email):
+        flash("Please enter a valid email address.")
+        return redirect(url_for("settings"))
+    if me["email"] and new_email.lower() == me["email"].lower():
+        flash("That's already your email address.")
+        return redirect(url_for("settings"))
+
+    db = get_db()
+    taken = db.execute(
+        "SELECT 1 AS hit FROM users WHERE LOWER(email) = LOWER(?) AND id != ?",
+        (new_email, me["id"]),
+    ).fetchone()
+    if taken:
+        flash("That email address is already in use.")
+        return redirect(url_for("settings"))
+
+    db.execute("UPDATE users SET pending_email = ? WHERE id = ?", (new_email, me["id"]))
+    db.commit()
+    send_email_change_confirmation(me["id"], new_email)
+    if me["email"]:
+        send_email_change_notice(me["email"], new_email)
+    flash(f"Check {new_email} for a link to confirm the change.")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/email/confirm/<token>")
+def confirm_email_change(token):
+    """No @login_required: the token is what proves this, exactly like
+    verify_email and reset_password -- the link may be opened in a browser
+    that never had a session to begin with.
+    """
+    user_id = consume_email_token(token, "email_change")
+    if user_id is None:
+        flash("That confirmation link has expired or was already used.")
+        return redirect(url_for("settings") if current_uid() else url_for("login"))
+
+    db = get_db()
+    row = db.execute(
+        "SELECT pending_email FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    new_email = row["pending_email"] if row else None
+    if not new_email:
+        flash("That email change was already completed or cancelled.")
+        return redirect(url_for("settings") if current_uid() else url_for("login"))
+
+    try:
+        db.execute(
+            """
+            UPDATE users SET email = ?, email_verified_at = NOW(), pending_email = NULL
+            WHERE id = ?
+            """,
+            (new_email, user_id),
+        )
+        db.commit()
+    except psycopg.errors.UniqueViolation:
+        # Someone else claimed the same address and confirmed first --
+        # possible since pending_email carries no uniqueness of its own.
+        db.rollback()
+        db.execute("UPDATE users SET pending_email = NULL WHERE id = ?", (user_id,))
+        db.commit()
+        flash("That address was claimed by another account before you confirmed.")
+        return redirect(url_for("settings") if current_uid() else url_for("login"))
+
+    flash("Email address updated.")
+    return redirect(url_for("settings") if current_uid() else url_for("login"))
+
+
+@app.route("/settings/email/cancel", methods=["POST"])
+@login_required
+def cancel_email_change():
+    db = get_db()
+    db.execute("UPDATE users SET pending_email = NULL WHERE id = ?", (current_uid(),))
+    db.commit()
+    flash("Email change cancelled.")
+    return redirect(url_for("settings"))
+
+
 @app.route("/settings/sessions/<int:session_id>/revoke", methods=["POST"])
 @login_required
 def revoke_session(session_id):
@@ -2731,9 +2860,9 @@ def purge_due_deletions():
         db.execute(
             """
             UPDATE users
-            SET username = ?, email = NULL, dob = NULL, email_verified_at = NULL,
-                age_verified_at = NULL, password_hash = ?, status = 'deleted',
-                deletion_requested_at = NULL
+            SET username = ?, email = NULL, pending_email = NULL, dob = NULL,
+                email_verified_at = NULL, age_verified_at = NULL,
+                password_hash = ?, status = 'deleted', deletion_requested_at = NULL
             WHERE id = ?
             """,
             (f"deleted_{uid}", secrets.token_hex(32), uid),

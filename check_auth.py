@@ -604,6 +604,146 @@ with app.test_client() as c:
           data["fits"] == 0 and any(o["action"] == "widen:age" for o in data["options"]),
           str(data))
 
+
+# --- 13. changing email --------------------------------------------------
+def email_row(uid):
+    with app.test_request_context():
+        return A.get_db().execute(
+            "SELECT email, pending_email, email_verified_at FROM users WHERE id = ?",
+            (uid,),
+        ).fetchone()
+
+
+def uniq_email(prefix):
+    """Unique per run, not just per test -- these checks run against a
+    persistent dev database, and a literal address confirmed by a past run
+    would make 'already claimed' checks pass for the wrong reason."""
+    return f"{prefix}-{uuid.uuid4().hex[:8]}@example.test"
+
+
+clear_rate_limits()
+with app.test_client() as c:
+    alice, _ = register(c)
+    aid = uid_of(alice)
+    with app.test_client() as bc:
+        bob, _ = register(bc)
+    bob_email = email_row(uid_of(bob))["email"]
+    original = email_row(aid)
+    new_addr = uniq_email("alice-new")
+
+    r = c.post("/settings/email",
+               data={"email": new_addr, "password": "wrong password",
+                     "csrf_token": token(c, "/settings")})
+    check("changing email requires the current password",
+          email_row(aid)["pending_email"] is None, f"HTTP {r.status_code}")
+
+    r = c.post("/settings/email",
+               data={"email": "not-an-address", "password": "correct horse battery",
+                     "csrf_token": token(c, "/settings")})
+    check("an invalid address is rejected",
+          email_row(aid)["pending_email"] is None, f"HTTP {r.status_code}")
+
+    r = c.post("/settings/email",
+               data={"email": original["email"], "password": "correct horse battery",
+                     "csrf_token": token(c, "/settings")})
+    check("submitting your own current address is a no-op",
+          email_row(aid)["pending_email"] is None)
+
+    r = c.post("/settings/email",
+               data={"email": new_addr, "password": "correct horse battery",
+                     "csrf_token": "not-a-real-token"})
+    check("changing email requires a CSRF token", r.status_code == 400)
+
+    r = c.post("/settings/email",
+               data={"email": bob_email, "password": "correct horse battery",
+                     "csrf_token": token(c, "/settings")})
+    check("an address already claimed by another account is rejected",
+          email_row(aid)["pending_email"] is None, f"HTTP {r.status_code}")
+
+    r = c.post("/settings/email",
+               data={"email": new_addr, "password": "correct horse battery",
+                     "csrf_token": token(c, "/settings")})
+    mid = email_row(aid)
+    check("a valid change sets pending_email, leaving email alone",
+          mid["pending_email"] == new_addr and mid["email"] == original["email"])
+    check("email_verified_at is untouched until confirmed",
+          mid["email_verified_at"] == original["email_verified_at"])
+
+    r = c.get("/settings/email/confirm/not-a-real-token", follow_redirects=False)
+    check("an unknown confirm token is rejected without erroring", r.status_code == 302)
+    check("a rejected token leaves the pending change in place",
+          email_row(aid)["pending_email"] == new_addr)
+
+    with app.test_request_context():
+        real_tok = A.issue_email_token(aid, "email_change", 48)
+    c.get(f"/settings/email/confirm/{real_tok}", follow_redirects=False)
+    done = email_row(aid)
+    check("confirming moves pending_email into email",
+          done["email"] == new_addr and done["pending_email"] is None)
+    check("confirming marks the new address verified", done["email_verified_at"] is not None)
+
+    clear_rate_limits()  # the checks above already spent most of this account's budget
+    again_addr = uniq_email("alice-again")
+    c.post("/settings/email",
+           data={"email": again_addr, "password": "correct horse battery",
+                 "csrf_token": token(c, "/settings")})
+    check("a follow-up change can be started",
+          email_row(aid)["pending_email"] == again_addr)
+    c.post("/settings/email/cancel", data={"csrf_token": token(c, "/settings")})
+    check("cancelling clears the pending change", email_row(aid)["pending_email"] is None)
+
+# Two accounts can both point pending_email at the same address -- nothing
+# stops that, since only `email` itself is unique. Whoever confirms first
+# should win it; the second confirm must fail cleanly, not corrupt a row or
+# leave two accounts sharing an address. Two separate `with` statements, not
+# one with both clients: Werkzeug's test client keeps its last request
+# context pushed until the client's own `with` block exits or it makes
+# another request, and that context lives on one shared stack -- two clients
+# open at once step on each other's pushes and pops.
+with app.test_client() as c1:
+    carol, _ = register(c1)
+with app.test_client() as c2:
+    dana, _ = register(c2)
+cid, did = uid_of(carol), uid_of(dana)
+contested = uniq_email("contested")
+with app.test_request_context():
+    db = A.get_db()
+    db.execute("UPDATE users SET pending_email = ? WHERE id IN (?, ?)",
+               (contested, cid, did))
+    db.commit()
+    tok_c = A.issue_email_token(cid, "email_change", 48)
+    tok_d = A.issue_email_token(did, "email_change", 48)
+with app.test_client() as c1:
+    c1.get(f"/settings/email/confirm/{tok_c}", follow_redirects=False)
+with app.test_client() as c2:
+    r2 = c2.get(f"/settings/email/confirm/{tok_d}", follow_redirects=False)
+row_c, row_d = email_row(cid), email_row(did)
+check("the first confirm to arrive wins the contested address",
+      row_c["email"] == contested)
+check("the second confirm is refused rather than erroring",
+      r2.status_code == 302 and row_d["email"] != contested,
+      f"HTTP {r2.status_code}")
+check("the loser's pending_email is cleared rather than left dangling",
+      row_d["pending_email"] is None)
+with app.test_request_context():
+    dupes = A.get_db().execute(
+        "SELECT COUNT(*) AS n FROM users WHERE LOWER(email) = LOWER(?)",
+        (contested,),
+    ).fetchone()["n"]
+check("the address ends up claimed by exactly one account", dupes == 1, str(dupes))
+
+clear_rate_limits()
+with app.test_client() as c:
+    name, _ = register(c)
+    codes = [
+        c.post("/settings/email",
+               data={"email": uniq_email(f"flood{i}"), "password": "correct horse battery",
+                     "csrf_token": token(c, "/settings")}).status_code
+        for i in range(7)
+    ]
+    check("repeated email-change attempts are throttled", 429 in codes,
+          f"saw {sorted(set(codes))}")
+
 failed = [n for n, ok, _ in RESULTS if not ok]
 print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
 if failed:
