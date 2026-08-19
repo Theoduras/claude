@@ -165,6 +165,9 @@
   {% if profile['location'] %}
     {% set _ = facts.append(('pin', 'Lives in ' ~ profile['location'])) %}
   {% endif %}
+  {% if profile['relationship_preference'] %}
+    {% set _ = facts.append(('pref', profile['relationship_preference'])) %}
+  {% endif %}
   {% set _ = facts.append(('at', '@' ~ profile['username'])) %}
 
   <div class="pro-card">

@@ -124,6 +124,11 @@
             data-value="{{ opt }}" aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ opt }}</button>
   {% endfor %}
 </div>
+<div class="field-add">
+  <input type="text" id="interest-custom" maxlength="30"
+         placeholder="{{ t('wiz.custom_ph') }}" aria-label="{{ t('wiz.custom_aria') }}">
+  <button type="button" class="btn btn-secondary" id="interest-add">{{ t("wiz.add") }}</button>
+</div>
 
 
 {% if single_city %}
@@ -142,13 +147,23 @@
   {% endwith %}
 {% endif %}
 
-<label for="relationship_type">{{ t("form.relationship_type") }}
+<label for="relationship_type">{{ t("form.looking_for") }}
   {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="relationship_type">{{ t("form.fill") }}</button></span>{% endif %}
 </label>
 <select id="relationship_type" name="relationship_type">
   <option value="">{{ t("form.select") }}</option>
   {% for rt in relationship_types %}
     <option value="{{ rt }}" {% if profile['relationship_type'] == rt %}selected{% endif %}>{{ opt_label(rt) }}</option>
+  {% endfor %}
+</select>
+
+<label for="relationship_preference">{{ t("form.relationship_preference") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="relationship_preference">{{ t("form.fill") }}</button></span>{% endif %}
+</label>
+<select id="relationship_preference" name="relationship_preference">
+  <option value="">{{ t("form.select") }}</option>
+  {% for rp in relationship_preferences %}
+    <option value="{{ rp }}" {% if profile['relationship_preference'] == rp %}selected{% endif %}>{{ opt_label(rp) }}</option>
   {% endfor %}
 </select>
 
@@ -444,14 +459,15 @@
   // ---- interest chips over the hidden CSV field ----
   var interests = document.getElementById("interests");
   var pills = document.getElementById("interest-pills");
+  var customIn = document.getElementById("interest-custom");
+  var customAdd = document.getElementById("interest-add");
+  var INTEREST_MAX = {{ interest_max }};
   if (interests && pills) {
-    var buttons = pills.querySelectorAll(".pill");
-
     // hidden field -> chips, so the Fill helper (which writes the field
     // directly) still lights up the right ones
     function syncFromField() {
       var on = interests.value.split(",").map(function (s) { return s.trim(); });
-      buttons.forEach(function (b) {
+      pills.querySelectorAll(".pill").forEach(function (b) {
         var isOn = on.indexOf(b.dataset.value) !== -1;
         b.classList.toggle("is-on", isOn);
         b.setAttribute("aria-pressed", isOn ? "true" : "false");
@@ -461,20 +477,65 @@
     // chips -> hidden field, keeping the order the chips are shown in
     function syncFromPills() {
       var on = [];
-      buttons.forEach(function (b) {
+      pills.querySelectorAll(".pill").forEach(function (b) {
         if (b.classList.contains("is-on")) on.push(b.dataset.value);
       });
       interests.value = on.join(", ");
     }
 
-    buttons.forEach(function (b) {
-      b.addEventListener("click", function () {
-        b.classList.toggle("is-on");
-        b.setAttribute("aria-pressed", b.classList.contains("is-on") ? "true" : "false");
-        syncFromPills();
-      });
+    // Event delegation rather than a fixed button list, since a written-in
+    // interest adds a new .pill node after the page has already loaded.
+    pills.addEventListener("click", function (ev) {
+      var b = ev.target.closest(".pill[data-value]");
+      if (!b) return;
+      if (!b.classList.contains("is-on")) {
+        var onCount = pills.querySelectorAll(".pill.is-on").length;
+        if (onCount >= INTEREST_MAX) return;   // server caps too, this is just the UI
+      }
+      b.classList.toggle("is-on");
+      b.setAttribute("aria-pressed", b.classList.contains("is-on") ? "true" : "false");
+      syncFromPills();
     });
     interests.addEventListener("change", syncFromField);
+
+    // A written-in interest becomes a chip like any other, so it can be
+    // toggled off again rather than being stuck once added.
+    function addCustom() {
+      var value = customIn.value.replace(/,/g, " ").trim().replace(/\s+/g, " ");
+      if (!value) return;
+      var existing = pills.querySelector('.pill[data-value="' + CSS.escape(value) + '"]');
+      if (existing) {
+        if (!existing.classList.contains("is-on")) {
+          if (pills.querySelectorAll(".pill.is-on").length < INTEREST_MAX) {
+            existing.classList.add("is-on");
+            existing.setAttribute("aria-pressed", "true");
+          }
+        }
+      } else {
+        if (pills.querySelectorAll(".pill.is-on").length >= INTEREST_MAX) {
+          customIn.value = "";
+          return;
+        }
+        var pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "pill is-on";
+        pill.dataset.value = value;
+        pill.setAttribute("aria-pressed", "true");
+        pill.textContent = value;
+        pills.insertBefore(pill, pills.firstChild);
+      }
+      syncFromPills();
+      customIn.value = "";
+    }
+
+    if (customAdd && customIn) {
+      customAdd.addEventListener("click", addCustom);
+      customIn.addEventListener("keydown", function (ev) {
+        if (ev.key !== "Enter") return;
+        ev.preventDefault();
+        addCustom();
+      });
+    }
   }
 })();
 </script>

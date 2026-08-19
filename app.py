@@ -663,6 +663,17 @@ RELATIONSHIP_TYPES = [
     "Not sure yet",
 ]
 
+# Self-descriptive, like body_type or hair_color -- shown on the profile,
+# not a live-search filter. Kept separate from RELATIONSHIP_TYPES (which is
+# "what kind of connection", CSV, and feeds matching) because monogamous vs.
+# polyamorous is a different axis a searcher isn't filtered on today.
+RELATIONSHIP_PREFERENCES = [
+    "Monogamous",
+    "Polyamorous",
+    "Open relationship",
+    "Not sure yet",
+]
+
 # Fallback reveal copy when two searches share no interest keyword -- the
 # thing that's always true instead: they're both looking for the same
 # relationship_type. Keyed on RELATIONSHIP_TYPES values.
@@ -713,6 +724,7 @@ PROFILE_FIELDS = [
     "interests",
     "hobbies",
     "relationship_type",
+    "relationship_preference",
 ]
 # Used by the search wizard's step-3 physical filters (searches.pref_body_types),
 # a checkbox group that arrives as repeated fields rather than one value, so it
@@ -738,6 +750,7 @@ def sample_profile_data():
         "interests": SAMPLE_INTERESTS,
         "hobbies": SAMPLE_HOBBIES,
         "relationship_type": RELATIONSHIP_TYPES,
+        "relationship_preference": RELATIONSHIP_PREFERENCES,
         "height_cm": {"min": HEIGHT_MIN_CM, "max": HEIGHT_MAX_CM},
         "body_type": BODY_TYPES,
         "fitness_level": FITNESS_LEVELS,
@@ -840,6 +853,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     wants TEXT NOT NULL DEFAULT '',
     needs TEXT NOT NULL DEFAULT '',
     relationship_type TEXT NOT NULL DEFAULT '',
+    relationship_preference TEXT NOT NULL DEFAULT '',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -859,6 +873,7 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_fitness_level TEXT NOT NULL D
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_hair_color TEXT NOT NULL DEFAULT '';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_eye_color TEXT NOT NULL DEFAULT '';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pref_tattoos TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS relationship_preference TEXT NOT NULL DEFAULT '';
 
 -- status default is 'active' so every pre-existing row (and every future
 -- /find "Match & chat" row, which never goes through try_pair) behaves as a
@@ -2343,6 +2358,9 @@ def validate_profile(values):
 
     if values["relationship_type"] and values["relationship_type"] not in RELATIONSHIP_TYPES:
         error = t("msg.pick_relationship")
+    if (values["relationship_preference"]
+            and values["relationship_preference"] not in RELATIONSHIP_PREFERENCES):
+        error = t("msg.pick_relationship_preference")
     if values["gender"] and values["gender"] not in GENDERS:
         error = t("msg.pick_gender")
     if values["seeking"] and values["seeking"] not in SEEKING_OPTIONS:
@@ -2767,6 +2785,7 @@ STRENGTH_FIELDS = [
     ("hair_color", "Add your hair colour"),
     ("eye_color", "Add your eye colour"),
     ("tattoos", "Say whether you have tattoos"),
+    ("relationship_preference", "Say your relationship preference"),
 ]
 
 
@@ -2937,9 +2956,9 @@ def edit_profile():
                      height_cm, body_type, fitness_level,
                      hair_color, eye_color, tattoos,
                      bio, interests, hobbies,
-                     relationship_type, updated_at)
+                     relationship_type, relationship_preference, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, NOW())
+                        ?, ?, ?, ?, ?, NOW())
                 ON CONFLICT (user_id) DO UPDATE SET
                     name = excluded.name, age = excluded.age,
                     gender = excluded.gender, seeking = excluded.seeking,
@@ -2953,6 +2972,7 @@ def edit_profile():
                     bio = excluded.bio, interests = excluded.interests,
                     hobbies = excluded.hobbies,
                     relationship_type = excluded.relationship_type,
+                    relationship_preference = excluded.relationship_preference,
                     updated_at = NOW()
                 """,
                 (
@@ -2962,6 +2982,7 @@ def edit_profile():
                     phys["hair_color"], phys["eye_color"], phys["tattoos"],
                     values["bio"], values["interests"],
                     values["hobbies"], values["relationship_type"],
+                    values["relationship_preference"],
                 ),
             )
             apply_photo_edits(db, user_id, removals, uploads, posted_order, posted_primary)
@@ -3009,7 +3030,9 @@ def edit_profile():
         bio_max=BIO_MAX_CHARS,
         interest_chips=chips,
         interest_chosen=chosen,
+        interest_max=INTEREST_MAX,
         relationship_types=RELATIONSHIP_TYPES,
+        relationship_preferences=RELATIONSHIP_PREFERENCES,
         genders=GENDERS,
         seeking_options=SEEKING_OPTIONS,
         body_types=BODY_TYPES,
@@ -3887,8 +3910,9 @@ def admin_new_profile():
                         (user_id, name, age, gender, seeking, location,
                          height_cm, body_type, fitness_level, hair_color,
                          eye_color, tattoos, bio,
-                         interests, hobbies, relationship_type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         interests, hobbies, relationship_type,
+                         relationship_preference)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         new_id, values["name"], age, values["gender"],
@@ -3899,6 +3923,7 @@ def admin_new_profile():
                         values["bio"],
                         values["interests"], values["hobbies"],
                         values["relationship_type"],
+                        values["relationship_preference"],
                     ),
                 )
                 db.commit()
@@ -3924,7 +3949,9 @@ def admin_new_profile():
         bio_max=BIO_MAX_CHARS,
         interest_chips=chips,
         interest_chosen=chosen,
+        interest_max=INTEREST_MAX,
         relationship_types=RELATIONSHIP_TYPES,
+        relationship_preferences=RELATIONSHIP_PREFERENCES,
         genders=GENDERS,
         seeking_options=SEEKING_OPTIONS,
         body_types=BODY_TYPES,

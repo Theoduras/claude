@@ -1495,6 +1495,16 @@
       min-width: 0;
     }
     .sheet-add .btn { flex: none; width: auto; padding-inline: 1.1rem; }
+    /* same add-your-own row, inline in an ordinary form rather than a sheet
+       -- no horizontal padding to cancel, and the fields around it already
+       carry a 1.15rem bottom margin */
+    .field-add {
+      display: flex;
+      gap: 0.5rem;
+      margin: -0.55rem 0 1.15rem;
+    }
+    .field-add input { flex: 1; margin: 0; min-width: 0; }
+    .field-add .btn { flex: none; width: auto; padding-inline: 1.1rem; margin: 0; }
     /* at the cap, the ones you have not picked stop inviting a tap */
     .pillset.is-full .pill[data-value]:not(.is-on) {
       opacity: 0.38;
