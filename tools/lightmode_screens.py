@@ -33,9 +33,9 @@ def icon(slot, size=24, cls=""):
     return (
         '<svg width="%d" height="%d" viewBox="%s" fill="none" '
         'stroke-width="%s" stroke-linecap="%s" stroke-linejoin="%s" '
-        'aria-hidden="true"%s>%s</svg>'
+        'aria-hidden="true" data-icon="%s"%s>%s</svg>'
         % (size, size, view_box, round(STROKE * box / 24.0, 2), CAP, CAP,
-           ' class="%s"' % cls if cls else "", inner)
+           name, ' class="%s"' % cls if cls else "", inner)
     )
 
 
