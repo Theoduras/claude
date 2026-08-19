@@ -215,9 +215,10 @@ def build():
       the phone</b> and the inspector opens on it: its colours, its words, its
       icon, what it does under the cursor, and whether it moves. The palette
       rail edits the other scope &mdash; a token, so one swatch repaints every
-      screen at once. <b>Light and dark are one set of names with two
-      answers</b>: the switch changes which answer you are editing, and both
-      export separately.</p>
+      screen at once. <b>Only colour is answered twice</b>: the mode switch
+      changes which answer you are editing, while an icon, a word, a radius or
+      a hover lift is the same decision in both worlds and lands in both at
+      once.</p>
   </header>
 
   <div class="split">

@@ -281,6 +281,13 @@ SCREEN_CSS = """
 /* Outline, round caps and joins, 2px at a 24 canvas. The registry emits the
    stroke already scaled per canvas, so a 20-box glyph is not heavier. */
 .vl svg { display: block; }
+/* An icon sitting inside a sentence is the exception: `display: block` there
+   breaks the line and drops the words underneath the mark. Flex parents
+   (chips, rows, the tab bar) are unaffected, since display is ignored on a
+   flex item -- so this only has to name the prose case. */
+.vl p > svg, .vl label > svg, .vl summary > svg, .vl strong > svg, .vl span > svg {
+  display: inline-block; vertical-align: -0.15em; margin-right: 3px;
+}
 .vl .tap { min-width: 44px; min-height: 44px; display: inline-flex;
            align-items: center; justify-content: center; }
 
@@ -294,9 +301,21 @@ SCREEN_CSS = """
 .vl .mascot-pair .mascot:last-child  { transform: rotate(-7deg); transform-origin: bottom center; }
 
 /* ---- the shell ---------------------------------------------------- */
-.vl-top { display: flex; align-items: center; justify-content: space-between;
-          padding: var(--space-4) var(--gutter) var(--space-2); flex: none; gap: var(--space-2); }
+/* Three slots, the outer two equal-weight, so whatever sits in the middle is
+   centred on the screen rather than on whatever is left over. A flex row with
+   space-between would hang the mark off-axis by half the back arrow. */
+.vl-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+          padding: var(--space-4) var(--gutter) var(--space-2); flex: none; gap: var(--space-2);
+          min-height: 44px; }
+.vl-slot { display: flex; align-items: center; min-width: 0; }
+.vl-slot-end { justify-content: flex-end; }
 .vl-word { font-size: 13px; font-weight: 700; letter-spacing: 0.22em; color: var(--ink); }
+/* The mark itself, not the letters retyped: the same artwork the landing
+   masks, at bar size and filled with --ink so it reads as chrome. Sized by
+   height with the drawing's own ratio, so it cannot be squashed. */
+.vl-logo { display: block; height: 19px; aspect-ratio: 753 / 391; background: var(--ink);
+           -webkit-mask: var(--logo-art) center / contain no-repeat;
+           mask: var(--logo-art) center / contain no-repeat; }
 .vl-main { flex: 1 1 auto; min-height: 0; padding: 0 var(--gutter); display: flex; flex-direction: column; }
 .vl-foot { flex: none; padding: var(--space-4) var(--gutter) var(--space-6); }
 .vl .vl-scroll { overflow-y: auto; }

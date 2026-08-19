@@ -101,11 +101,30 @@ def tabbar(active="search"):
 
 
 def _head(title="", back=False, action=""):
-    """The pinned top row. A title only where the screen is a destination."""
+    """The pinned top row: three slots, and the middle one is the brand.
+
+    The wordmark here is the logo artwork, not the letters typed out -- the
+    same `velvt-logo.svg` mask the landing uses, so the letterforms stay as
+    drawn and a palette change still reaches the fill. Set in type it was a
+    second, worse drawing of a mark we already own.
+
+    The row is a grid of `1fr auto 1fr` rather than a flex with
+    space-between, because centred has to mean centred: with a back arrow on
+    one side and nothing on the other, space-between pushes the middle slot
+    off-axis by half the arrow, and the mark visibly fails to line up with the
+    headline under it. Equal-weight side columns hold the centre wherever the
+    edges land.
+
+    A screen deep enough to have a title puts that in the middle instead --
+    on a detail view, what you are looking at outranks whose app it is.
+    """
     left = ('<button class="btn btn-quiet tap vl-back">%s</button>' % icon("nav.back", 22)
-            if back else '<span class="vl-word">Velvt</span>')
-    return ('<div class="vl-top">%s<span class="vl-title">%s</span>'
-            '<span class="vl-back">%s</span></div>' % (left, title, action))
+            if back else "")
+    middle = ('<span class="vl-title">%s</span>' % title if title
+              else '<span class="vl-logo" role="img" aria-label="Velvt"></span>')
+    return ('<div class="vl-top"><span class="vl-slot">%s</span>%s'
+            '<span class="vl-slot vl-slot-end">%s</span></div>'
+            % (left, middle, action))
 
 
 # ======================================================================
@@ -452,7 +471,7 @@ def search_waiting():
   <div class="vl-foot">
     <button class="btn btn-block btn-secondary">Stop searching</button>
   </div>
-</div>""" % {"head": _head(title="Searching")}
+</div>""" % {"head": _head()}
 
 
 # ======================================================================
@@ -583,7 +602,7 @@ def chat_ended():
     <button class="btn btn-primary empty-cta">Search again</button>
   </div>
   %(tabs)s
-</div>""" % {"head": _head(title="Ended"), "icon": icon("card.check", 28),
+</div>""" % {"head": _head(), "icon": icon("card.check", 28),
              "tabs": tabbar("chats")}
 
 
@@ -842,7 +861,7 @@ def safety():
     </div>
   </div>
   %(tabs)s
-</div>""" % {"head": _head(title="Safety"), "tabs": tabbar("info")}
+</div>""" % {"head": _head(), "tabs": tabbar("info")}
 
 
 # ======================================================================

@@ -79,8 +79,13 @@ KEYFRAMES = """
 @keyframes vl-sheen   { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 @keyframes vl-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.045); } }
 @keyframes vl-shimmer { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
+/* A family rule targets a class, not a `data-el`, so the old guard here missed
+   exactly the edits most likely to animate a lot of things at once. CSS cannot
+   select by animation name, so this covers everything inside a screen -- which
+   costs nothing, since the two built-in animations (the sheen and the search
+   pulse) already switch themselves off under the same query. */
 @media (prefers-reduced-motion: reduce) {
-  .vl [data-el] { animation: none !important; }
+  .vl *, .vl *::before, .vl *::after { animation-name: none !important; }
 }
 """
 
@@ -153,6 +158,21 @@ EDITOR_CSS = """
            font-size: .72rem; text-decoration: underline; flex: none; }
 .f-clear:hover { color: var(--c-text); }
 .f-val { flex: none; width: 3.2rem; text-align: right; font-family: var(--code); font-size: .72rem; color: var(--c-faint); }
+/* Which scope an edit lands in is the one thing about this panel a person
+   cannot infer from looking, so it is stated on the control itself rather
+   than in a paragraph nobody reads twice. */
+.f > label em { font-style: normal; display: block; font-size: .62rem; letter-spacing: .06em;
+                text-transform: uppercase; color: var(--c-faint); margin-top: 1px; }
+.scope-note { font-size: .74rem; color: var(--c-faint); margin: 0 0 .8rem;
+              padding-left: .55rem; border-left: 2px solid var(--c-line-firm); }
+.scope-note b { color: var(--c-muted); font-weight: 600; }
+.f-scope { margin-bottom: .45rem; }
+.f-scope select { font-family: var(--code); font-size: .74rem; }
+/* Editing a whole family is the one state where a stray click does real work,
+   so the panel says so in the accent rather than leaving it to the dropdown. */
+.insp.is-family { border-color: var(--c-accent); }
+.insp.is-family .f-scope select { border-color: var(--c-accent); color: var(--c-accent); }
+.insp.is-family .scope-note { border-left-color: var(--c-accent); }
 
 /* the glyph grid */
 .glyphs { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: .3rem;
@@ -203,6 +223,11 @@ def inspector_html():
       <code id="insp-path">&nbsp;</code>
     </div>
 
+    <div class="f f-scope"><label>Apply to</label>
+      <select id="insp-scope"></select>
+      <span class="f-val" id="insp-scope-n">&mdash;</span></div>
+    <p class="scope-note" id="insp-scope-note">Edits land on this one element.</p>
+
     <div class="seg" id="insp-seg">
       <button data-pane="paint" class="is-on">Paint</button>
       <button data-pane="text">Text</button>
@@ -212,33 +237,36 @@ def inspector_html():
     </div>
 
     <div class="pane is-on" data-pane="paint">
-      <div class="f"><label>Text</label>
+      <p class="scope-note">Colour is answered per mode. <b>Everything else on
+        this panel &mdash; type, radius, shadow, icons, words, hover and motion
+        &mdash; applies to light and dark at once.</b></p>
+      <div class="f"><label>Text<em>this mode</em></label>
         <input type="color" data-set="color" data-state="base">
         <input type="text" data-set="color" data-state="base" placeholder="var(--ink)">
         <button class="f-clear" data-clear="color" data-state="base">clear</button></div>
-      <div class="f"><label>Background</label>
+      <div class="f"><label>Background<em>this mode</em></label>
         <input type="color" data-set="background-color" data-state="base">
         <input type="text" data-set="background-color" data-state="base" placeholder="var(--surface)">
         <button class="f-clear" data-clear="background-color" data-state="base">clear</button></div>
-      <div class="f"><label>Shadow</label>
+      <div class="f"><label>Shadow<em>both modes</em></label>
         <select data-set="box-shadow" data-state="base">%(shadows)s</select></div>
-      <div class="f"><label>Radius</label>
+      <div class="f"><label>Radius<em>both modes</em></label>
         <select data-set="border-radius" data-state="base">%(radii)s</select></div>
     </div>
 
     <div class="pane" data-pane="text">
       <div class="f"><textarea id="insp-text" placeholder="This element has no text of its own."></textarea></div>
-      <div class="f"><label>Weight</label>
+      <div class="f"><label>Weight<em>both modes</em></label>
         <select data-set="font-weight" data-state="base">
           <option value="">Inherit</option><option value="400">400 regular</option>
           <option value="500">500 medium</option><option value="600">600 semibold</option>
           <option value="700">700 bold</option><option value="800">800 heavy</option>
         </select></div>
-      <div class="f"><label>Size</label>
+      <div class="f"><label>Size<em>both modes</em></label>
         <input type="range" min="9" max="44" step="1" data-set="font-size" data-state="base" data-unit="px">
         <span class="f-val" data-val="font-size">&mdash;</span>
         <button class="f-clear" data-clear="font-size" data-state="base">clear</button></div>
-      <div class="f"><label>Tracking</label>
+      <div class="f"><label>Tracking<em>both modes</em></label>
         <input type="range" min="-6" max="20" step="1" data-set="letter-spacing" data-state="base" data-unit="/100em">
         <span class="f-val" data-val="letter-spacing">&mdash;</span>
         <button class="f-clear" data-clear="letter-spacing" data-state="base">clear</button></div>
@@ -248,13 +276,13 @@ def inspector_html():
       <p class="insp-empty" id="icon-none" hidden>No icon here. Pick one below and
         it is added to this element.</p>
       <div class="glyphs" id="glyphs"></div>
-      <div class="f"><label>Size</label>
+      <div class="f"><label>Size<em>both modes</em></label>
         <input type="range" min="12" max="48" step="2" id="icon-size">
         <span class="f-val" id="icon-size-val">24px</span></div>
-      <div class="f"><label>Stroke</label>
+      <div class="f"><label>Stroke<em>both modes</em></label>
         <input type="range" min="1" max="3" step="0.25" id="icon-stroke">
         <span class="f-val" id="icon-stroke-val">2</span></div>
-      <div class="f"><label>Colour</label>
+      <div class="f"><label>Colour<em>this mode</em></label>
         <input type="color" data-set="color" data-state="icon">
         <input type="text" data-set="color" data-state="icon" placeholder="currentColor">
         <button class="f-clear" data-clear="color" data-state="icon">clear</button></div>
@@ -262,19 +290,19 @@ def inspector_html():
     </div>
 
     <div class="pane" data-pane="hover">
-      <div class="f"><label>Text</label>
+      <div class="f"><label>Text<em>this mode</em></label>
         <input type="color" data-set="color" data-state="hover">
         <input type="text" data-set="color" data-state="hover" placeholder="unchanged">
         <button class="f-clear" data-clear="color" data-state="hover">clear</button></div>
-      <div class="f"><label>Background</label>
+      <div class="f"><label>Background<em>this mode</em></label>
         <input type="color" data-set="background-color" data-state="hover">
         <input type="text" data-set="background-color" data-state="hover" placeholder="unchanged">
         <button class="f-clear" data-clear="background-color" data-state="hover">clear</button></div>
-      <div class="f"><label>Shadow</label>
+      <div class="f"><label>Shadow<em>both modes</em></label>
         <select data-set="box-shadow" data-state="hover">%(shadows)s</select></div>
-      <div class="f"><label>Move</label>
+      <div class="f"><label>Move<em>both modes</em></label>
         <select data-set="transform" data-state="hover">%(lifts)s</select></div>
-      <div class="f"><label>Over</label>
+      <div class="f"><label>Over<em>both modes</em></label>
         <select data-set="transition-duration" data-state="base">
           <option value="">Default</option>
           <option value="var(--d-fast)">120ms - press</option>
@@ -285,12 +313,12 @@ def inspector_html():
     </div>
 
     <div class="pane" data-pane="motion">
-      <div class="f"><label>Effect</label>
+      <div class="f"><label>Effect<em>both modes</em></label>
         <select data-set="animation-name" data-state="base">%(anims)s</select></div>
-      <div class="f"><label>Duration</label>
+      <div class="f"><label>Duration<em>both modes</em></label>
         <input type="range" min="0.4" max="8" step="0.2" data-set="animation-duration" data-state="base" data-unit="s">
         <span class="f-val" data-val="animation-duration">&mdash;</span></div>
-      <div class="f"><label>Repeat</label>
+      <div class="f"><label>Repeat<em>both modes</em></label>
         <select data-set="animation-iteration-count" data-state="base">
           <option value="infinite">Forever</option><option value="1">Once</option>
           <option value="2">Twice</option><option value="3">Three times</option>
@@ -327,14 +355,30 @@ def script():
 (function () {
   var GLYPHS = %(glyphs)s;
   var sheet = document.getElementById("overrides");
-  /* Appearance is per mode; content is not. A colour that works on a light
-     ground rarely works on a dark one, so every rule below is filed under the
-     mode it was made in -- but the words on a button and the glyph in it are
-     the same product in both worlds, so `texts` and the icon swaps stay
-     shared. Duplicating those would let the two modes drift into two
-     different apps. */
-  var rules = { light: {}, dark: {} };   /* mode -> "el-3|base" -> {prop: value} */
+  /* What is per mode, and what is not.
+     Only *colour* is a per-mode answer: a hex that works on a light ground
+     rarely works on a dark one, so `color` and `background-color` are filed
+     under the mode they were chosen in. Everything else describes the thing
+     rather than the palette -- how heavy the type is, how round the corner
+     is, how far it lifts on hover, whether it moves -- and a button that is
+     600 weight in light and 400 in dark is not one button, it is two.
+     Those go to `shared` and apply in both worlds at once.
+     Shadow is shared for the same reason and one more: the values on offer
+     are the elevation tokens, and those already carry their own per-mode
+     answer, so "raised" means raised in both without being restated.
+     Text and icon swaps are shared too, and more simply -- they are edits to
+     the DOM itself, which both modes are looking at. */
+  var COLOR_PROPS = { "color": 1, "background-color": 1 };
+  /* Keyed by *selector*, not by element. A rule aimed at one button is filed
+     under `[data-el="el-3"]`; the same rule aimed at the family is filed
+     under `.btn-primary` and needs no id at all. Making the key a selector
+     rather than an id plus a flag means one code path writes both, and the
+     export is the CSS you would have written by hand either way. */
+  var rules = { light: {}, dark: {}, shared: {} };  /* store -> "sel|state" -> {prop: value} */
   var texts = {};                        /* "el-3" -> original textContent */
+  var scope = "";                        /* "" = this element, else a class name */
+
+  function storeFor(prop) { return COLOR_PROPS[prop] ? mode : "shared"; }
   var seq = 0;
   var sel = null;
 
@@ -343,22 +387,53 @@ def script():
     return node.dataset.el;
   }
 
+  /* What the current edit is aimed at. */
+  function target(node) {
+    return scope ? "." + scope : '[data-el="' + idOf(node) + '"]';
+  }
+
+  /* Every element the current scope reaches, across all screens -- a family
+     edit is meant to be app-wide, not confined to whichever screen is open. */
+  function matched(node) {
+    if (!scope) { return [node]; }
+    return Array.prototype.slice.call(
+      document.querySelectorAll('.device .vl .' + scope));
+  }
+
+  /* The families this element could belong to. State classes are left out:
+     `.is-on` is a mode a chip is in, not a kind of thing it is, and offering
+     it as a family invites a rule that repaints every selected control in the
+     app the moment one is selected. */
+  function familiesOf(node) {
+    var cls = (node.className && node.className.baseVal !== undefined)
+      ? node.className.baseVal : (node.className || "");
+    return String(cls).trim().split(/\\s+/).filter(function (c) {
+      return c && c.indexOf("is-") !== 0 && c !== "vl";
+    });
+  }
+
+  /* Light has to exclude dark explicitly. An unqualified `.vl [data-el]`
+     matches in both worlds -- the dark stamp only *adds* a selector -- so a
+     colour chosen on the light ground would follow you into the dark one and
+     quietly override its answer. `shared` wants exactly that reach, so it is
+     the one that stays unqualified. */
+  var SCOPE = {
+    shared: "",
+    light: ':root:not([data-mode="dark"]) ',
+    dark: '[data-mode="dark"] '
+  };
+
   function render() {
     var out = [];
-    ["light", "dark"].forEach(function (m) {
-      Object.keys(rules[m]).forEach(function (key) {
-        var parts = key.split("|"), id = parts[0], state = parts[1];
-        var decls = rules[m][key], body = [];
+    ["shared", "light", "dark"].forEach(function (store) {
+      Object.keys(rules[store]).forEach(function (key) {
+        var parts = key.split("|"), what = parts[0], state = parts[1];
+        var decls = rules[store][key], body = [];
         Object.keys(decls).forEach(function (p) {
           if (decls[p] !== "") { body.push("  " + p + ": " + decls[p] + ";"); }
         });
         if (!body.length) { return; }
-        /* Light has to exclude dark explicitly. An unqualified `.vl [data-el]`
-           matches in both worlds -- the dark stamp only *adds* a selector --
-           so a colour chosen on the light ground would follow you into the
-           dark one and quietly override its answer. */
-        var s = (m === "dark" ? '[data-mode="dark"] ' : ':root:not([data-mode="dark"]) ')
-              + '.vl [data-el="' + id + '"]';
+        var s = SCOPE[store] + '.vl ' + what;
         if (state === "hover") { s += ":hover"; }
         if (state === "icon")  { s += " svg"; }
         out.push(s + " {\\n" + body.join("\\n") + "\\n}");
@@ -370,32 +445,38 @@ def script():
   }
 
   function setProp(node, state, prop, value) {
-    var key = idOf(node) + "|" + state;
-    rules[mode][key] = rules[mode][key] || {};
+    var key = target(node) + "|" + state;
+    /* The companions written alongside a value below are all structural --
+       an easing, a duration, a transition list -- so they follow the property
+       that triggered them into whichever store it belongs to, which for every
+       one of them is `shared`. */
+    var st = storeFor(prop);
+    rules[st][key] = rules[st][key] || {};
     /* An animation is nothing without a duration and an easing, and asking the
        user for the easing would let a non-guide curve in. So the shorthand
        companions are written alongside the name rather than exposed. */
     if (prop === "animation-name" && value) {
-      rules[mode][key]["animation-timing-function"] = "var(--ease)";
-      rules[mode][key]["animation-iteration-count"] =
-        rules[mode][key]["animation-iteration-count"] || "infinite";
-      rules[mode][key]["animation-duration"] = rules[mode][key]["animation-duration"] || "3s";
+      rules[st][key]["animation-timing-function"] = "var(--ease)";
+      rules[st][key]["animation-iteration-count"] =
+        rules[st][key]["animation-iteration-count"] || "infinite";
+      rules[st][key]["animation-duration"] = rules[st][key]["animation-duration"] || "3s";
     }
     if (prop === "transform" && state === "hover") {
-      var base = idOf(node) + "|base";
-      rules[mode][base] = rules[mode][base] || {};
-      rules[mode][base]["transition-property"] = "color, background-color, box-shadow, transform";
-      rules[mode][base]["transition-timing-function"] = "var(--ease)";
-      rules[mode][base]["transition-duration"] =
-        rules[mode][base]["transition-duration"] || "var(--d-base)";
+      var base = target(node) + "|base";
+      rules.shared[base] = rules.shared[base] || {};
+      rules.shared[base]["transition-property"] = "color, background-color, box-shadow, transform";
+      rules.shared[base]["transition-timing-function"] = "var(--ease)";
+      rules.shared[base]["transition-duration"] =
+        rules.shared[base]["transition-duration"] || "var(--d-base)";
     }
-    rules[mode][key][prop] = value;
+    rules[st][key][prop] = value;
     render();
   }
 
   function readProp(node, state, prop) {
-    var key = idOf(node) + "|" + state;
-    return (rules[mode][key] && rules[mode][key][prop]) || "";
+    var key = target(node) + "|" + state;
+    var st = storeFor(prop);
+    return (rules[st][key] && rules[st][key][prop]) || "";
   }
 
   /* ---- selection --------------------------------------------------- */
@@ -416,6 +497,40 @@ def script():
     return bits.slice(-3).join(" > ");
   }
 
+  /* ---- scope: this element, or every one like it --------------------- */
+  var scopeSel = document.getElementById("insp-scope");
+
+  function buildScope(node) {
+    var fams = familiesOf(node);
+    scopeSel.innerHTML = '<option value="">This element only</option>' +
+      fams.map(function (c) {
+        var n = document.querySelectorAll(".device .vl ." + c).length;
+        return '<option value="' + c + '">Every .' + c + " (" + n + ")</option>";
+      }).join("");
+    /* A family the element no longer belongs to would silently write rules
+       nothing on screen matches, so the scope resets whenever it cannot be
+       carried over to the new selection. */
+    if (scope && fams.indexOf(scope) === -1) { scope = ""; }
+    scopeSel.value = scope;
+    paintScope();
+  }
+
+  function paintScope() {
+    var n = scope ? matched(sel).length : 1;
+    document.getElementById("insp-scope-n").textContent = n + (n === 1 ? " el" : " els");
+    document.getElementById("insp").classList.toggle("is-family", !!scope);
+    document.getElementById("insp-scope-note").innerHTML = scope
+      ? "Edits land on <b>every ." + scope + " in the app</b>, on every screen. " +
+        "Words stay on the one you picked."
+      : "Edits land on this one element.";
+  }
+
+  scopeSel.addEventListener("change", function () {
+    scope = this.value;
+    paintScope();
+    syncPanel();
+  });
+
   function select(node) {
     document.querySelectorAll("[data-sel]").forEach(function (n) { delete n.dataset.sel; });
     sel = node;
@@ -424,6 +539,7 @@ def script():
     document.getElementById("insp-body").hidden = false;
     document.getElementById("insp-name").textContent = label(node);
     document.getElementById("insp-path").textContent = pathOf(node);
+    buildScope(node);
     syncPanel();
   }
 
@@ -559,23 +675,29 @@ def script():
     var size = document.getElementById("icon-size").value || 24;
     var stroke = document.getElementById("icon-stroke").value || 2;
     var box = parseFloat(g.box.split(" ")[2]);
-    var svg = currentSvg();
-    if (!svg) {
-      svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      sel.insertBefore(svg, sel.firstChild);
-    }
-    svg.setAttribute("viewBox", g.box);
-    svg.setAttribute("width", size);
-    svg.setAttribute("height", size);
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("stroke-linecap", "round");
-    svg.setAttribute("stroke-linejoin", "round");
-    /* ch.07 asks for 2px at a 24 canvas "scaling proportionally", so a glyph
-       drawn on a 20 box gets 2 * 20/24 in its own units and still lands at
-       2px on screen. Reproduced here so the picker cannot break the spec. */
-    svg.setAttribute("stroke-width", (stroke * box / 24).toFixed(2));
-    svg.dataset.icon = name;
-    svg.innerHTML = g.d;
+    /* An icon is a DOM change, not a rule, so a family edit has to touch each
+       member rather than be expressed once as CSS. Same scope, different
+       mechanism -- which is why this walks matched() instead of writing a
+       selector. */
+    matched(sel).forEach(function (node) {
+      var svg = node.querySelector("svg");
+      if (!svg) {
+        svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        node.insertBefore(svg, node.firstChild);
+      }
+      svg.setAttribute("viewBox", g.box);
+      svg.setAttribute("width", size);
+      svg.setAttribute("height", size);
+      svg.setAttribute("fill", "none");
+      svg.setAttribute("stroke-linecap", "round");
+      svg.setAttribute("stroke-linejoin", "round");
+      /* ch.07 asks for 2px at a 24 canvas "scaling proportionally", so a glyph
+         drawn on a 20 box gets 2 * 20/24 in its own units and still lands at
+         2px on screen. Reproduced here so the picker cannot break the spec. */
+      svg.setAttribute("stroke-width", (stroke * box / 24).toFixed(2));
+      svg.dataset.icon = name;
+      svg.innerHTML = g.d;
+    });
     syncIconPane();
   }
 
@@ -592,8 +714,12 @@ def script():
     });
   });
   document.getElementById("icon-remove").addEventListener("click", function () {
-    var svg = currentSvg();
-    if (svg) { svg.remove(); syncIconPane(); }
+    if (!sel) { return; }
+    matched(sel).forEach(function (node) {
+      var svg = node.querySelector("svg");
+      if (svg) { svg.remove(); }
+    });
+    syncIconPane();
   });
 
   /* ---- the token rail: one swatch, every screen, per mode ------------- */
@@ -656,6 +782,10 @@ def script():
     if (mode === "dark") { document.documentElement.dataset.mode = "dark"; }
     else { delete document.documentElement.dataset.mode; }
     syncRail();
+    /* The colour fields now point at the other mode's answer; the structural
+       ones are shared and will read back identical. Re-syncing both is
+       simpler than tracking which is which out here. */
+    syncPanel();
   });
 
   /* ---- screens -------------------------------------------------------- */
@@ -669,12 +799,13 @@ def script():
   });
 
   document.getElementById("reset-all").addEventListener("click", function () {
-    rules = { light: {}, dark: {} };
+    rules = { light: {}, dark: {}, shared: {} };
     Object.keys(texts).forEach(function (id) {
       var node = document.querySelector('[data-el="' + id + '"]');
       if (node) { node.textContent = texts[id]; }
     });
     texts = {};
+    scope = "";
     render();
     document.querySelectorAll("[data-sel]").forEach(function (n) { delete n.dataset.sel; });
     sel = null;
