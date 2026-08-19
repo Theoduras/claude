@@ -206,6 +206,8 @@ def build():
 </style>
 <style id="tokens"></style>
 <style id="overrides"></style>
+<!-- written last so a custom rule wins without needing !important -->
+<style id="custom"></style>
 
 <div class="page">
   <header class="top">

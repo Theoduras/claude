@@ -33,21 +33,109 @@ CAP = _REG["cap"]
 # The alternative was worse. `icon()` returns "" for a slot it cannot resolve,
 # so a mistyped or missing name draws nothing at all -- a tick that is simply
 # absent reads as an unselected row, not as a bug.
+def _g(d):
+    """One glyph on the 24 canvas, stroked in currentColor.
+
+    Every path below is written without its own stroke-width or caps: `icon()`
+    emits those on the <svg> from ch.07's spec and they inherit, which is the
+    same arrangement the app's registry uses and the reason a weight change is
+    one edit rather than sixty.
+    """
+    return ["0 0 24 24", "".join(
+        '<path d="%s" stroke="currentColor"/>' % p if not p.startswith("<") else p
+        for p in d)]
+
+
 EXTRA = {
-    "check": ["0 0 24 24", '<path d="M20 6 9 17l-5-5" stroke="currentColor"/>'],
-    "send": ["0 0 24 24",
-             '<path d="M4 12 20 4l-8 16-2-6-6-2Z" stroke="currentColor"/>'],
-    "more": ["0 0 24 24",
-             '<circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none"/>'
-             '<circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/>'
-             '<circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none"/>'],
-    "plus": ["0 0 24 24", '<path d="M12 5v14M5 12h14" stroke="currentColor"/>'],
-    "clock": ["0 0 24 24",
-              '<circle cx="12" cy="12" r="8.5" stroke="currentColor"/>'
-              '<path d="M12 7.5V12l3 2" stroke="currentColor"/>'],
-    "shield": ["0 0 24 24",
-               '<path d="M12 3.5 19 6v5.5c0 4.2-2.9 7.5-7 9-4.1-1.5-7-4.8-7-9V6l7-2.5Z"'
-               ' stroke="currentColor"/>'],
+    # -- the six the screens themselves needed --------------------------
+    "check":   _g(["M20 6 9 17l-5-5"]),
+    "send":    _g(["M4 12 20 4l-8 16-2-6-6-2Z"]),
+    "more":    _g(['<circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none"/>'
+                   '<circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/>'
+                   '<circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none"/>']),
+    "plus":    _g(["M12 5v14M5 12h14"]),
+    "clock":   _g(['<circle cx="12" cy="12" r="8.5" stroke="currentColor"/>', "M12 7.5V12l3 2"]),
+    "shield":  _g(["M12 3.5 19 6v5.5c0 4.2-2.9 7.5-7 9-4.1-1.5-7-4.8-7-9V6l7-2.5Z"]),
+
+    # -- a working set, so the picker is a library rather than a sample --
+    # Chosen for what an app of this shape actually needs a mark for, not to
+    # pad a grid: every one of these has a place it would plausibly go.
+    "search":     _g(['<circle cx="11" cy="11" r="6.5" stroke="currentColor"/>', "M15.8 15.8 20 20"]),
+    "x":          _g(["M6 6l12 12M18 6 6 18"]),
+    "menu":       _g(["M4 7h16M4 12h16M4 17h16"]),
+    "settings":   _g(['<circle cx="12" cy="12" r="3" stroke="currentColor"/>',
+                      "M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21"
+                      "M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"]),
+    "bell":       _g(["M18 15V10a6 6 0 1 0-12 0v5l-1.6 2.5h15.2L18 15Z", "M10 20a2 2 0 0 0 4 0"]),
+    "camera":     _g(["M3 8.5h3.4L8 6h8l1.6 2.5H21v11H3v-11Z",
+                      '<circle cx="12" cy="13.5" r="3.6" stroke="currentColor"/>']),
+    "image":      _g(["M3.5 4.5h17v15h-17z", "m3.5 16 5-5 4.5 4.5L16.5 12l4 4",
+                      '<circle cx="9" cy="9" r="1.4" stroke="currentColor"/>']),
+    "trash":      _g(["M4.5 6.5h15", "M9 6.5V4h6v2.5", "M6.5 6.5 7.6 21h8.8l1.1-14.5",
+                      "M10.5 10.5v6M13.5 10.5v6"]),
+    "edit":       _g(["M4 20h4L20 8l-4-4L4 16v4Z", "M14.5 5.5 18.5 9.5"]),
+    "filter":     _g(["M3.5 5.5h17l-6.7 8v6l-3.6-2v-4L3.5 5.5Z"]),
+    "share":      _g(['<circle cx="18" cy="6" r="2.6" stroke="currentColor"/>',
+                      '<circle cx="6" cy="12" r="2.6" stroke="currentColor"/>',
+                      '<circle cx="18" cy="18" r="2.6" stroke="currentColor"/>',
+                      "M8.3 10.8 15.7 7.2M8.3 13.2l7.4 3.6"]),
+    "download":   _g(["M12 4v11", "m7.5 10.5 4.5 4.5 4.5-4.5", "M4.5 19.5h15"]),
+    "upload":     _g(["M12 20V9", "m7.5 13.5 4.5-4.5 4.5 4.5", "M4.5 4.5h15"]),
+    "lock":       _g(["M5.5 10.5h13v10h-13z", "M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"]),
+    "unlock":     _g(["M5.5 10.5h13v10h-13z", "M8.5 10.5V7.5a3.5 3.5 0 0 1 6.6-1.7"]),
+    "mail":       _g(["M3.5 5.5h17v13h-17z", "m3.5 6.5 8.5 6.5 8.5-6.5"]),
+    "phone":      _g(["M7.5 3.5h9v17h-9z", "M10.5 17.5h3"]),
+    "calendar":   _g(["M3.5 6.5h17v14h-17z", "M3.5 10.5h17", "M8 4v4M16 4v4"]),
+    "map":        _g(["m3.5 6.5 5.5-2.5 6 2.5 5.5-2.5v13l-5.5 2.5-6-2.5-5.5 2.5v-13Z",
+                      "M9 4v13M15 6.5v13"]),
+    "globe":      _g(['<circle cx="12" cy="12" r="8.5" stroke="currentColor"/>',
+                      "M3.5 12h17", "M12 3.5c2.4 2.6 3.6 5.4 3.6 8.5s-1.2 5.9-3.6 8.5"
+                      "c-2.4-2.6-3.6-5.4-3.6-8.5S9.6 6.1 12 3.5Z"]),
+    "user":       _g(['<circle cx="12" cy="8.5" r="3.8" stroke="currentColor"/>',
+                      "M4.8 20.5a7.4 7.4 0 0 1 14.4 0"]),
+    "users":      _g(['<circle cx="9.5" cy="8.5" r="3.4" stroke="currentColor"/>',
+                      "M3 20.5a6.7 6.7 0 0 1 13 0", "M16 5.6a3.4 3.4 0 0 1 0 5.8",
+                      "M17.5 14.4a6.7 6.7 0 0 1 3.5 6.1"]),
+    "minus":      _g(["M5 12h14"]),
+    "arrow-up":   _g(["M12 20V4", "m5.5 10.5 6.5-6.5 6.5 6.5"]),
+    "arrow-down": _g(["M12 4v16", "m5.5 13.5 6.5 6.5 6.5-6.5"]),
+    "arrow-left": _g(["M20 12H4", "m10.5 5.5-6.5 6.5 6.5 6.5"]),
+    "arrow-right": _g(["M4 12h16", "m13.5 5.5 6.5 6.5-6.5 6.5"]),
+    "chevron-up": _g(["m5.5 15 6.5-6.5 6.5 6.5"]),
+    "chevron-down": _g(["m5.5 9 6.5 6.5L18.5 9"]),
+    "refresh":    _g(["M20 12a8 8 0 1 1-2.6-5.9", "M20 4v5h-5"]),
+    "external":   _g(["M18 13.5v6h-13v-13h6", "M13 4h7v7", "M20 4l-8.5 8.5"]),
+    "bookmark":   _g(["M6.5 3.5h11v17l-5.5-4-5.5 4v-17Z"]),
+    "flag":       _g(["M6 21V4", "M6 4.5h12l-2.5 4 2.5 4H6"]),
+    "sparkle":    _g(["M12 3.5 13.9 9.6 20 11.5l-6.1 1.9L12 19.5l-1.9-6.1L4 11.5l6.1-1.9L12 3.5Z"]),
+    "moon":       _g(["M20 14.2A8.5 8.5 0 0 1 9.8 4 8.5 8.5 0 1 0 20 14.2Z"]),
+    "sun":        _g(['<circle cx="12" cy="12" r="4" stroke="currentColor"/>',
+                      "M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6"
+                      "M5.4 5.4 7.2 7.2M16.8 16.8l1.8 1.8M18.6 5.4l-1.8 1.8M7.2 16.8l-1.8 1.8"]),
+    "play":       _g(["M7.5 4.5 19 12 7.5 19.5v-15Z"]),
+    "pause":      _g(["M9 5v14M15 5v14"]),
+    "eye-off":    _g(["M4 12s3.2-5.5 8-5.5c1.4 0 2.7.5 3.8 1.2M20 12s-3.2 5.5-8 5.5"
+                      "c-1.5 0-2.8-.5-3.9-1.3", "M4 4l16 16",
+                      '<circle cx="12" cy="12" r="2.6" stroke="currentColor"/>']),
+    "info":       _g(['<circle cx="12" cy="12" r="8.5" stroke="currentColor"/>',
+                      "M12 11v6", '<circle cx="12" cy="7.8" r="1" fill="currentColor" stroke="none"/>']),
+    "warning":    _g(["M12 4 21 20H3L12 4Z", "M12 10v4.5",
+                      '<circle cx="12" cy="17.4" r="1" fill="currentColor" stroke="none"/>']),
+    "bolt":       _g(["M13.5 3 5 13.5h6L10.5 21 19 10.5h-6L13.5 3Z"]),
+    "gift":       _g(["M3.5 8.5h17v4h-17z", "M5 12.5h14v8H5z", "M12 8.5v12",
+                      "M12 8.5C10.5 5 8.5 4 7.3 4.8 6 5.7 6.8 8 12 8.5Z",
+                      "M12 8.5c1.5-3.5 3.5-4.5 4.7-3.7C18 5.7 17.2 8 12 8.5Z"]),
+    "coffee":     _g(["M4.5 5.5h12v8a5 5 0 0 1-10 0v-8Z", "M16.5 7.5h2.5a2.5 2.5 0 0 1 0 5h-2.5",
+                      "M4 20.5h13"]),
+    "music":      _g(['<circle cx="7" cy="17.5" r="2.8" stroke="currentColor"/>',
+                      '<circle cx="18" cy="15.5" r="2.8" stroke="currentColor"/>',
+                      "M9.8 17.5V6l11-2v11.5"]),
+    "chat":       _g(["M4 5h16v11H9l-5 4V5Z"]),
+    "grid":       _g(["M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"]),
+    "list":       _g(["M8 6.5h12M8 12h12M8 17.5h12",
+                      '<circle cx="4.4" cy="6.5" r="1" fill="currentColor" stroke="none"/>'
+                      '<circle cx="4.4" cy="12" r="1" fill="currentColor" stroke="none"/>'
+                      '<circle cx="4.4" cy="17.5" r="1" fill="currentColor" stroke="none"/>']),
 }
 GLYPHS.update(EXTRA)
 SLOTS.update({
