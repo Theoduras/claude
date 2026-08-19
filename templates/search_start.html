@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ t("wiz.title") }}{% endblock %}
 {% block content %}
 {# Six questions, one visible at a time. Every step is in this one form and
@@ -25,31 +26,13 @@
     <h1 class="wiz-q">{{ t("wiz.q_relationship_1") }}<br>{{ t("wiz.q_relationship_2") }}</h1>
     <p class="wiz-hint">{{ t("wiz.hint_multi") }}</p>
     <div class="opt-list">
-      {% set rel_icons = {
-        'Long-term relationship': 'M12 20.2s-7.8-4.6-10-9.3C.4 7.4 2.6 4 6.2 4c2 0 3.7 1 4.8 2.6C12.1 5 13.8 4 15.8 4c3.6 0 5.8 3.4 4.2 6.9-2.2 4.7-10 9.3-10 9.3Z',
-        'Short-term relationship': 'M12 21c4 0 6.5-2.6 6.5-6 0-2.7-1.6-4.3-2.6-5.9.1 1.7-.7 2.7-1.6 2.7-1.2 0-1.3-1.2-1.1-2.3.3-1.8-.4-3.9-2.2-5C10.6 6 10 8 8.6 9.6 7.4 11 6 12.4 6 15c0 3.4 2 6 6 6Z',
-        'Friendship': '',
-        'Not sure yet': ''
-      } %}
       {% for rt in relationship_types %}
         <label class="opt opt-{{ loop.index }}">
           <input type="checkbox" name="relationship_type" value="{{ rt }}"
                  class="visually-hidden"
                  {% if rt in existing_relationship_types %}checked{% endif %}>
           <span class="opt-icon">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              {% if rt == 'Friendship' %}
-                <circle cx="9.5" cy="12" r="6" stroke="currentColor" stroke-width="1.7"/>
-                <circle cx="14.5" cy="12" r="6" stroke="currentColor" stroke-width="1.7"/>
-              {% elif rt == 'Not sure yet' %}
-                <circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="1.7"/>
-                <path d="M9.6 9.4a2.4 2.4 0 1 1 3.4 2.2c-.8.4-1 1-1 1.9"
-                      stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="12" cy="16.7" r="0.15" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
-              {% else %}
-                <path d="{{ rel_icons[rt] }}" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-              {% endif %}
-            </svg>
+            {{ icon("rel." ~ rt) }}
           </span>
           <span class="opt-label">{{ opt_label(rt) }}</span>
           <span class="opt-mark opt-mark-box"></span>
@@ -67,25 +50,7 @@
           <input type="radio" name="seeking" value="{{ opt }}" class="visually-hidden"
                  {% if existing and existing['seeking'] == opt %}checked{% endif %}>
           <span class="opt-icon">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              {% if opt == 'Women' %}
-                <circle cx="12" cy="9" r="5" stroke="currentColor" stroke-width="1.8"/>
-                <path d="M12 14v7M9 18.5h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-              {% elif opt == 'Men' %}
-                <circle cx="10.5" cy="13.5" r="5" stroke="currentColor" stroke-width="1.8"/>
-                <path d="M14.5 9.5 20 4m0 0h-5m5 0v5"
-                      stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              {% elif opt == 'Non-binary people' %}
-                <circle cx="12" cy="13.5" r="4.6" stroke="currentColor" stroke-width="1.8"/>
-                <path d="M12 8.9V2m-2.2 2.2L12 2l2.2 2.2"
-                      stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              {% else %}
-                <path d="M12 20.5c-3.6-2.4-6.5-4.6-6.5-7.6a3.6 3.6 0 0 1 6.5-2.1 3.6 3.6 0 0 1 6.5 2.1c0 3-2.9 5.2-6.5 7.6Z"
-                      stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                <circle cx="6.6" cy="5.4" r="1.9" stroke="currentColor" stroke-width="1.5"/>
-                <circle cx="17.4" cy="5.4" r="1.9" stroke="currentColor" stroke-width="1.5"/>
-              {% endif %}
-            </svg>
+            {{ icon("seek." ~ opt) }}
           </span>
           <span class="opt-label">{{ opt_label(opt) }}</span>
           <span class="opt-mark"></span>
@@ -180,11 +145,7 @@
                  class="visually-hidden"
                  {% if bt in existing_body_types %}checked{% endif %}>
           <span class="opt-icon">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <circle cx="12" cy="6.4" r="3.1" stroke="currentColor" stroke-width="1.7"/>
-              <path d="M6.5 20.5v-4a5.5 5.5 0 0 1 11 0v4"
-                    stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-            </svg>
+            {{ icon("body.type") }}
           </span>
           <span class="opt-label">{{ opt_label(bt) }}</span>
           <span class="opt-mark opt-mark-box"></span>
@@ -197,18 +158,12 @@
 
   <div class="wiz-nav">
     <button type="button" class="wiz-back" id="wiz-back" aria-label="{{ t('wiz.back_aria') }}">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
+      {{ icon("wiz.back") }}
     </button>
     <div class="wiz-nav-end">
       <button type="button" class="wiz-skip" id="wiz-skip">{{ t("wiz.skip") }}</button>
       <button type="submit" class="wiz-next" id="wiz-next" aria-label="{{ t('wiz.next_aria') }}">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        {{ icon("wiz.next") }}
       </button>
     </div>
   </div>
@@ -221,10 +176,7 @@
       <div class="sheet-head">
         <h2 id="interest-sheet-title">{{ t("wiz.sheet_title") }}</h2>
         <button type="button" class="sheet-x" data-close aria-label="{{ t('sheet.close') }}">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round"/>
-          </svg>
+          {{ icon("sheet.close.wide") }}
         </button>
       </div>
       <div class="sheet-body">

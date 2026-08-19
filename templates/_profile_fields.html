@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 {% if sample_profile is defined %}
   <p style="margin-bottom: 1rem;">
     <button type="button" class="btn btn-secondary btn-small" id="fill-all-btn">{{ t("form.fill_all") }}</button>
@@ -71,10 +72,7 @@
         <button type="button" class="photo-main" data-main
                 aria-label="{{ t('form.make_main') }}"></button>
         <button type="button" class="photo-x" data-remove aria-label="{{ t('form.remove_photo') }}">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4"
-                  stroke-linecap="round"/>
-          </svg>
+          {{ icon("photo.remove") }}
         </button>
         <span class="photo-tile-label">{{ t("form.main") }}</span>
         <button type="button" class="photo-undo" data-undo>{{ t("form.undo") }}</button>
@@ -379,7 +377,11 @@
         makeMain: {{ t("form.make_main") | tojson }},
         remove: {{ t("form.remove_photo") | tojson }},
         main: {{ t("form.main") | tojson }},
-        undo: {{ t("form.undo") | tojson }}
+        undo: {{ t("form.undo") | tojson }},
+        {#- the same glyph the server-rendered tiles use, from the same
+            registry: a tile built in the browser must not carry its own
+            private copy of a path that the slot map can no longer reach -#}
+        removeIcon: {{ icon("photo.remove") | string | tojson }}
       };
       function attr(s) {
         return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;")
@@ -390,9 +392,7 @@
         '<button type="button" class="photo-main" data-main' +
         ' aria-label="' + attr(L.makeMain) + '"></button>' +
         '<button type="button" class="photo-x" data-remove aria-label="' + attr(L.remove) + '">' +
-        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
-        '<path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4"' +
-        ' stroke-linecap="round"/></svg></button>' +
+        L.removeIcon + '</button>' +
         '<span class="photo-tile-label">' + attr(L.main) + '</span>' +
         '<button type="button" class="photo-undo" data-undo>' + attr(L.undo) + '</button>';
       tile.querySelector("img").src = url;

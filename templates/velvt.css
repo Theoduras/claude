@@ -2823,6 +2823,21 @@
       cursor: pointer;
       transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
     }
+    /* A pill only becomes a flex box when it actually carries an icon, so a
+       plain one keeps the inline layout it has always had and nothing shifts
+       by a pixel when the pill.* slots are empty. 0.25rem is the design
+       system's icon-to-label gap -- the job --space-1 exists for. */
+    .pill:has(svg) {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .pill > svg {
+      flex: none;
+      width: 0.95em;
+      height: 0.95em;
+      opacity: 0.75;
+    }
     .pill:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
     .pill.is-on {
       color: #F0E2FF;

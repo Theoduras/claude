@@ -110,6 +110,22 @@ the pull-up won and slid the wizard's Next row under the bar. `.match` redefines
 `--fit-tight` locally with a higher knee, because at full size the reveal does not fit
 an 812px phone. One height query survives, in `.match-note.is-aside`: an aside is a
 line or it is nothing, and there is no fractional version to ramp to.
+**Icons are a registry, not markup.** `templates/_icons.html` holds all 38 glyphs in
+`ICONS` (keyed by what they *are* — a heart, a pin, a ruler) and a `SLOTS` map (keyed by
+where they *go* — `tab.search`, `card.interests`, `rel.Long-term relationship`). Templates
+call `{{ icon("tab.search") }}` and nothing else. They used to carry 28 inline `<svg>`
+blocks across six files, several of them an `{% if %}` chain with a branch per option,
+which meant an icon had no name to ask for, no list to choose from, and a weight change
+meant 28 edits that could silently disagree — `search_start.html` had already invented
+half the fix with a dict of path data keyed by relationship type.
+
+Changing which mark a place uses is now one line in `SLOTS`; an empty value draws nothing,
+which is how `.pill` carries an icon on interests and none on hobbies without either
+template knowing. **The spec lives on the macro, not the drawings**: `ICON_STROKE` (2) and
+`ICON_CAP` (round) are emitted on the `<svg>` and inherited by shapes that no longer state
+their own, scaled per glyph because a few are drawn on a 20 or 21 box and 2px there would
+read heavier than 2px on 24. The Restyler previews all of it and exports the diff.
+
 - `docs/style-guide.html` — velvet-textured design system; `docs/deploy-gcp.md` — Cloud Run
 - `docs/launch-readiness.html` — the pre-launch audit these changes came from, with what
   is still outstanding (image scanning, passkeys, selfie verification, stepped
@@ -126,6 +142,7 @@ line or it is nothing, and there is no fractional version to ramp to.
   chat. Idempotent; `--reset` to rebuild
 - `smoke.py`, `dev.ps1`, `docker-compose.yml` — local dev only, not deployed
 - `vastai_client.py` — standalone Vast.ai GPU-rental CLI, **not imported by the app**
+- `templates/_icons.html` — **every icon in the app, in one place.** See below
 - `static/velvt-icon.svg` — the square tab mark; also served as `/favicon.ico`, since
   browsers ask for that whether or not a `<link rel="icon">` tells them to
 - `make_search_avatars.py`, `static/velvet-searching.lottie` — **both dead now.** The
