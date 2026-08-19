@@ -86,13 +86,28 @@ KEYFRAMES = """
 
 EDITOR_CSS = """
 /* ==== the editor shell ============================================== */
-.tabs { display: flex; gap: .4rem; margin: 0 0 1rem; flex-wrap: wrap; }
+/* Thirty screens will not fit a flat row of pills, and a dropdown hides the
+   map. Grouped by section, the rail stays scannable and says how the app is
+   actually shaped. */
+.tabs { display: flex; flex-direction: column; gap: .5rem; margin: 0 0 1rem; }
+.tab-sec { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.tab-sec > h4 { flex: none; width: 4.6rem; margin: 0; font-size: .62rem; font-weight: 700;
+                letter-spacing: .11em; text-transform: uppercase; color: var(--c-faint); }
+.tab-sec > div { display: flex; gap: .3rem; flex-wrap: wrap; flex: 1; }
 .tab { border: 1px solid var(--c-line); background: var(--c-raised); color: var(--c-muted);
-       border-radius: 999px; padding: .4rem .9rem; font: inherit; font-size: .78rem;
+       border-radius: 999px; padding: .3rem .72rem; font: inherit; font-size: .74rem;
        font-weight: 600; cursor: pointer; }
+.tab:hover { color: var(--c-text); border-color: var(--c-line-firm); }
 .tab.is-on { background: var(--c-accent); color: #fff; border-color: var(--c-accent); }
 .device .vl { display: none; }
 .device .vl.is-on { display: flex; }
+
+/* The mode switch. Painted in chrome colours like everything else out here,
+   so it stays legible whatever either palette is set to. */
+.modes { display: flex; gap: .25rem; background: var(--c-sunken); border-radius: 9px; padding: 3px; }
+.modes button { border: 0; background: none; color: var(--c-muted); border-radius: 6px;
+                padding: .34rem .8rem; font: inherit; font-size: .74rem; font-weight: 600; cursor: pointer; }
+.modes button.is-on { background: var(--c-raised); color: var(--c-text); box-shadow: 0 1px 3px rgba(0,0,0,.4); }
 
 /* Selection is drawn with outline, not border: a border would relayout the
    element being inspected and move the thing under the cursor. */
@@ -312,8 +327,14 @@ def script():
 (function () {
   var GLYPHS = %(glyphs)s;
   var sheet = document.getElementById("overrides");
-  var rules = {};          /* "el-3|base" -> {prop: value} */
-  var texts = {};          /* "el-3" -> textContent */
+  /* Appearance is per mode; content is not. A colour that works on a light
+     ground rarely works on a dark one, so every rule below is filed under the
+     mode it was made in -- but the words on a button and the glyph in it are
+     the same product in both worlds, so `texts` and the icon swaps stay
+     shared. Duplicating those would let the two modes drift into two
+     different apps. */
+  var rules = { light: {}, dark: {} };   /* mode -> "el-3|base" -> {prop: value} */
+  var texts = {};                        /* "el-3" -> original textContent */
   var seq = 0;
   var sel = null;
 
@@ -324,17 +345,24 @@ def script():
 
   function render() {
     var out = [];
-    Object.keys(rules).forEach(function (key) {
-      var parts = key.split("|"), id = parts[0], state = parts[1];
-      var decls = rules[key], body = [];
-      Object.keys(decls).forEach(function (p) {
-        if (decls[p] !== "") { body.push("  " + p + ": " + decls[p] + ";"); }
+    ["light", "dark"].forEach(function (m) {
+      Object.keys(rules[m]).forEach(function (key) {
+        var parts = key.split("|"), id = parts[0], state = parts[1];
+        var decls = rules[m][key], body = [];
+        Object.keys(decls).forEach(function (p) {
+          if (decls[p] !== "") { body.push("  " + p + ": " + decls[p] + ";"); }
+        });
+        if (!body.length) { return; }
+        /* Light has to exclude dark explicitly. An unqualified `.vl [data-el]`
+           matches in both worlds -- the dark stamp only *adds* a selector --
+           so a colour chosen on the light ground would follow you into the
+           dark one and quietly override its answer. */
+        var s = (m === "dark" ? '[data-mode="dark"] ' : ':root:not([data-mode="dark"]) ')
+              + '.vl [data-el="' + id + '"]';
+        if (state === "hover") { s += ":hover"; }
+        if (state === "icon")  { s += " svg"; }
+        out.push(s + " {\\n" + body.join("\\n") + "\\n}");
       });
-      if (!body.length) { return; }
-      var sel = '.vl [data-el="' + id + '"]';
-      if (state === "hover") { sel += ":hover"; }
-      if (state === "icon")  { sel += " svg"; }
-      out.push(sel + " {\\n" + body.join("\\n") + "\\n}");
     });
     sheet.textContent = out.join("\\n\\n");
     document.getElementById("export-css").value =
@@ -343,30 +371,31 @@ def script():
 
   function setProp(node, state, prop, value) {
     var key = idOf(node) + "|" + state;
-    rules[key] = rules[key] || {};
+    rules[mode][key] = rules[mode][key] || {};
     /* An animation is nothing without a duration and an easing, and asking the
        user for the easing would let a non-guide curve in. So the shorthand
        companions are written alongside the name rather than exposed. */
     if (prop === "animation-name" && value) {
-      rules[key]["animation-timing-function"] = "var(--ease)";
-      rules[key]["animation-iteration-count"] =
-        rules[key]["animation-iteration-count"] || "infinite";
-      rules[key]["animation-duration"] = rules[key]["animation-duration"] || "3s";
+      rules[mode][key]["animation-timing-function"] = "var(--ease)";
+      rules[mode][key]["animation-iteration-count"] =
+        rules[mode][key]["animation-iteration-count"] || "infinite";
+      rules[mode][key]["animation-duration"] = rules[mode][key]["animation-duration"] || "3s";
     }
     if (prop === "transform" && state === "hover") {
       var base = idOf(node) + "|base";
-      rules[base] = rules[base] || {};
-      rules[base]["transition-property"] = "color, background-color, box-shadow, transform";
-      rules[base]["transition-timing-function"] = "var(--ease)";
-      rules[base]["transition-duration"] = rules[base]["transition-duration"] || "var(--d-base)";
+      rules[mode][base] = rules[mode][base] || {};
+      rules[mode][base]["transition-property"] = "color, background-color, box-shadow, transform";
+      rules[mode][base]["transition-timing-function"] = "var(--ease)";
+      rules[mode][base]["transition-duration"] =
+        rules[mode][base]["transition-duration"] || "var(--d-base)";
     }
-    rules[key][prop] = value;
+    rules[mode][key][prop] = value;
     render();
   }
 
   function readProp(node, state, prop) {
     var key = idOf(node) + "|" + state;
-    return (rules[key] && rules[key][prop]) || "";
+    return (rules[mode][key] && rules[mode][key][prop]) || "";
   }
 
   /* ---- selection --------------------------------------------------- */
@@ -567,33 +596,66 @@ def script():
     if (svg) { svg.remove(); syncIconPane(); }
   });
 
-  /* ---- the token rail, unchanged: one swatch, every screen ------------ */
-  var rootStyle = document.documentElement.style;
-  var tokenDefaults = {};
-  document.querySelectorAll(".rail-row input[type=color]").forEach(function (input) {
-    tokenDefaults[input.dataset.token] = input.value;
+  /* ---- the token rail: one swatch, every screen, per mode ------------- */
+  /* Token overrides go into their own stylesheet rather than onto the root's
+     inline style, because inline style wins over both mode blocks at once --
+     one drag in light mode would silently repaint dark mode too. Written as
+     rules, each mode's overrides land in that mode's own selector. */
+  var tokenSheet = document.getElementById("tokens");
+  var tokens = { light: {}, dark: {} };
+  var mode = "light";
+  var rail = document.querySelectorAll(".rail-row input[type=color]");
+
+  function renderTokens() {
+    var out = [];
+    ["light", "dark"].forEach(function (m) {
+      var body = [];
+      Object.keys(tokens[m]).forEach(function (t) {
+        body.push("  " + t + ": " + tokens[m][t] + ";");
+      });
+      if (!body.length) { return; }
+      /* Same trap as the element rules, and worse here: a bare `:root` ties
+         with the dark block on specificity and wins on source order, because
+         this sheet is written after it. */
+      var s = m === "dark" ? '[data-mode="dark"]' : ':root:not([data-mode="dark"])';
+      out.push(s + " {\\n" + body.join("\\n") + "\\n}");
+    });
+    tokenSheet.textContent = out.join("\\n\\n");
+    document.getElementById("export-tokens").value =
+      out.join("\\n\\n") || "/* both palettes unchanged */";
+  }
+
+  function syncRail() {
+    rail.forEach(function (input) {
+      var t = input.dataset.token;
+      input.value = tokens[mode][t] || input.dataset[mode];
+    });
+  }
+
+  rail.forEach(function (input) {
     input.addEventListener("input", function () {
-      rootStyle.setProperty(input.dataset.token, input.value);
+      tokens[mode][input.dataset.token] = input.value;
       renderTokens();
     });
   });
 
-  function renderTokens() {
-    var out = [];
-    Object.keys(tokenDefaults).forEach(function (token) {
-      var v = rootStyle.getPropertyValue(token);
-      if (v && v !== tokenDefaults[token]) { out.push("  " + token + ": " + v.trim() + ";"); }
-    });
-    document.getElementById("export-tokens").value = out.length
-      ? ":root {\\n" + out.join("\\n") + "\\n}" : "/* palette unchanged */";
-  }
-
   document.getElementById("rail-reset").addEventListener("click", function () {
-    document.querySelectorAll(".rail-row input[type=color]").forEach(function (input) {
-      rootStyle.removeProperty(input.dataset.token);
-      input.value = tokenDefaults[input.dataset.token];
-    });
+    tokens[mode] = {};
+    syncRail();
     renderTokens();
+  });
+
+  /* ---- the mode switch ------------------------------------------------ */
+  document.getElementById("modes").addEventListener("click", function (e) {
+    var btn = e.target.closest("button");
+    if (!btn) { return; }
+    mode = btn.dataset.mode;
+    this.querySelectorAll("button").forEach(function (b) {
+      b.classList.toggle("is-on", b === btn);
+    });
+    if (mode === "dark") { document.documentElement.dataset.mode = "dark"; }
+    else { delete document.documentElement.dataset.mode; }
+    syncRail();
   });
 
   /* ---- screens -------------------------------------------------------- */
@@ -607,7 +669,7 @@ def script():
   });
 
   document.getElementById("reset-all").addEventListener("click", function () {
-    rules = {};
+    rules = { light: {}, dark: {} };
     Object.keys(texts).forEach(function (id) {
       var node = document.querySelector('[data-el="' + id + '"]');
       if (node) { node.textContent = texts[id]; }
@@ -620,6 +682,7 @@ def script():
     document.getElementById("insp-body").hidden = true;
   });
 
+  syncRail();
   render();
   renderTokens();
 })();
@@ -627,16 +690,37 @@ def script():
 
 
 def rail_html():
+    """Both palettes, in one rail.
+
+    Every swatch carries both of its values and shows whichever mode is
+    active, rather than the rail being duplicated per mode. Two rails would
+    make the pair of values look like two unrelated settings; one rail with a
+    mode switch above it says the true thing -- that these are one token with
+    two answers, and that changing the mode changes which answer you are
+    looking at.
+    """
     groups = {}
-    for name, label, group, value in theme.PALETTE:
-        groups.setdefault(group, []).append((name, label, value))
+    for name, label, group, light, dark in theme.PALETTE:
+        groups.setdefault(group, []).append((name, label, light, dark))
     return "\n".join(
         '<div class="rail-group"><h3>%s</h3>\n%s\n</div>' % (
             group,
             "\n".join(
                 '<div class="rail-row"><input type="color" value="%s" '
-                'data-token="--%s"><label>%s<code>--%s</code></label></div>'
-                % (value, name, label, name)
-                for name, label, value in rows),
+                'data-token="--%s" data-light="%s" data-dark="%s">'
+                '<label>%s<code>--%s</code></label></div>'
+                % (light, name, light, dark, label, name)
+                for name, label, light, dark in rows),
         )
         for group, rows in groups.items())
+
+
+def tabs_html():
+    """The screen rail, grouped by section."""
+    return "".join(
+        '<div class="tab-sec"><h4>%s</h4><div>%s</div></div>' % (
+            section,
+            "".join('<button class="tab%s" data-target="%s">%s</button>'
+                    % (" is-on" if key == screens.SCREENS[0][0] else "", key, label)
+                    for key, label in rows))
+        for section, rows in screens.sections())

@@ -90,24 +90,10 @@ def build():
     import lightmode_assets as assets
 
     brand = assets.brand()
-    screen_list = [
-        ("landing", "Landing", screens.landing(brand)),
-        ("intro", "How it works", screens.intro()),
-        ("reveal", "Match reveal", screens.match_reveal()),
-        ("empty", "Chats, empty", screens.chats_empty()),
-    ]
     art = (
         "  --film-still: url(%s);\n"
         "  --logo-art: url(%s);" % (brand["still"], brand["logo"])
     )
-
-    tabs_html = "\n".join(
-        '<button class="tab%s" data-target="%s">%s</button>'
-        % (" is-on" if i == 0 else "", key, label)
-        for i, (key, label, _html) in enumerate(screen_list))
-    screens_html = "\n".join(
-        html.replace('<div class="vl', '<div class="vl%s' % (" is-on" if i == 0 else ""), 1)
-        for i, (_key, _label, html) in enumerate(screen_list))
 
     legend = [
         ("The film is kept, and recoloured", "&mdash;",
@@ -214,22 +200,35 @@ def build():
 %(screen)s
 %(landing)s
 %(keyframes)s
+
+/* ==== the same names, re-answered for the dark world ================ */
+%(dark)s
 </style>
+<style id="tokens"></style>
 <style id="overrides"></style>
 
 <div class="page">
   <header class="top">
     <p class="word">Velvt <span>Light</span></p>
-    <p>Four screens, built from the design system's elements rather than from
-      the mockup's surface. <b>Click anything in the phone</b> and the inspector
-      opens on it: its colours, its words, its icon, what it does under the
-      cursor, and whether it moves. The palette rail below edits the other
-      scope &mdash; a token, so one swatch repaints every screen at once.
-      Everything you change exports as CSS at the foot of the page.</p>
+    <p>Every screen in the app, built from the design system's elements rather
+      than from the mockup's surface, and in both worlds. <b>Click anything in
+      the phone</b> and the inspector opens on it: its colours, its words, its
+      icon, what it does under the cursor, and whether it moves. The palette
+      rail edits the other scope &mdash; a token, so one swatch repaints every
+      screen at once. <b>Light and dark are one set of names with two
+      answers</b>: the switch changes which answer you are editing, and both
+      export separately.</p>
   </header>
 
   <div class="split">
     <div class="col-left">
+      <div class="bar">
+        <div class="modes" id="modes">
+          <button data-mode="light" class="is-on">Light</button>
+          <button data-mode="dark">Dark</button>
+        </div>
+        <span class="bar-note">%(count)d screens</span>
+      </div>
       <div class="tabs">%(tabs)s</div>
       <div class="device">%(screens)s</div>
       <p class="device-cap">390 &times; 844 &mdash; the guide's baseline viewport</p>
@@ -243,16 +242,16 @@ def build():
       %(insp)s
 
       <div class="rail-head">
-        <h2 class="sec" style="margin:0;">Palette &mdash; every screen at once</h2>
+        <h2 class="sec" style="margin:0;">Palette &mdash; the active mode</h2>
         <button class="rail-reset" id="rail-reset" type="button">Reset</button>
       </div>
       %(rail)s
 
       <h2 class="sec">Export</h2>
       <div class="export">
-        <p class="bar-note" style="margin:0 0 .5rem;">Per-element rules</p>
+        <p class="bar-note" style="margin:0 0 .5rem;">Per-element rules, both modes</p>
         <textarea id="export-css" readonly></textarea>
-        <p class="bar-note" style="margin:.9rem 0 .5rem;">Palette</p>
+        <p class="bar-note" style="margin:.9rem 0 .5rem;">Palettes</p>
         <textarea id="export-tokens" readonly style="min-height:7rem;"></textarea>
       </div>
 
@@ -270,10 +269,12 @@ def build():
         "keyframes": editor.KEYFRAMES,
         "art": art,
         "root": theme.root_block(),
+        "dark": theme.dark_block(),
         "screen": theme.screen_css(),
         "landing": screens.LANDING_CSS,
-        "tabs": tabs_html,
-        "screens": screens_html,
+        "count": len(screens.SCREENS),
+        "tabs": editor.tabs_html(),
+        "screens": screens.render_all(brand),
         "insp": editor.inspector_html(),
         "rail": editor.rail_html(),
         "script": editor.script(),
