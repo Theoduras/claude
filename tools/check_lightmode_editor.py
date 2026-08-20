@@ -312,8 +312,9 @@ with sync_playwright() as p:
           const v = f.querySelector('.film-reel');
           const cv = getComputedStyle(v), cf = getComputedStyle(f);
           const r = v.getBoundingClientRect();
-          return {fit: cv.objectFit, pos: cv.objectPosition, bgSize: cf.backgroundSize,
-                  bgPos: cf.backgroundPosition, vw: v.videoWidth, vh: v.videoHeight,
+          return {fit: cv.objectFit, pos: cv.objectPosition, layerBg: cf.backgroundImage,
+                  poster: v.getAttribute("poster") ? v.getAttribute("poster").slice(0, 11) : null,
+                  vw: v.videoWidth, vh: v.videoHeight,
                   boxW: r.width, boxH: r.height, err: v.error && v.error.code};
         }""")
     ok(film["err"] is None, "the hero film decodes (%s)" % film["err"])
@@ -321,9 +322,14 @@ with sync_playwright() as p:
     ok(film["fit"] == "contain", "the film is contained, not cropped (%s)" % film["fit"])
     ok(film["pos"].split()[-1] == "100%",
        "and sits on the floor of the screen (%s)" % film["pos"])
-    ok(film["bgSize"] == film["fit"] and film["bgPos"] == film["pos"],
-       "the poster is framed identically, so it cannot jump (%s / %s)"
-       % (film["bgSize"], film["bgPos"]))
+    # The film's alpha is real, so anything painted behind it shows through --
+    # and a still of a *different* moment of the same shot came through as a
+    # second, offset pair. The still belongs on the video's own poster, which
+    # a painted frame replaces, and nowhere else.
+    ok(film["layerBg"] == "none",
+       "nothing is painted behind the alpha film (%s)" % film["layerBg"][:40])
+    ok(film["poster"] == "data:image/",
+       "the still is carried by the poster instead (%s)" % film["poster"])
     if film["vw"]:
         # The whole frame is visible: painted height must be the source ratio
         # against the painted width, and both faces are in the top half of it.

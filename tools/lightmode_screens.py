@@ -1267,14 +1267,22 @@ LANDING_CSS = """
    still spans the screen so the scrim has somewhere to fade into. */
 .vl .film {
   position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
-  background: var(--film-still) 50% 100% / contain no-repeat;
 }
 .vl .film-reel {
   width: 100%; height: 100%; display: block;
-  /* Same framing as the still behind it: whole frame, sitting on the floor
-     of the screen. If these two disagree the poster jumps as the video
-     starts, which reads as a glitch rather than a load. */
+  /* The whole frame, sitting on the floor of the screen. */
   object-fit: contain; object-position: 50% 100%;
+}
+/* The still is a *fallback*, never a layer under the film. The webm carries
+   a real alpha channel, so a still painted behind it shows through every
+   transparent pixel -- and the two are different moments of the same shot,
+   so what came through was a second, offset copy of the pair. Four
+   characters, ghosting through each other. The `poster` attribute already
+   covers the gap before the first frame paints, which is the only job the
+   still had here. It comes back only where the film does not run. */
+@media (prefers-reduced-motion: reduce) {
+  .vl .film { background: var(--film-still) 50% 100% / contain no-repeat; }
+  .vl .film-reel { display: none; }
 }
 /* The recolour that matters. Every stop is mixed from --scrim rather than
    written as a literal, so switching mode inverts the whole thing: it

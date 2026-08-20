@@ -322,17 +322,16 @@ SCREEN_CSS = """
    letterforms exactly as drawn, and what fills them is a gradient wide
    enough to slide -- so the colour *travels* through the letters instead of
    the whole mark cross-fading, which at this size reads as a flicker.
-   The stops walk the brand's own range (violet, indigo, plum, gold) rather
-   than two neighbouring purples: a sweep between colours a few degrees
-   apart is motion nobody can see, which is the same as no animation at all.
-   The gold stop is --delight-deep, not --delight: `delight` is the fill
-   behind dark text and is far too pale to *be* a letterform on a pale
-   ground, while `delight-deep` is the same colour at type weight, which is
-   exactly what a wordmark is. */
+   It is one purple lightening and coming back: --action against the same
+   hue lifted toward white. The lift is mixed from --action rather than
+   written down, so it follows a palette change instead of drifting off it,
+   and it mixes toward white rather than toward --surface so that "lighter"
+   still means lighter in dark mode. */
 .brand-fill {
+  --brand-lift: color-mix(in srgb, var(--action) 42%, #FFFFFF);
   background-image: linear-gradient(100deg,
-    var(--action) 0%, var(--velvet-2) 18%, var(--velvet-3) 34%,
-    var(--delight-deep) 50%, var(--velvet-3) 66%, var(--velvet-2) 82%, var(--action) 100%);
+    var(--action) 0%, var(--brand-lift) 25%, var(--action) 50%,
+    var(--brand-lift) 75%, var(--action) 100%);
   background-size: 340% 100%;
   background-repeat: no-repeat;
   -webkit-mask: var(--logo-art) center / contain no-repeat;
@@ -347,7 +346,7 @@ SCREEN_CSS = """
    resting position is off the champagne stop, which has the least contrast
    against a pale ground. */
 @media (prefers-reduced-motion: reduce) {
-  .brand-fill { animation: none; background-position: 8% 50%; }
+  .brand-fill { animation: none; background-position: 0% 50%; }
 }
 .vl-main { flex: 1 1 auto; min-height: 0; padding: 0 var(--gutter); display: flex; flex-direction: column; }
 .vl-foot { flex: none; padding: var(--space-4) var(--gutter) var(--space-6); }
