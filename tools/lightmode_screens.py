@@ -1258,51 +1258,57 @@ def sections():
 
 LANDING_CSS = """
 /* ---- landing ------------------------------------------------------ */
-/* The film is the lower half of the screen, not the whole of it.
-   `cover` across the full height was the bug: the source is 9:16 and a phone
-   screen here is nearer 9:19.5, so filling the height blew the frame up past
-   1:1 and cropped straight through both faces -- a wall of chin behind the
-   headline. `contain`, anchored to the bottom, shows the shot as it was
-   framed and puts the pair *under* the copy instead of behind it. The layer
-   still spans the screen so the scrim has somewhere to fade into. */
+/* The film is a band, not the page.
+
+   Full bleed was the trap, and it cost three passes to see. The shot is a
+   full-body 9:16 two-shot; the screen is nearer 9:19.5 with type across the
+   top half and two buttons across the bottom fifth. Whatever you do with the
+   slack, something important lands somewhere it cannot be read: on the floor
+   of the screen the arms sit under the buttons -- two heads and no hug --
+   and hung from the top the faces disappear behind the headline. There is no
+   placement that puts a head-to-toe figure and a page of copy in the same
+   844px, and tuning the scrim only trades which half is lost.
+
+   So it stops trying. The band spans the gap between the last line of copy
+   and the first button, and it is `cover`, framed on the part of the shot
+   that is actually the message: faces down to where the arms come round.
+   The legs were never carrying anything. The pair get to be near life-size
+   in the one place nothing is competing with them, the copy sits on clean
+   canvas, and the buttons sit on clean canvas. */
 .vl .film {
-  position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
+  position: absolute; left: 0; right: 0; bottom: 20%; height: 44%;
+  z-index: 0; overflow: hidden; pointer-events: none;
 }
 .vl .film-reel {
   width: 100%; height: 100%; display: block;
-  /* The whole frame, sitting on the floor of the screen. */
-  object-fit: contain; object-position: 50% 100%;
+  /* Vertically this crops away the legs and the empty headroom, and 66% is
+     the window that holds both faces *and* both pairs of arms across the
+     whole five seconds rather than only at the end -- the two things the
+     shot is for, and the pair the earlier full-bleed layouts kept making
+     you choose between. Horizontally `cover` trims about 18%, which is the
+     outer edge of a swinging arm early on and nothing once they are
+     together. */
+  object-fit: cover; object-position: 50% 66%;
 }
-/* The still is a *fallback*, never a layer under the film. The webm carries
-   a real alpha channel, so a still painted behind it shows through every
-   transparent pixel -- and the two are different moments of the same shot,
-   so what came through was a second, offset copy of the pair. Four
-   characters, ghosting through each other. The `poster` attribute already
-   covers the gap before the first frame paints, which is the only job the
-   still had here. It comes back only where the film does not run. */
-@media (prefers-reduced-motion: reduce) {
-  .vl .film { background: var(--film-still) 50% 100% / contain no-repeat; }
-  .vl .film-reel { display: none; }
-}
-/* The recolour that matters. Every stop is mixed from --scrim rather than
-   written as a literal, so switching mode inverts the whole thing: it
-   lightens the film under dark type and darkens it under pale type.
-   The old curve never dropped below 62% anywhere, which on a near-white
-   ground is not a scrim but a lid -- the art came through as a milky smear
-   with no subject in it. It is opaque only where type actually lands: solid
-   through the wordmark and headline, gone entirely across the embrace, and
-   back at the foot where the buttons sit. */
+/* The band has two cut edges, and a cut edge is the thing that gives away
+   that this is a rectangle of video rather than a picture in the page. Both
+   are dissolved into the canvas with the same token that recolours the film
+   between modes, and the middle -- the embrace -- is left completely alone.
+   The top stop stays solid a little longer than the edge needs, because the
+   last line of copy sits just inside the band and has to read.
+   Every stop is mixed from --scrim rather than written as a literal, so
+   switching mode inverts it: it lightens the film under dark type and
+   darkens it under pale type. */
 .vl .film::after {
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(180deg,
     var(--scrim) 0%,
-    var(--scrim) 30%,
-    color-mix(in srgb, var(--scrim) 88%, transparent) 44%,
-    color-mix(in srgb, var(--scrim) 20%, transparent) 58%,
-    color-mix(in srgb, var(--scrim) 0%, transparent) 68%,
-    color-mix(in srgb, var(--scrim) 62%, transparent) 78%,
-    color-mix(in srgb, var(--scrim) 90%, transparent) 88%,
-    color-mix(in srgb, var(--scrim) 94%, transparent) 100%);
+    var(--scrim) 13%,
+    color-mix(in srgb, var(--scrim) 46%, transparent) 22%,
+    color-mix(in srgb, var(--scrim) 0%, transparent) 32%,
+    color-mix(in srgb, var(--scrim) 0%, transparent) 76%,
+    color-mix(in srgb, var(--scrim) 60%, transparent) 91%,
+    var(--scrim) 100%);
 }
 .vl-top, .vl-main, .vl-foot, .vl-tabbar { position: relative; z-index: 1; }
 

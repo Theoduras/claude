@@ -302,26 +302,70 @@ with sync_playwright() as p:
            })""")
     ok(moved[0] != moved[1], "the fill travels rather than sitting still (%s)" % moved)
 
-    # ---- the film is framed, not blown up --------------------------------
-    # `cover` on a 9:16 source in a 9:19.5 box scaled past 1:1 and cropped
-    # through both faces. The fix is contain-on-the-floor, and the poster
-    # underneath has to agree or it jumps when the video starts.
+    # ---- the film is a band, and it clears the copy and the buttons ------
+    # Three layouts failed here before this check existed, all of them
+    # looking fine in a still of the first frame. Full-bleed on the floor of
+    # the screen put the arms under the two buttons -- two heads and no hug.
+    # Hung from the top it lost the faces behind the headline. Both only show
+    # up at the end of the film, so the check drives to the embrace first.
     film = page.evaluate(
-        """() => {
-          const f = document.querySelector('.vl[data-screen="landing"] .film');
-          const v = f.querySelector('.film-reel');
+        """async () => {
+          const s = document.querySelector('.vl[data-screen="landing"]');
+          const f = s.querySelector('.film'), v = f.querySelector('.film-reel');
+          await new Promise(r => {
+            if (v.readyState >= 2) return r();
+            v.onloadeddata = r; setTimeout(r, 3000);
+          });
+          v.pause();
+          await new Promise(r => { v.onseeked = r; v.currentTime = v.duration * 0.985; });
           const cv = getComputedStyle(v), cf = getComputedStyle(f);
-          const r = v.getBoundingClientRect();
-          return {fit: cv.objectFit, pos: cv.objectPosition, layerBg: cf.backgroundImage,
+          const R = e => e.getBoundingClientRect();
+          const cta = R(s.querySelector(".btn-primary"));
+          const copy = R(s.querySelector(".sub"));
+          const band = R(f), screen = R(s);
+          return {fit: cv.objectFit, layerBg: cf.backgroundImage,
                   poster: v.getAttribute("poster") ? v.getAttribute("poster").slice(0, 11) : null,
-                  vw: v.videoWidth, vh: v.videoHeight,
-                  boxW: r.width, boxH: r.height, err: v.error && v.error.code};
+                  vw: v.videoWidth, vh: v.videoHeight, err: v.error && v.error.code,
+                  inside: band.top >= screen.top - 1 && band.bottom <= screen.bottom + 1,
+                  tall: (band.height / screen.height),
+                  wide: Math.abs(band.width - screen.width) < 2,
+                  // Where the scrim actually lets the film through, read off
+                  // the gradient rather than assumed: the first and last stop
+                  // whose alpha is zero. Chromium prints a fully transparent
+                  // mix as `/ 0)`, and an opaque one with no slash at all.
+                  clear: (() => {
+                    const g = getComputedStyle(f, "::after").backgroundImage;
+                    const stops = [...g.matchAll(/(rgba?\([^)]*\)|color\([^)]*\))\s+([\d.]+)%/g)];
+                    const open = stops.filter(m => /\/\s*0\s*\)/.test(m[1]))
+                                      .map(m => parseFloat(m[2]));
+                    if (!open.length) return null;
+                    const y = pc => band.top + band.height * pc / 100;
+                    return {top: y(Math.min(...open)) - screen.top,
+                            bottom: y(Math.max(...open)) - screen.top};
+                  })(),
+                  copyEnds: copy.bottom - screen.top,
+                  ctaStarts: cta.top - screen.top};
         }""")
     ok(film["err"] is None, "the hero film decodes (%s)" % film["err"])
     ok(film["vw"] and film["vh"], "and has real dimensions (%sx%s)" % (film["vw"], film["vh"]))
-    ok(film["fit"] == "contain", "the film is contained, not cropped (%s)" % film["fit"])
-    ok(film["pos"].split()[-1] == "100%",
-       "and sits on the floor of the screen (%s)" % film["pos"])
+    # The band's own box is allowed to reach past the copy and the buttons --
+    # its edges are dissolved, that is the point. What must not is the part
+    # the scrim leaves open, which is where the pair are actually visible.
+    ok(film["clear"] is not None, "the scrim opens somewhere over the band")
+    if film["clear"]:
+        ok(film["clear"]["bottom"] <= film["ctaStarts"],
+           "the film is clear above the buttons, not behind them "
+           "(open to %dpx, buttons at %dpx)"
+           % (film["clear"]["bottom"], film["ctaStarts"]))
+        ok(film["clear"]["top"] >= film["copyEnds"],
+           "and opens below the last line of copy (open from %dpx, copy ends %dpx)"
+           % (film["clear"]["top"], film["copyEnds"]))
+    ok(film["inside"] and film["wide"], "the band spans the screen and stays inside it")
+    ok(0.3 < film["tall"] < 0.6,
+       "it is a band, not the whole page (%d%% of the screen)"
+       % round(100 * film["tall"]))
+    ok(film["fit"] == "cover",
+       "cropped to the part of the shot that carries the message (%s)" % film["fit"])
     # The film's alpha is real, so anything painted behind it shows through --
     # and a still of a *different* moment of the same shot came through as a
     # second, offset pair. The still belongs on the video's own poster, which
@@ -330,14 +374,8 @@ with sync_playwright() as p:
        "nothing is painted behind the alpha film (%s)" % film["layerBg"][:40])
     ok(film["poster"] == "data:image/",
        "the still is carried by the poster instead (%s)" % film["poster"])
-    if film["vw"]:
-        # The whole frame is visible: painted height must be the source ratio
-        # against the painted width, and both faces are in the top half of it.
-        drawn = film["boxW"] * film["vh"] / film["vw"]
-        ok(drawn <= film["boxH"] + 1,
-           "the whole frame fits in the box (%dpx drawn into %dpx)" % (drawn, film["boxH"]))
-    # The scrim must open right up in the middle -- the old curve never went
-    # below 62%, which is a lid, not a scrim.
+    # The scrim dissolves the band's two cut edges and must leave the middle
+    # -- the embrace -- completely alone.
     stops = page.eval_on_selector(
         '.vl[data-screen="landing"] .film',
         "el => getComputedStyle(el, '::after').backgroundImage")
