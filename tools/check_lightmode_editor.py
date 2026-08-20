@@ -249,6 +249,95 @@ with sync_playwright() as p:
         " return Math.abs((l.left + l.right) / 2 - (s.left + s.right) / 2); }")
     ok(off2 < 1, "still centred beside a back arrow (off by %.2fpx)" % off2)
 
+    # ---- the mark: one animated fill, at the size asked for --------------
+    # Two failures this catches, both of which look like "nothing happened":
+    # a mark filled with a flat colour, and a mark whose gradient never
+    # moves. Neither shows up in a still screenshot.
+    marks = page.evaluate(
+        """() => {
+          const out = [];
+          document.querySelectorAll('.device .vl').forEach(v => {
+            const was = v.classList.contains('is-on');
+            v.classList.add('is-on');
+            const l = v.querySelector('.vl-logo');
+            if (l) {
+              const c = getComputedStyle(l), r = l.getBoundingClientRect(),
+                    t = v.querySelector('.vl-top').getBoundingClientRect();
+              out.push({key: v.dataset.screen, h: Math.round(r.height),
+                        anim: c.animationName, grad: c.backgroundImage.includes('gradient'),
+                        masked: (c.maskImage || c.webkitMaskImage || '').includes('url('),
+                        inside: r.top >= t.top - 0.5 && r.bottom <= t.bottom + 0.5});
+            }
+            if (!was) v.classList.remove('is-on');
+          });
+          return out;
+        }""")
+    ok(len(marks) > 5, "the bar mark appears across the app (%d screens)" % len(marks))
+    ok(all(m["h"] == 66 for m in marks),
+       "every bar mark is 66px high (%s)" % sorted({m["h"] for m in marks}))
+    ok(all(m["inside"] for m in marks),
+       "and none of them is clipped by its own bar (%s)"
+       % [m["key"] for m in marks if not m["inside"]])
+    ok(all(m["anim"] == "brand-travel" for m in marks),
+       "the colour animation is on the bar mark (%s)" % sorted({m["anim"] for m in marks}))
+    ok(all(m["grad"] and m["masked"] for m in marks),
+       "it is a gradient through a mask, not a flat fill")
+
+    page.locator('.tab[data-target="landing"]').click()
+    page.wait_for_timeout(300)
+    big = page.eval_on_selector(
+        '.vl[data-screen="landing"] .logo',
+        "el => { const c = getComputedStyle(el);"
+        " return [c.animationName, c.backgroundImage.includes('gradient'),"
+        " Math.round(el.getBoundingClientRect().height)]; }")
+    ok(big[0] == "brand-travel" and big[1],
+       "the big landing mark animates from the same rule (%s)" % big[0])
+    ok(big[2] > 60, "and is still the hero-sized one (%dpx)" % big[2])
+    # The gradient has to actually travel: sample the computed position twice.
+    moved = page.evaluate(
+        """() => new Promise(res => {
+             const el = document.querySelector('.vl[data-screen="landing"] .logo');
+             const a = getComputedStyle(el).backgroundPositionX;
+             setTimeout(() => res([a, getComputedStyle(el).backgroundPositionX]), 900);
+           })""")
+    ok(moved[0] != moved[1], "the fill travels rather than sitting still (%s)" % moved)
+
+    # ---- the film is framed, not blown up --------------------------------
+    # `cover` on a 9:16 source in a 9:19.5 box scaled past 1:1 and cropped
+    # through both faces. The fix is contain-on-the-floor, and the poster
+    # underneath has to agree or it jumps when the video starts.
+    film = page.evaluate(
+        """() => {
+          const f = document.querySelector('.vl[data-screen="landing"] .film');
+          const v = f.querySelector('.film-reel');
+          const cv = getComputedStyle(v), cf = getComputedStyle(f);
+          const r = v.getBoundingClientRect();
+          return {fit: cv.objectFit, pos: cv.objectPosition, bgSize: cf.backgroundSize,
+                  bgPos: cf.backgroundPosition, vw: v.videoWidth, vh: v.videoHeight,
+                  boxW: r.width, boxH: r.height, err: v.error && v.error.code};
+        }""")
+    ok(film["err"] is None, "the hero film decodes (%s)" % film["err"])
+    ok(film["vw"] and film["vh"], "and has real dimensions (%sx%s)" % (film["vw"], film["vh"]))
+    ok(film["fit"] == "contain", "the film is contained, not cropped (%s)" % film["fit"])
+    ok(film["pos"].split()[-1] == "100%",
+       "and sits on the floor of the screen (%s)" % film["pos"])
+    ok(film["bgSize"] == film["fit"] and film["bgPos"] == film["pos"],
+       "the poster is framed identically, so it cannot jump (%s / %s)"
+       % (film["bgSize"], film["bgPos"]))
+    if film["vw"]:
+        # The whole frame is visible: painted height must be the source ratio
+        # against the painted width, and both faces are in the top half of it.
+        drawn = film["boxW"] * film["vh"] / film["vw"]
+        ok(drawn <= film["boxH"] + 1,
+           "the whole frame fits in the box (%dpx drawn into %dpx)" % (drawn, film["boxH"]))
+    # The scrim must open right up in the middle -- the old curve never went
+    # below 62%, which is a lid, not a scrim.
+    stops = page.eval_on_selector(
+        '.vl[data-screen="landing"] .film',
+        "el => getComputedStyle(el, '::after').backgroundImage")
+    ok("/ 0)" in stops or "/ 0 )" in stops or "transparent" in stops,
+       "the scrim reaches fully clear somewhere over the embrace")
+
     # An icon inside a sentence must sit on the line, not above it.
     same_line = page.eval_on_selector(
         '.vl[data-screen="profile_view"] .t-caption',

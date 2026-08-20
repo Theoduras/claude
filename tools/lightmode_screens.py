@@ -209,7 +209,7 @@ def _head(title="", back=False, action=""):
     left = ('<button class="btn btn-quiet tap vl-back">%s</button>' % icon("nav.back", 22)
             if back else "")
     middle = ('<span class="vl-title">%s</span>' % title if title
-              else '<span class="vl-logo" role="img" aria-label="Velvt"></span>')
+              else '<span class="vl-logo brand-fill" role="img" aria-label="Velvt"></span>')
     return ('<div class="vl-top"><span class="vl-slot">%s</span>%s'
             '<span class="vl-slot vl-slot-end">%s</span></div>'
             % (left, middle, action))
@@ -247,7 +247,7 @@ def landing(brand):
   </div>
 
   <div class="vl-main">
-    <div class="logo" role="img" aria-label="Velvt"></div>
+    <div class="logo brand-fill" role="img" aria-label="Velvt"></div>
 
     <h1 class="t-display headline"><span class="lead">Two people,</span><br>
       five minutes,<br>one decision.</h1>
@@ -1258,50 +1258,52 @@ def sections():
 
 LANDING_CSS = """
 /* ---- landing ------------------------------------------------------ */
-/* The film is the ground, so it covers every pixel and the scrim can be a
-   plain overlay: with no band edge there is no seam to give away. */
+/* The film is the lower half of the screen, not the whole of it.
+   `cover` across the full height was the bug: the source is 9:16 and a phone
+   screen here is nearer 9:19.5, so filling the height blew the frame up past
+   1:1 and cropped straight through both faces -- a wall of chin behind the
+   headline. `contain`, anchored to the bottom, shows the shot as it was
+   framed and puts the pair *under* the copy instead of behind it. The layer
+   still spans the screen so the scrim has somewhere to fade into. */
 .vl .film {
   position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
-  background: var(--film-still) 50% 16% / cover no-repeat;
+  background: var(--film-still) 50% 100% / contain no-repeat;
 }
 .vl .film-reel {
   width: 100%; height: 100%; display: block;
-  /* The shot pushes in as they come together, so it rests on a head-and-
-     shoulders embrace: anchoring near the top keeps both faces on screen,
-     biased down a little so the earlier full-body run still has its feet. */
-  object-fit: cover; object-position: 50% 16%;
+  /* Same framing as the still behind it: whole frame, sitting on the floor
+     of the screen. If these two disagree the poster jumps as the video
+     starts, which reads as a glitch rather than a load. */
+  object-fit: contain; object-position: 50% 100%;
 }
 /* The recolour that matters. Every stop is mixed from --scrim rather than
    written as a literal, so switching mode inverts the whole thing: it
-   lightens the film under dark type and darkens it under pale type. Strong
-   top and bottom where the wordmark, the headline and the buttons sit, and
-   nearly absent across the middle third, which is where the two of them meet. */
+   lightens the film under dark type and darkens it under pale type.
+   The old curve never dropped below 62% anywhere, which on a near-white
+   ground is not a scrim but a lid -- the art came through as a milky smear
+   with no subject in it. It is opaque only where type actually lands: solid
+   through the wordmark and headline, gone entirely across the embrace, and
+   back at the foot where the buttons sit. */
 .vl .film::after {
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(180deg,
-    color-mix(in srgb, var(--scrim) 95%, transparent) 0%,
-    color-mix(in srgb, var(--scrim) 90%, transparent) 30%,
-    color-mix(in srgb, var(--scrim) 62%, transparent) 52%,
-    color-mix(in srgb, var(--scrim) 86%, transparent) 76%,
-    color-mix(in srgb, var(--scrim) 96%, transparent) 100%);
+    var(--scrim) 0%,
+    var(--scrim) 30%,
+    color-mix(in srgb, var(--scrim) 88%, transparent) 44%,
+    color-mix(in srgb, var(--scrim) 20%, transparent) 58%,
+    color-mix(in srgb, var(--scrim) 0%, transparent) 68%,
+    color-mix(in srgb, var(--scrim) 62%, transparent) 78%,
+    color-mix(in srgb, var(--scrim) 90%, transparent) 88%,
+    color-mix(in srgb, var(--scrim) 94%, transparent) 100%);
 }
 .vl-top, .vl-main, .vl-foot, .vl-tabbar { position: relative; z-index: 1; }
 
-/* The wordmark is artwork, not a typeface: the mask keeps the letterforms
-   exactly as drawn and the fill stays ours, so a palette change reaches it.
-   Three stops and an over-wide background so the sheen can sweep across. */
+/* The big mark is the same drawing and the same travelling fill as the one
+   in the bar -- `.brand-fill` carries both, so the colour cannot drift apart
+   between the landing and every other screen. Only the size is local. */
 .vl .logo {
   width: min(80%, 270px); aspect-ratio: 753 / 391;
   max-height: 132px; margin: var(--space-2) auto var(--space-5); flex: 0 1 auto; min-height: 0;
-  background: linear-gradient(115deg, var(--action), var(--velvet-2) 45%, var(--action) 90%);
-  background-size: 260% 100%;
-  -webkit-mask: var(--logo-art) center / contain no-repeat;
-  mask: var(--logo-art) center / contain no-repeat;
-  animation: sheen 7s ease-in-out infinite;
-}
-@keyframes sheen { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-@media (prefers-reduced-motion: reduce) {
-  .vl .logo { animation: none; background-position: 25% 50%; }
 }
 
 .vl .lang { min-width: 44px; min-height: 44px; padding: 0 var(--space-2); }  /* ch.05 tap target */

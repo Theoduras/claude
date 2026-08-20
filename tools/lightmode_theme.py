@@ -305,17 +305,50 @@ SCREEN_CSS = """
    centred on the screen rather than on whatever is left over. A flex row with
    space-between would hang the mark off-axis by half the back arrow. */
 .vl-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
-          padding: var(--space-4) var(--gutter) var(--space-2); flex: none; gap: var(--space-2);
+          padding: var(--space-3) var(--gutter) var(--space-2); flex: none; gap: var(--space-2);
           min-height: 44px; }
 .vl-slot { display: flex; align-items: center; min-width: 0; }
 .vl-slot-end { justify-content: flex-end; }
 .vl-word { font-size: 13px; font-weight: 700; letter-spacing: 0.22em; color: var(--ink); }
 /* The mark itself, not the letters retyped: the same artwork the landing
-   masks, at bar size and filled with --ink so it reads as chrome. Sized by
-   height with the drawing's own ratio, so it cannot be squashed. */
-.vl-logo { display: block; height: 19px; aspect-ratio: 753 / 391; background: var(--ink);
-           -webkit-mask: var(--logo-art) center / contain no-repeat;
-           mask: var(--logo-art) center / contain no-repeat; }
+   masks, sized by height with the drawing's own ratio so it cannot be
+   squashed, and filled with the same travelling gradient the landing uses.
+   It is the brand's one moment of colour on an otherwise quiet bar, and the
+   fill is shared rather than restated -- see `.brand-fill` below. */
+.vl-logo { display: block; height: 66px; aspect-ratio: 753 / 391; }
+
+/* ---- the mark's fill ---------------------------------------------- */
+/* One rule for both marks: the bar's and the landing's. A mask keeps the
+   letterforms exactly as drawn, and what fills them is a gradient wide
+   enough to slide -- so the colour *travels* through the letters instead of
+   the whole mark cross-fading, which at this size reads as a flicker.
+   The stops walk the brand's own range (violet, indigo, plum, gold) rather
+   than two neighbouring purples: a sweep between colours a few degrees
+   apart is motion nobody can see, which is the same as no animation at all.
+   The gold stop is --delight-deep, not --delight: `delight` is the fill
+   behind dark text and is far too pale to *be* a letterform on a pale
+   ground, while `delight-deep` is the same colour at type weight, which is
+   exactly what a wordmark is. */
+.brand-fill {
+  background-image: linear-gradient(100deg,
+    var(--action) 0%, var(--velvet-2) 18%, var(--velvet-3) 34%,
+    var(--delight-deep) 50%, var(--velvet-3) 66%, var(--velvet-2) 82%, var(--action) 100%);
+  background-size: 340% 100%;
+  background-repeat: no-repeat;
+  -webkit-mask: var(--logo-art) center / contain no-repeat;
+  mask: var(--logo-art) center / contain no-repeat;
+  animation: brand-travel 9s linear infinite;
+}
+@keyframes brand-travel {
+  from { background-position: 0% 50%; }
+  to   { background-position: 100% 50%; }
+}
+/* ch.05: motion is decoration here, so it is the first thing to go. The
+   resting position is off the champagne stop, which has the least contrast
+   against a pale ground. */
+@media (prefers-reduced-motion: reduce) {
+  .brand-fill { animation: none; background-position: 8% 50%; }
+}
 .vl-main { flex: 1 1 auto; min-height: 0; padding: 0 var(--gutter); display: flex; flex-direction: column; }
 .vl-foot { flex: none; padding: var(--space-4) var(--gutter) var(--space-6); }
 .vl .vl-scroll { overflow-y: auto; }
