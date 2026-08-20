@@ -16,6 +16,7 @@ tokens being shown. The Restyler already paid for that lesson: a toolbar drawn
 from the palette under edit disappears the moment someone sets the ground to
 match the text.
 """
+import json
 import os
 import pathlib
 import re
@@ -183,7 +184,20 @@ def build():
         '<div class="note"><b>%s</b><span>%s</span></div>' % (t, d)
         for t, d in departures)
 
-    html = """<title>Velvt Light</title>
+    # Any state the artifact already carries. Republishing from source would
+    # otherwise wipe whatever was saved through the page itself -- the saved
+    # state lives *in* the published HTML, so a rebuild has to be handed it
+    # back or it silently throws the user's work away. Point LIGHTMODE_STATE
+    # at the JSON pulled out of the live artifact.
+    state_path = os.environ.get("LIGHTMODE_STATE")
+    state = ""
+    if state_path:
+        raw = pathlib.Path(state_path).read_text(encoding="utf-8").strip()
+        json.loads(raw)  # fail loudly here rather than in the browser
+        state = ('<script type="application/json" id="saved-state">%s</script>\n'
+                 % raw.replace("<", "\\u003c"))
+
+    html = state + """<title>Velvt Light</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -208,6 +222,8 @@ def build():
 <style id="overrides"></style>
 <!-- written last so a custom rule wins without needing !important -->
 <style id="custom"></style>
+
+%(savebar)s
 
 <div class="page">
   <header class="top">
@@ -281,6 +297,7 @@ def build():
         "screens": screens.render_all(brand),
         "insp": editor.inspector_html(),
         "save": editor.save_html(),
+        "savebar": editor.savebar_html(),
         "rail": editor.rail_html(),
         "script": editor.script(),
         "leg": leg_html,

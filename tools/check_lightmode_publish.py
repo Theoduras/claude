@@ -82,7 +82,8 @@ with sync_playwright() as p:
     page.locator('.seg button[data-pane="text"]').click()
     page.locator("#insp-text").fill("Published words")
     page.wait_for_timeout(250)
-    page.locator("#save-draft").click()
+    page.on("dialog", lambda d: d.accept("Published version"))
+    page.locator("#save-keep").click()
     page.wait_for_timeout(900)
 
     published = page.evaluate("() => window.__published")
@@ -102,9 +103,12 @@ with sync_playwright() as p:
             ok("\\u003c" in raw or "<" not in raw,
                "any < inside the JSON is escaped so it cannot close the tag early")
             state = json.loads(raw.replace("\\u003c", "<"))
-            ok(state["draft"]["tokens"]["light"]["--canvas"] == "#ddeeff",
+            top = state["kept"][0]
+            ok(top["state"]["tokens"]["light"]["--canvas"] == "#ddeeff",
                "the token edit is in the published state")
-            ok(state["draft"]["dom"]["text"], "the text edit is in the published state")
+            ok(top["state"]["dom"]["text"], "the text edit is in the published state")
+            ok(state["active"] == top["id"],
+               "and the saved state is marked active, so a reload applies it")
         ok(published.count('<script type="application/json" id="saved-state">') == 1,
            "exactly one state block (%d)"
            % published.count('<script type="application/json" id="saved-state">'))
@@ -120,16 +124,18 @@ with sync_playwright() as p:
         page2.goto("http://127.0.0.1:%d/v2.html" % port)
         page2.wait_for_timeout(700)
         ok(not errs2, "the published page loads clean: %s" % errs2[:2])
-        ok("draft is waiting" in page2.locator("#save-state").inner_text(),
-           "the reloaded page knows a draft is there — the bug that started this")
-        page2.locator("#draft-restore").click()
-        page2.wait_for_timeout(400)
+        ok("showing" in page2.locator("#save-state").inner_text(),
+           "the reloaded page opens with the saved state already applied: %s"
+           % page2.locator("#save-state").inner_text())
+        ok(page2.locator("#kept-list li.is-active").count() == 1,
+           "and the list marks which one is active")
+        page2.wait_for_timeout(200)
         got = page2.evaluate(
             "() => [document.querySelector('.vl[data-screen=\"landing\"] .btn-primary')"
             ".textContent.trim(), getComputedStyle(document.querySelector("
             "'.vl[data-screen=\"intro\"]')).backgroundColor]")
-        ok(got[0] == "Published words", "restored across a reload: the words (%s)" % got[0])
-        ok(got[1] == "rgb(221, 238, 255)", "restored across a reload: the token (%s)" % got[1])
+        ok(got[0] == "Published words", "applied across a reload: the words (%s)" % got[0])
+        ok(got[1] == "rgb(221, 238, 255)", "applied across a reload: the token (%s)" % got[1])
 
     # And a second save must replace the block, not append another.
     page.locator("#save-draft").click()

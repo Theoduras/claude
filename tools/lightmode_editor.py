@@ -181,6 +181,29 @@ EDITOR_CSS = """
 /* The sliders and checkboxes were still painting in the browser's own blue,
    which is the one colour on this page that belongs to neither palette. */
 .insp input[type=range] { accent-color: var(--c-accent); }
+/* ---- the save bar ----------------------------------------------------- */
+/* Fixed, so it is reachable from anywhere in a page that scrolls a long way.
+   The body reserves its height rather than letting it overlap, because a bar
+   that covers the first line of the page is a worse trade than the space. */
+.savebar { position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+           background: rgba(16,14,22,.94); backdrop-filter: blur(8px);
+           border-bottom: 1px solid var(--c-line-firm); }
+.savebar-in { max-width: 1120px; margin: 0 auto; padding: .55rem 1.5rem;
+              display: flex; align-items: center; gap: .6rem; }
+/* A starting value only; the real reserve is measured at runtime, because the
+   bar grows when the status line wraps and a hard-coded rem cannot know. */
+body { padding-top: 3.15rem; }
+.btn-save, .btn-draft { border: 0; border-radius: 8px; padding: .46rem 1.05rem;
+                        font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer;
+                        color: #fff; flex: none;
+                        transition: filter 160ms cubic-bezier(.2,.8,.2,1),
+                                    transform 120ms cubic-bezier(.2,.8,.2,1); }
+.btn-save { background: #1E9E63; box-shadow: 0 4px 14px rgba(30,158,99,.32); }
+.btn-draft { background: #3E7BE8; box-shadow: 0 4px 14px rgba(62,123,232,.30); }
+.btn-save:hover, .btn-draft:hover { filter: brightness(1.12); }
+.btn-save:active, .btn-draft:active { transform: scale(.97); }
+.btn-save:focus-visible, .btn-draft:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
 /* ---- saving ---------------------------------------------------------- */
 .save { border: 1px solid var(--c-line); border-radius: 14px; background: var(--c-raised);
         padding: .9rem 1rem; margin: 0 0 1.4rem; }
@@ -204,6 +227,17 @@ EDITOR_CSS = """
                font-weight: 600; cursor: pointer; flex: none; }
 .kept button:hover { color: var(--c-text); border-color: var(--c-line-firm); }
 .kept button.del:hover { color: #FF8A8F; border-color: #FF8A8F; }
+/* The active row is the one the artifact opens with, so it is marked twice
+   over -- a lit dot and a word. A colour alone would say nothing to a reader
+   who cannot separate these two greens. */
+.kept li.is-active { box-shadow: inset 0 0 0 1px var(--c-accent); }
+.kept .dot { width: 7px; height: 7px; border-radius: 50%; flex: none;
+             background: var(--c-line-firm); }
+.kept li.is-active .dot { background: var(--c-accent); box-shadow: 0 0 0 3px rgba(143,123,247,.22); }
+.kept-tag { flex: none; font-size: .6rem; font-weight: 700; letter-spacing: .08em;
+            text-transform: uppercase; color: var(--c-faint); border: 1px solid var(--c-line);
+            border-radius: 5px; padding: .1rem .3rem; }
+.kept-tag.is-on { color: var(--c-accent); border-color: var(--c-accent); }
 .save-none { font-size: .74rem; color: var(--c-faint); margin: .7rem 0 0; }
 
 .f-scope { margin-bottom: .45rem; }
@@ -282,39 +316,62 @@ def _opts(pairs):
 
 
 def save_html():
-    """Two ways to save, because they answer different questions.
+    """Everything saved, in one list, with one of them switched on.
 
-    A *draft* is the one you are in the middle of: a single slot, overwritten
-    each time, restored automatically next visit. That is what stops a closed
-    tab costing an afternoon.
+    Two kinds of save, because they answer different questions. A *draft* is
+    the one you are in the middle of: a single slot, overwritten each time. A
+    *saved state* is one you decided about: named, and never overwritten by
+    ordinary work.
 
-    A *kept* version is one you decided about: named, listed, and never
-    overwritten by ordinary work. Collapsing the two into a single "save"
-    forces every autosave to either destroy a version you liked or prompt you
-    for a name you do not have yet.
+    What they share is the list. Before, a draft was a status line and two
+    buttons while saved versions were a list somewhere else, so "what have I
+    got?" had two answers in two places. One list answers it once.
+
+    Exactly one entry can be **active**, and the active one is applied when
+    the artifact loads. That is what makes a save mean what people expect it
+    to mean: you come back and your work is on the screen, rather than parked
+    behind a button you have to find.
     """
     return """
 <div class="save" id="save">
-  <div class="save-row">
-    <button class="btn-tool" id="save-draft" type="button">Save draft</button>
-    <button class="btn-tool" id="save-keep" type="button">Keep as&hellip;</button>
-    <span class="save-state" id="save-state">nothing changed yet</span>
-  </div>
-  <div class="save-row" id="draft-row" hidden>
-    <button class="btn-tool" id="draft-restore" type="button">Restore draft</button>
-    <button class="btn-tool" id="draft-discard" type="button">Discard draft</button>
-  </div>
   <div class="save-row">
     <button class="btn-tool" id="state-copy" type="button">Copy state</button>
     <button class="btn-tool" id="state-paste" type="button">Load state</button>
   </div>
   <textarea class="code-area" id="state-box" spellcheck="false" hidden
     placeholder="Paste a saved state here, then press Load state."></textarea>
+
+  <p class="f-head" style="margin-bottom:.4rem;">Saved states</p>
   <ul class="kept" id="kept-list"></ul>
+  <p class="save-none" id="kept-none">Nothing saved yet. <b>Save&hellip;</b> names
+    what you have and switches it on, so the artifact opens with it next time.
+    <b>Save draft</b> keeps a single work-in-progress slot that is overwritten
+    each time.</p>
   <p class="save-none" id="save-note" hidden></p>
-  <p class="save-none" id="kept-none">Nothing kept yet. &ldquo;Keep as&hellip;&rdquo;
-    names a version and parks it here; the draft is overwritten every time you
-    save it, a kept version never is.</p>
+</div>"""
+
+
+def savebar_html():
+    """Save, pinned where it can always be reached.
+
+    These two used to sit in the right-hand column above the inspector, which
+    meant that on a long screen -- the settings list, the legal pages -- you
+    scrolled the thing you were editing into view and scrolled Save out of it.
+    A save you have to go looking for is one that gets skipped.
+
+    Colour carries the difference rather than the label alone: green for the
+    save that sticks and switches on, blue for the work-in-progress slot.
+    They are literal colours, not palette tokens -- the same rule the rest of
+    the chrome follows, since a Save button drawn from the palette under edit
+    disappears the moment someone sets the ground to match it.
+    """
+    return """
+<div class="savebar">
+  <div class="savebar-in">
+    <button class="btn-save" id="save-keep" type="button">Save</button>
+    <button class="btn-draft" id="save-draft" type="button">Save draft</button>
+    <span class="save-state" id="save-state">nothing changed yet</span>
+  </div>
 </div>"""
 
 
@@ -1199,6 +1256,7 @@ def script():
      for the file:// case, but it is no longer what "saved" means. */
   var DRAFT = "velvt-light:draft";
   var KEPT = "velvt-light:kept";
+  var ACTIVE = "velvt-light:active";
   var local = (function () {
     try {
       window.localStorage.setItem("velvt-light:probe", "1");
@@ -1227,15 +1285,40 @@ def script():
     try { return JSON.parse(el.textContent); } catch (e) { return null; }
   })();
 
+  /* `active` names the one entry the page applies on load -- a kept id, the
+     string "draft", or null for the design as authored. Keeping it as a
+     pointer rather than a copy means restoring, renaming and deleting all
+     stay one operation: there is no second copy of the state to keep in
+     step with the list. */
+  function blank() { return { v: 2, active: null, draft: null, kept: [] }; }
+
+  function upgrade(st) {
+    if (!st) { return blank(); }
+    var out = { v: 2, active: st.active || null, draft: st.draft || null,
+                kept: st.kept || [] };
+    /* v1 had no ids, because nothing pointed at an entry. Now something
+       does, so anything saved before gets one on the way in. */
+    out.kept.forEach(function (k, i) { if (!k.id) { k.id = "k" + i + "-" + (k.at || 0); } });
+    return out;
+  }
+
   function readAll() {
     /* The published block is the truth; localStorage only fills in when
        there is no published state (a local file, or a first run). */
-    if (embedded) { return embedded; }
-    if (!local) { return { draft: null, kept: [] }; }
-    var draft = null, kept = [];
-    try { draft = JSON.parse(local.getItem(DRAFT) || "null"); } catch (e) {}
-    try { kept = JSON.parse(local.getItem(KEPT) || "[]"); } catch (e) {}
-    return { draft: draft, kept: kept };
+    if (embedded) { return upgrade(embedded); }
+    if (!local) { return blank(); }
+    var st = blank();
+    try { st.draft = JSON.parse(local.getItem(DRAFT) || "null"); } catch (e) {}
+    try { st.kept = JSON.parse(local.getItem(KEPT) || "[]"); } catch (e) {}
+    try { st.active = JSON.parse(local.getItem(ACTIVE) || "null"); } catch (e) {}
+    return upgrade(st);
+  }
+
+  function entry(id) {
+    if (id === "draft") { return saved.draft ? { name: "Draft", state: saved.draft } : null; }
+    var hit = null;
+    (saved.kept || []).forEach(function (k) { if (k.id === id) { hit = k; } });
+    return hit;
   }
 
   var saved = readAll();
@@ -1251,6 +1334,7 @@ def script():
       try {
         local.setItem(DRAFT, JSON.stringify(saved.draft));
         local.setItem(KEPT, JSON.stringify(saved.kept));
+        local.setItem(ACTIVE, JSON.stringify(saved.active));
       } catch (e) {}
     }
     return durable().then(function (art) {
@@ -1378,19 +1462,34 @@ def script():
       " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
 
+  /* One list, holding the draft and every saved state, with the active one
+     marked. Rebuilt wholesale rather than patched: it is small, and a list
+     that is re-derived from the state cannot drift out of step with it. */
   function paintKept() {
-    var list = saved.kept || [];
+    var rows = [];
+    if (saved.draft) {
+      rows.push({ id: "draft", name: "Draft", at: saved.draft.at || 0, draft: true });
+    }
+    (saved.kept || []).forEach(function (k) {
+      rows.push({ id: k.id, name: k.name, at: k.at });
+    });
     var ul = document.getElementById("kept-list");
-    ul.innerHTML = list.map(function (k, i) {
-      return "<li><b></b><time>" + when(k.at) + "</time>" +
-        '<button data-restore="' + i + '">Restore</button>' +
-        '<button class="del" data-del="' + i + '">Delete</button></li>';
+    ul.innerHTML = rows.map(function (r) {
+      var on = saved.active === r.id;
+      return '<li' + (on ? ' class="is-active"' : "") + ">" +
+        '<span class="dot"></span><b></b>' +
+        (r.draft ? '<span class="kept-tag">work in progress</span>' : "") +
+        (on ? '<span class="kept-tag is-on">active</span>' : "") +
+        "<time>" + (r.at ? when(r.at) : "") + "</time>" +
+        '<button data-restore="' + r.id + '">Restore</button>' +
+        '<button data-active="' + r.id + '">' + (on ? "Switch off" : "Set active") + "</button>" +
+        '<button class="del" data-del="' + r.id + '">Delete</button></li>';
     }).join("");
     /* Names are user text, so they go in as textContent rather than through
        innerHTML -- a version called "<img onerror=...>" is not a scenario
        worth being clever about. */
-    ul.querySelectorAll("li b").forEach(function (b, i) { b.textContent = list[i].name; });
-    document.getElementById("kept-none").hidden = list.length > 0;
+    ul.querySelectorAll("li b").forEach(function (b, i) { b.textContent = rows[i].name; });
+    document.getElementById("kept-none").hidden = rows.length > 0;
   }
 
   /* One place decides what the status line says after a save, so the two
@@ -1434,47 +1533,77 @@ def script():
     };
   }
 
-  document.getElementById("save-draft").addEventListener("click", guard(function () {
-    saved.draft = snapshot();
-    document.getElementById("draft-row").hidden = false;
-    return persist().then(report("draft saved"));
-  }));
-
+  /* Save is the one that means what people expect "save" to mean: it names
+     what is on screen, switches it on, and the artifact opens with it next
+     time. Saving without making it active would leave someone who pressed
+     Save and reloaded looking at an unchanged design, which is the whole
+     complaint this replaced. */
   document.getElementById("save-keep").addEventListener("click", function () {
-    var name = window.prompt("Name this version", "Version " + ((saved.kept || []).length + 1));
+    var name = window.prompt("Name this saved state",
+                             "Version " + ((saved.kept || []).length + 1));
     if (name === null) { return; }
     name = name.trim() || "Untitled";
     guard(function () {
+      var id = "k" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       saved.kept = saved.kept || [];
-      saved.kept.unshift({ name: name, at: Date.now(), state: snapshot() });
+      saved.kept.unshift({ id: id, name: name, at: Date.now(), state: snapshot() });
+      saved.active = id;
       paintKept();
-      return persist().then(report("kept as \\u201c" + name + "\\u201d"));
+      return persist().then(report("saved \\u201c" + name + "\\u201d and switched on"));
     })();
   });
 
-  document.getElementById("draft-restore").addEventListener("click", function () {
-    if (apply(saved.draft)) { dirty = false; mark("draft restored", "is-ok"); }
-    else { mark("no draft to restore", "is-dirty"); }
-  });
-
-  document.getElementById("draft-discard").addEventListener("click", guard(function () {
-    saved.draft = null;
-    document.getElementById("draft-row").hidden = true;
-    return persist().then(report("draft discarded"));
+  /* The draft stays a draft: saved, listed, but not switched on unless you
+     say so. A work-in-progress that reapplied itself to every visitor would
+     be a different feature. */
+  document.getElementById("save-draft").addEventListener("click", guard(function () {
+    var snap = snapshot();
+    snap.at = Date.now();
+    saved.draft = snap;
+    paintKept();
+    return persist().then(report("draft saved"));
   }));
 
   document.getElementById("kept-list").addEventListener("click", function (e) {
     var btn = e.target.closest("button");
     if (!btn) { return; }
-    var list = saved.kept || [];
+    var id = btn.dataset.restore || btn.dataset.active || btn.dataset.del;
+    var row = entry(id);
+
     if (btn.dataset.restore !== undefined) {
-      var k = list[+btn.dataset.restore];
-      if (k && apply(k.state)) { dirty = false; mark("restored \\u201c" + k.name + "\\u201d", "is-ok"); }
-    } else if (btn.dataset.del !== undefined) {
-      var gone = list.splice(+btn.dataset.del, 1)[0];
+      if (row && apply(row.state)) {
+        dirty = false;
+        mark("restored \\u201c" + row.name + "\\u201d", "is-ok");
+      } else { mark("nothing to restore", "is-dirty"); }
+      return;
+    }
+
+    if (btn.dataset.active !== undefined) {
+      var turningOn = saved.active !== id;
+      saved.active = turningOn ? id : null;
+      /* Switching one on shows it too. Marking a state active without
+         applying it would leave the list claiming one thing and the screen
+         showing another until the next reload. */
+      if (turningOn && row) { apply(row.state); }
       paintKept();
       guard(function () {
-        return persist().then(report(gone ? "deleted \\u201c" + gone.name + "\\u201d" : "deleted"));
+        return persist().then(report(turningOn
+          ? "\\u201c" + (row ? row.name : "") + "\\u201d is active"
+          : "nothing active \\u2014 opens as authored"));
+      })();
+      return;
+    }
+
+    if (btn.dataset.del !== undefined) {
+      var name = row ? row.name : "";
+      if (id === "draft") { saved.draft = null; }
+      else { saved.kept = (saved.kept || []).filter(function (k) { return k.id !== id; }); }
+      /* Deleting what was switched on cannot leave the pointer dangling, or
+         the next load would look for a state that is not there. */
+      if (saved.active === id) { saved.active = null; }
+      paintKept();
+      guard(function () {
+        return persist().then(report("deleted \\u201c" + name + "\\u201d"));
       })();
     }
   });
@@ -1522,18 +1651,40 @@ def script():
     if (dirty) { e.preventDefault(); e.returnValue = ""; }
   });
 
+  /* Reserve exactly the bar's height, and keep doing so as it changes. The
+     status text wraps on a narrow window, which makes the bar taller than any
+     constant written here could predict -- and a bar that overlaps the page
+     hides the first thing on it. */
+  (function () {
+    var bar = document.querySelector(".savebar");
+    var fit = function () {
+      document.body.style.paddingTop = bar.getBoundingClientRect().height + "px";
+    };
+    fit();
+    if (window.ResizeObserver) { new ResizeObserver(fit).observe(bar); }
+    else { window.addEventListener("resize", fit); }
+  })();
+
   syncRail();
   _render();
   _renderTokens();
   filterGlyphs();
   paintKept();
 
-  /* A draft is offered, not forced. Restoring automatically would mean a
-     visit that only wanted to look at the design silently gets somebody's
-     half-finished experiment instead. */
-  if (saved.draft) {
-    document.getElementById("draft-row").hidden = false;
-    mark("a saved draft is waiting", "is-dirty");
+  /* The active state is applied on load -- that is what "active" means, and
+     what makes coming back show your work rather than the design as
+     authored. Everything else in the list waits to be asked for. */
+  var startWith = saved.active ? entry(saved.active) : null;
+  if (startWith && apply(startWith.state)) {
+    mark("showing \\u201c" + startWith.name + "\\u201d", "is-ok");
+  } else if (saved.active) {
+    /* Pointer with nothing behind it: say so rather than opening as
+       authored and letting someone conclude their save vanished. */
+    saved.active = null;
+    paintKept();
+    mark("the active state could not be read", "is-dirty");
+  } else if (saved.draft || (saved.kept || []).length) {
+    mark("nothing active \\u2014 pick one from the list below");
   } else {
     mark("nothing changed yet");
   }

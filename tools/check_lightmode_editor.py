@@ -403,7 +403,7 @@ with sync_playwright() as p:
     ok(page.locator('.vl[data-screen="landing"].is-on').count() == 1,
        "the editor still works after a script error")
 
-    # ---- saving: draft and kept ----
+    # ---- saving: one list, and an active state ----
     page.locator("#reset-all").click()
     page.evaluate("() => localStorage.clear()")
     page.reload()
@@ -411,9 +411,10 @@ with sync_playwright() as p:
 
     ok("nothing changed yet" in page.locator("#save-state").inner_text(),
        "a clean load says so")
-    ok(page.locator("#draft-row").is_hidden(), "no draft offered when none exists")
+    ok(page.locator("#kept-list li").count() == 0, "the list starts empty")
+    ok(page.locator("#kept-none").is_visible(), "with a note explaining the two saves")
 
-    # Make an edit of each kind, so the save has to carry more than CSS.
+    # An edit of each kind, so a save has to carry more than CSS.
     page.locator('.tab[data-target="landing"]').click()
     page.eval_on_selector('.vl[data-screen="landing"] .btn-primary', "el => el.click()")
     page.locator('input[type=text][data-set="background-color"][data-state="base"]').fill("#FAE83E")
@@ -422,70 +423,105 @@ with sync_playwright() as p:
     page.locator('.seg button[data-pane="icon"]').click()
     page.locator('#glyphs button[data-glyph="heart"]').click()
     page.locator('.rail-row input[data-token="--canvas"]').fill("#DDEEFF")
-    page.locator('.seg button[data-pane="code"]').click()
-    page.locator("#custom-css").fill(".vl .t-h1 { font-style: italic; }")
     page.wait_for_timeout(300)
     ok("unsaved" in page.locator("#save-state").inner_text(), "edits mark it unsaved")
 
+    # A draft is listed, but not switched on.
     page.locator("#save-draft").click()
-    page.wait_for_timeout(250)
-    ok("draft saved" in page.locator("#save-state").inner_text(), "draft saves")
+    page.wait_for_timeout(300)
+    ok(page.locator("#kept-list li").count() == 1, "the draft appears in the list")
+    # inner_text() returns rendered text, and the tag is uppercased in CSS.
+    ok("work in progress" in page.locator("#kept-list li").inner_text().lower(),
+       "labelled as a draft")
+    ok(page.locator("#kept-list li.is-active").count() == 0, "and is not active by itself")
 
-    # The real test: reload, and see whether the draft actually comes back.
-    page.reload()
-    page.wait_for_timeout(600)
-    ok("draft is waiting" in page.locator("#save-state").inner_text(),
-       "the draft is offered after a reload, not forced")
-    fresh = page.eval_on_selector('.vl[data-screen="landing"] .btn-primary',
-                                  "el => el.textContent.trim()")
-    ok(fresh == "Create an account", "and the page loads clean until you ask for it")
-
-    page.locator("#draft-restore").click()
-    page.wait_for_timeout(400)
-    got = page.evaluate(
-        "() => { const b = document.querySelector('.vl[data-screen=\"landing\"] .btn-primary');"
-        " const c = getComputedStyle(b);"
-        " return [b.textContent.trim(), c.backgroundColor, !!b.querySelector('svg'),"
-        " getComputedStyle(document.querySelector('.vl[data-screen=\"intro\"]')).backgroundColor,"
-        " getComputedStyle(document.querySelector('.vl[data-screen=\"landing\"] .t-h1')"
-        " || document.querySelector('.vl .t-h1')).fontStyle,"
-        " document.getElementById('custom-css').value.length]; }")
-    ok(got[0] == "Saved words", "restored: the words (%s)" % got[0])
-    ok(got[1] == "rgb(250, 232, 62)", "restored: the per-element colour (%s)" % got[1])
-    ok(got[2] is True, "restored: the icon")
-    ok(got[3] == "rgb(221, 238, 255)", "restored: the token (%s)" % got[3])
-    ok(got[4] == "italic", "restored: the custom CSS (%s)" % got[4])
-    ok(got[5] > 0, "restored: the CSS text is back in the box")
-
-    # Kept versions are named, listed, and survive a draft being discarded.
+    # Save names it AND switches it on.
     page.on("dialog", lambda d: d.accept("Gold CTA"))
     page.locator("#save-keep").click()
-    page.wait_for_timeout(300)
-    ok(page.locator("#kept-list li").count() == 1, "a kept version is listed")
-    ok("Gold CTA" in page.locator("#kept-list li b").inner_text(), "under the name given")
-    page.locator("#draft-discard").click()
-    page.wait_for_timeout(200)
-    ok(page.locator("#kept-list li").count() == 1,
-       "discarding the draft leaves kept versions alone")
+    page.wait_for_timeout(400)
+    ok(page.locator("#kept-list li").count() == 2, "the saved state joins the same list")
+    ok(page.locator("#kept-list li.is-active").count() == 1, "exactly one row is active")
+    ok("Gold CTA" in page.locator("#kept-list li.is-active").inner_text(),
+       "and it is the one just saved")
 
-    page.locator("#reset-all").click()
-    # Reset closes the inspector, so the code pane has to be reopened before
-    # its textarea can be reached.
-    page.eval_on_selector('.vl[data-screen="landing"] .btn-primary', "el => el.click()")
-    page.locator('.seg button[data-pane="code"]').click()
-    page.locator("#custom-css").fill("")
-    page.wait_for_timeout(250)
-    page.locator('#kept-list button[data-restore="0"]').click()
+    # The point of all this: reload and the work is on screen.
+    page.reload()
+    page.wait_for_timeout(700)
+    ok("showing" in page.locator("#save-state").inner_text(),
+       "a reload says which state it opened with: %s" % page.locator("#save-state").inner_text())
+    got = page.evaluate(
+        "() => { const b = document.querySelector('.vl[data-screen=\"landing\"] .btn-primary');"
+        " return [b.textContent.trim(), getComputedStyle(b).backgroundColor,"
+        " !!b.querySelector('svg'),"
+        " getComputedStyle(document.querySelector('.vl[data-screen=\"intro\"]')).backgroundColor]; }")
+    ok(got[0] == "Saved words", "applied on load: the words (%s)" % got[0])
+    ok(got[1] == "rgb(250, 232, 62)", "applied on load: the colour (%s)" % got[1])
+    ok(got[2] is True, "applied on load: the icon")
+    ok(got[3] == "rgb(221, 238, 255)", "applied on load: the token (%s)" % got[3])
+    ok(page.locator("#kept-list li").count() == 2, "the list survives the reload")
+
+    # Switching off returns the artifact to the design as authored.
+    page.locator('#kept-list li.is-active button[data-active]').click()
+    page.wait_for_timeout(300)
+    ok(page.locator("#kept-list li.is-active").count() == 0, "it can be switched off")
+    page.reload()
+    page.wait_for_timeout(700)
+    ok(page.eval_on_selector('.vl[data-screen="landing"] .btn-primary',
+       "el => el.textContent.trim()") == "Create an account",
+       "and then the artifact opens as authored")
+
+    # Setting active from the list applies it immediately, not just next load.
+    rows = page.locator("#kept-list li")
+    idx = 0 if "Gold CTA" in rows.nth(0).inner_text() else 1
+    rows.nth(idx).locator("button[data-active]").click()
     page.wait_for_timeout(400)
     ok(page.eval_on_selector('.vl[data-screen="landing"] .btn-primary',
-       "el => el.textContent.trim()") == "Saved words", "a kept version restores")
+       "el => el.textContent.trim()") == "Saved words",
+       "setting active applies it there and then")
 
-    page.locator('#kept-list button[data-del="0"]').click()
-    page.wait_for_timeout(250)
-    ok(page.locator("#kept-list li").count() == 0, "and can be deleted")
-    ok(page.locator("#kept-none").is_visible(), "the empty note comes back")
+    # Deleting the active row must not leave the pointer dangling.
+    page.locator('#kept-list li.is-active button[data-del]').click()
+    page.wait_for_timeout(400)
+    ok(page.locator("#kept-list li.is-active").count() == 0,
+       "deleting the active row clears active")
+    page.reload()
+    page.wait_for_timeout(700)
+    ok("could not be read" not in page.locator("#save-state").inner_text(),
+       "so the next load is not left pointing at nothing")
+    ok(page.locator("#kept-list li").count() == 1, "the draft is still listed")
+
+    # Restore is separate from active: it applies without switching on.
+    page.locator('#kept-list button[data-restore]').first.click()
+    page.wait_for_timeout(300)
+    ok(page.locator("#kept-list li.is-active").count() == 0,
+       "Restore does not silently make it active")
 
     page.evaluate("() => localStorage.clear()")
+
+    # ---- the save bar stays put ----
+    # The whole point of moving it out of the column: on a long screen you
+    # scroll what you are editing into view and Save must not leave with it.
+    page.locator('.tab[data-target="privacy"]').click()
+    page.evaluate("() => window.scrollTo(0, 3000)")
+    page.wait_for_timeout(300)
+    box = page.locator(".savebar").bounding_box()
+    ok(box is not None and box["y"] <= 1, "the save bar is still at the top after scrolling")
+    ok(page.locator("#save-keep").is_visible() and page.locator("#save-draft").is_visible(),
+       "and both buttons are reachable from there")
+    ok(page.locator(".insp #save-keep").count() == 0, "they are no longer inside the inspector")
+    colours = page.evaluate(
+        "() => [getComputedStyle(document.getElementById('save-keep')).backgroundColor,"
+        " getComputedStyle(document.getElementById('save-draft')).backgroundColor]")
+    ok(colours[0] == "rgb(30, 158, 99)", "Save is green (%s)" % colours[0])
+    ok(colours[1] == "rgb(62, 123, 232)", "Save draft is blue (%s)" % colours[1])
+    # A fixed bar that covers the first line of the page is a worse trade.
+    overlap = page.evaluate(
+        "() => { const h = document.querySelector('.savebar').getBoundingClientRect().height;"
+        " return getComputedStyle(document.body).paddingTop === h.toFixed(3) + 'px'"
+        " || parseFloat(getComputedStyle(document.body).paddingTop) >= h - 1; }")
+    ok(overlap, "the body reserves the bar's height instead of hiding under it")
+    page.evaluate("() => window.scrollTo(0, 0)")
+    page.wait_for_timeout(200)
 
     ok(not errors, "no JS errors after driving it: %s" % errors[:3])
 
