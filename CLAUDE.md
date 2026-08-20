@@ -404,6 +404,17 @@ previous account's notifications arriving on a device that is no longer theirs. 
 retried forever; anything else is counted, and only `PUSH_FAILURE_LIMIT` consecutive
 failures give up on it.
 
+**The unread count is worn in four places and read once.** `unread_badge()` in
+`base.html` renders it into the desktop nav, the desktop footer, the tab bar's More
+sheet and — the one that matters on a phone, where the other three are hidden or behind
+a tap — the More trigger itself. It carries `hidden` at zero rather than drawing a "0",
+caps at `99+`, and the same poll that raises the in-tab toasts repaints all four, so a
+page left open for ten minutes does not go on claiming a number that has moved. The
+count is cached on `g` for the render, and cleared in `load_current_user()` — `g` is
+scoped to the *app* context, not the request, so without that a reused app context
+(a test client inside `test_request_context`, a CLI command) carries the previous
+request's number into the next one.
+
 `/sw.js` is served from the root, not `/static`, so its scope is the whole site — a
 worker registered from `/static/` may only control `/static/`, and one that cannot open
 the page it is notifying about is no use. It has no fetch handler on purpose: this

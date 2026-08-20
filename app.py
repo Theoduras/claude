@@ -2067,6 +2067,12 @@ def load_current_user():
     view had in flight. At before_request time nothing else is pending.
     """
     g.current_user = None
+    # `g` is scoped to the *app* context, not the request, and Flask reuses a
+    # pushed one rather than nesting -- so a cache set on it survives into the
+    # next request whenever something has already pushed an app context (a
+    # test client called from inside test_request_context, a CLI command).
+    # Cleared here, where a before_request hook makes it per-request for real.
+    g.unread_notifications = None
     user = _resolve_session_user()
     if user is None:
         return

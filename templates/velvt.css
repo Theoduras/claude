@@ -3686,6 +3686,26 @@
       transition: color 0.18s ease;
     }
     .tabbar-more:hover { color: var(--text-muted); }
+    /* On a phone the footer is gone and the sheet is behind a tap, so this
+       badge is the only thing that can say "there is something waiting"
+       without being opened first. Pinned to the icon rather than added to
+       the row: the bar's height is a function of --fit, and a fourth child
+       here would make the More item taller than the three tabs beside it.
+       The ring is the bar's own background colour, so the badge reads as
+       sitting on top of the glyph instead of merging with it. */
+    .tabbar-more { position: relative; }
+    .tabbar .tab-badge {
+      position: absolute;
+      top: calc(-0.1 * var(--fit));
+      left: 50%;
+      margin-left: calc(0.25 * var(--fit));
+      min-width: calc(0.95 * var(--fit));
+      height: calc(0.95 * var(--fit));
+      padding: 0 calc(0.22 * var(--fit));
+      font-size: calc(0.52 * var(--fit));
+      box-shadow: 0 0 0 2px rgba(8, 5, 14, 0.86);
+      pointer-events: none;
+    }
     .more-sheet-links {
       display: flex;
       flex-direction: column;
@@ -3720,6 +3740,16 @@
       text-decoration: none;
     }
     nav.more-sheet-links a:last-child { border-bottom: none; }
+    /* The badge sits at the end of the row rather than beside the word: in a
+       list of nine links, a count tucked against its label is one more thing
+       to scan for, and hard against the right edge it is the only thing on
+       that column. */
+    nav.more-sheet-links a:has(.count-badge) {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+    }
     /* The phone-layout rule `... nav { padding-inline: 1.25rem }` is (0,1,2)
        and applies to this <nav> too, insetting the links 20px past the logout
        row below them. Scoped through .sheet to outrank it rather than fought
@@ -3777,6 +3807,34 @@
       text-transform: uppercase;
       line-height: 1;
     }
+    /* An unread count, wherever "Notifications" is written down.
+       Never drawn as a zero: a badge saying nothing is happening is a worse
+       answer than no badge, so it carries `hidden` at rest and the poll in
+       base.html takes it off when the count crosses one. Above 99 it stops
+       counting and says so -- past that the number is not the information,
+       "a lot" is, and four digits would not fit a tab bar anyway. */
+    .count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.2rem;
+      height: 1.2rem;
+      padding: 0 0.36rem;
+      border-radius: 999px;
+      background: var(--violet-crest);
+      color: #12081F;
+      font-family: var(--sans);
+      font-size: 0.68rem;
+      font-weight: 800;
+      line-height: 1;
+      vertical-align: 0.05em;
+      /* It follows a word everywhere it is written inline. The tab bar's
+         copy is absolutely positioned and restates this to place itself, so
+         the two do not fight. */
+      margin-left: 0.4rem;
+    }
+    .count-badge[hidden] { display: none; }
+
     /* the active pip: always laid out, only painted when current, so the
        three tabs keep identical heights whichever one is selected */
     .tabbar .tab-dot { width: 0.25rem; height: 0.25rem; border-radius: 50%; }

@@ -380,6 +380,62 @@ with app.test_request_context():
     check("the inbox is not a channel -- it holds what nobody was told",
           len(notices(watcher)) == 2)
 
+    # --------------------------------------------------------- the badge
+    # The count on the menu item. Rendered by the server for the first paint
+    # and repainted by the same poll that raises the toasts, so a page left
+    # open does not go on claiming a number that has moved.
+    badged = mkuser("badge")
+    token = A.secrets.token_urlsafe(32)
+    db().execute("""INSERT INTO sessions (user_id, token_hash, expires_at)
+                    VALUES (?, ?, NOW() + INTERVAL '1 day')""",
+                 (badged, A.hash_token(token)))
+    db().commit()
+
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["sid"] = token
+
+    import re as _re
+    BADGE = _re.compile(r'<span class="count-badge[^"]*" data-unread\s*(hidden)?\s*>'
+                        r'([^<]*)</span>')
+
+    def menu():
+        """Every badge on an ordinary page, as (text, is_hidden) pairs."""
+        page = client.get("/chats").get_data(as_text=True)
+        return [(text.strip(), bool(flag)) for flag, text in BADGE.findall(page)]
+
+    badges = menu()
+    check("the menu item carries a badge on every page",
+          len(badges) >= 2, badges)
+    check("with nothing unread it is hidden, not a zero",
+          all(is_hidden for _, is_hidden in badges), badges)
+
+    for n in range(3):
+        A.notify(badged, "reminder", "Thing %d" % n, dedupe_key="badge%d" % n)
+    badges = menu()
+    check("the menu item shows the number", {t for t, _ in badges} == {"3"}, badges)
+    check("...in every place it is written", len(badges) >= 2, len(badges))
+    check("...and none of them is hidden any more",
+          not any(is_hidden for _, is_hidden in badges))
+
+    check("the feed hands the browser the same number",
+          client.get("/notifications/feed").get_json()["unread"] == 3)
+
+    client.get("/notifications")          # opening it is what marks them read
+    check("reading them puts the badge away",
+          all(is_hidden for _, is_hidden in menu()), menu())
+
+    # Above 99 the number stops being the information.
+    db().execute(
+        """INSERT INTO notifications (user_id, kind, title)
+           SELECT ?, 'reminder', 'bulk ' || g FROM generate_series(1, 120) g""",
+        (badged,))
+    db().commit()
+    check("a very large count says 'a lot' rather than four digits",
+          {t for t, _ in menu()} == {"99+"}, menu())
+    check("...while the real figure is untouched underneath",
+          A.unread_notification_count(badged) == 120)
+
     # ------------------------------------------------------------- deletion
     leaving = mkuser("leaving")
     A.notify(leaving, "reminder", "Goodbye")

@@ -57,6 +57,20 @@
     </script>
 </head>
 <body>
+  {# The unread count, said once and worn in three places: the desktop nav,
+     the desktop footer, and -- the one that matters on a phone -- the tab
+     bar's More trigger, which is otherwise the only route to it and gives
+     away nothing until it is tapped.
+
+     Always rendered, `hidden` while the count is zero, so the poll further
+     down can reveal it without having to build an element. A badge reading
+     "0" would be a worse answer than no badge. #}
+  {% macro unread_badge(extra="") %}
+    {%- set n = unread_notifications() -%}
+    <span class="count-badge{% if extra %} {{ extra }}{% endif %}" data-unread
+          {% if not n %}hidden{% endif %}>{{ n if n <= 99 else "99+" }}</span>
+  {%- endmacro %}
+
   {# The footer's links, in one place -- said once, used from the desktop
      footer and the mobile "More" sheet alike, so the two can never drift. #}
   {% macro more_links() %}
@@ -67,12 +81,11 @@
     <a href="{{ url_for('privacy') }}">{{ t("footer.privacy") }}</a>
     <a href="{{ url_for('imprint') }}">{{ t("footer.imprint") }}</a>
     {%- if current_user %}
-      {#- The count is read here rather than passed by every route: this
-          macro is rendered on every page, and a badge that only some screens
-          knew about would be worse than none. -#}
-      {% set unread = unread_notifications() %}
-      <a href="{{ url_for('notifications_inbox') }}">
-        {{ t("footer.notifications") }}{% if unread %} ({{ unread }}){% endif %}</a>
+      {#- The count is read inside unread_badge() rather than passed by every
+          route: this macro is rendered on every page, and a badge only some
+          screens knew about would be worse than none. -#}
+      <a href="{{ url_for('notifications_inbox') }}"
+         >{{ t("footer.notifications") }}{{ unread_badge() }}</a>
     {%- endif %}
     {% if current_user %}<a href="{{ url_for('settings') }}">{{ t("footer.settings") }}</a>{% endif %}
     <a href="mailto:{{ support_email }}">{{ t("footer.contact") }}</a>
@@ -108,6 +121,10 @@
       <a class="tab-dup" href="{{ url_for('live_search') }}">{{ t("nav.live_search") }}</a>
       <a class="tab-dup" href="{{ url_for('chats') }}">{{ t("nav.chats") }}</a>
       <a class="tab-dup" href="{{ url_for('view_profile', user_id=current_user['id']) }}">{{ t("nav.profile") }}</a>
+      {#- .tab-dup like its neighbours: on a phone these three collapse into
+          the tab bar, where the badge is carried by the More trigger. -#}
+      <a class="tab-dup" href="{{ url_for('notifications_inbox') }}"
+         >{{ t("footer.notifications") }}{{ unread_badge() }}</a>
       {% if current_user['is_admin'] %}
         {#- Admin screens are English-only (see CLAUDE.md), so these are the
             one part of the nav that is not translated. -#}
@@ -180,8 +197,14 @@
         <span class="tab-dot"></span>
       </a>
     {% endif %}
+    {%- set unread = unread_notifications() if current_user else 0 %}
     <button type="button" class="tabbar-more" id="more-trigger"
-            aria-haspopup="dialog" aria-expanded="false" aria-controls="more-sheet">
+            aria-haspopup="dialog" aria-expanded="false" aria-controls="more-sheet"
+            {#- the visible label is "Info", so the number needs saying out
+                loud or it is a decoration with no meaning attached -#}
+            aria-label="{{ t('tab.info') }}{% if unread %} — {{ unread }} unread notification{{ '' if unread == 1 else 's' }}{% endif %}"
+            data-unread-label="{{ t('tab.info') }}">
+      {% if current_user %}{{ unread_badge("tab-badge") }}{% endif %}
       {{ icon("tab.info") }}
       <span class="tab-label">{{ t("tab.info") }}</span>
       {# The tabs are icon + label + dot; this one has no page to be "current"
@@ -267,11 +290,34 @@
         }
       }
 
+      /* The badges the server rendered are correct for the moment the page
+         loaded and stale from then on. Someone reading a chat for ten
+         minutes should not have to reload to find out three things
+         happened, so every poll repaints them from the same response the
+         toasts come out of -- one request, both jobs. */
+      function paint(unread) {
+        var shown = unread > 99 ? "99+" : String(unread);
+        document.querySelectorAll("[data-unread]").forEach(function (badge) {
+          badge.textContent = shown;
+          badge.hidden = !unread;
+        });
+        var trigger = document.querySelector("[data-unread-label]");
+        if (trigger) {
+          trigger.setAttribute("aria-label", trigger.dataset.unreadLabel +
+            (unread ? " \u2014 " + unread + " unread notification" +
+                      (unread === 1 ? "" : "s") : ""));
+        }
+      }
+
       function poll() {
         if (document.visibilityState !== "visible") return;
         fetch(feed, { headers: { "Accept": "application/json" } })
           .then(function (r) { return r.ok ? r.json() : null; })
-          .then(function (data) { if (data && data.fresh.length) raise(data.fresh); })
+          .then(function (data) {
+            if (!data) return;
+            paint(data.unread);
+            if (data.fresh.length) raise(data.fresh);
+          })
           .catch(function () { /* offline; the next tick will do */ });
       }
 
