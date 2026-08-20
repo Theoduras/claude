@@ -1258,28 +1258,31 @@ def sections():
 
 LANDING_CSS = """
 /* ---- landing ------------------------------------------------------ */
-/* The film is the whole screen and the whole frame -- nothing is cropped.
+/* The film is the whole screen and the whole frame -- nothing this end can
+   crop, because the footage has already done it.
 
-   Two wrong answers came before this one, and both cropped. `cover` across
-   the full height scaled a 9:16 shot past 1:1 in a 9:19.5 box and cut
-   through both faces. Cropping it to a band around the embrace lost the
-   other end: the arms hang low, almost to the hem of the frame, so a window
-   tight enough to enlarge the faces took the hands off with it -- two
-   characters with stumps. The arms are thin and they are what the shot is
-   about, so there is nothing in this frame that can be trimmed.
+   Worth knowing before touching any of this: the subject touches the left
+   and right edge of the source frame in all 121 frames, 200-600px of a
+   960px edge. The camera pushes in as they come together and the shot is
+   framed tight throughout, so an outer arm and the far side of both heads
+   run off the sides. Those pixels are not in the file and no fit, position
+   or scale here puts them back -- the only real fix is a re-export at a
+   wider framing, from footage this repo does not have.
 
-   So the layer stops where the buttons start and the frame is contained in
-   what is left, hung from the top. `contain` against the full width would be
-   693px tall in an 844px screen and finish 21px *into* the buttons; against
-   the 675px that is actually free it comes out 380px wide instead of 390,
-   which is a 5px gutter either side of a full-bleed ground and invisible,
-   and nothing of the film is behind anything. Hanging the slack at the top
-   rather than the bottom is the whole difference between the arms clearing
-   the buttons and disappearing under them. 21% is the foot: the two
-   buttons, the gap between them and the fine print, plus the padding around
-   all of it. */
+   What this *can* do is stop the crop reading as damage. `contain` fitted to
+   the height left a 7px gutter down each side, so the footage's own edge
+   landed just inside the screen and drew a hard vertical line through an arm
+   with empty canvas beyond it -- which looks like something went wrong.
+   Full-bleed to the width puts that edge exactly on the screen edge, where
+   the eye reads it as the shot continuing past the phone.
+
+   The cost is 21px: the frame is then 693px tall against 672px of clear
+   screen, so the very bottom of it -- the ground under their feet -- sits
+   behind the first button. Hanging the slack at the top is what keeps the
+   arms out from under there; bottom-anchoring put the whole embrace beneath
+   the buttons. */
 .vl .film {
-  position: absolute; top: 0; left: 0; right: 0; bottom: 21%;
+  position: absolute; inset: 0;
   z-index: 0; overflow: hidden; pointer-events: none;
 }
 .vl .film-reel {
@@ -1296,20 +1299,21 @@ LANDING_CSS = """
    came through as a milky smear with no subject in it. Now: solid behind the
    wordmark, thinning through the headline where the two of them are standing
    full-length and read as a presence behind bold dark type, and fully clear
-   from two thirds down, which is where the arms come round and stays clear
-   to the hem. The percentages are of the layer, and the layer now ends at
-   the buttons, so they do not need re-deriving if the foot grows. */
+   from 62% to 76%, which is where the arms come round, and closes again
+   before the buttons -- the frame's bottom edge is behind them anyway, so
+   there is nothing down there to show. */
 .vl .film::after {
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(180deg,
     color-mix(in srgb, var(--scrim) 94%, transparent) 0%,
     color-mix(in srgb, var(--scrim) 72%, transparent) 22%,
     color-mix(in srgb, var(--scrim) 50%, transparent) 38%,
-    color-mix(in srgb, var(--scrim) 44%, transparent) 50%,
-    color-mix(in srgb, var(--scrim) 10%, transparent) 60%,
-    color-mix(in srgb, var(--scrim) 0%, transparent) 66%,
-    color-mix(in srgb, var(--scrim) 0%, transparent) 93%,
-    color-mix(in srgb, var(--scrim) 34%, transparent) 100%);
+    color-mix(in srgb, var(--scrim) 44%, transparent) 48%,
+    color-mix(in srgb, var(--scrim) 8%, transparent) 56%,
+    color-mix(in srgb, var(--scrim) 0%, transparent) 62%,
+    color-mix(in srgb, var(--scrim) 0%, transparent) 76%,
+    color-mix(in srgb, var(--scrim) 72%, transparent) 82%,
+    var(--scrim) 90%);
 }
 .vl-top, .vl-main, .vl-foot, .vl-tabbar { position: relative; z-index: 1; }
 

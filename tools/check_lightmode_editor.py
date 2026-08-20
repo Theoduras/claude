@@ -331,6 +331,7 @@ with sync_playwright() as p:
                   inside: band.top >= screen.top - 1 && band.bottom <= screen.bottom + 1,
                   tall: (band.height / screen.height),
                   wide: Math.abs(band.width - screen.width) < 2,
+                  layerWidth: band.width,
                   // Where the frame is actually painted. `contain` fits the
                   // tighter of the two axes, and which one that is has
                   // already flipped once here -- so it is computed, not
@@ -339,6 +340,8 @@ with sync_playwright() as p:
                   // that decides whether the arms clear the buttons.
                   drawnBottom: (band.top - screen.top) + Math.min(
                       band.width * v.videoHeight / v.videoWidth, band.height),
+                  drawnWidth: Math.min(
+                      band.width, band.height * v.videoWidth / v.videoHeight),
                   // Where the scrim actually lets the film through, read off
                   // the gradient rather than assumed: the first and last stop
                   // whose alpha is zero. Chromium prints a fully transparent
@@ -379,9 +382,20 @@ with sync_playwright() as p:
     # The arms hang almost to the hem of the frame and they are what the shot
     # is about, so the *drawn* rectangle -- not the layer -- has to finish
     # above the buttons. Bottom-anchoring it put them underneath.
-    ok(film["drawnBottom"] <= film["ctaStarts"],
-       "the film finishes above the buttons (%dpx, buttons at %dpx)"
-       % (film["drawnBottom"], film["ctaStarts"]))
+    # The subject touches the left and right edge of the source frame in all
+    # 121 frames -- the camera pushes in and the shot is framed tight -- so
+    # the footage's own crop is going to show whatever this does. Full-bleed
+    # puts that edge on the screen edge, where it reads as the shot
+    # continuing past the phone. A gutter of even a few pixels turns it into
+    # a hard vertical line through an arm with canvas beyond it, which reads
+    # as damage.
+    ok(abs(film["drawnWidth"] - film["layerWidth"]) < 2,
+       "the film bleeds to the screen edge, so the footage's own crop does "
+       "not read as a cut (%dpx drawn into %dpx)"
+       % (film["drawnWidth"], film["layerWidth"]))
+    ok(film["drawnBottom"] <= film["ctaStarts"] + 26,
+       "and finishes at the buttons, bar the ground under their feet "
+       "(%dpx, buttons at %dpx)" % (film["drawnBottom"], film["ctaStarts"]))
     # The film's alpha is real, so anything painted behind it shows through --
     # and a still of a *different* moment of the same shot came through as a
     # second, offset pair. The still belongs on the video's own poster, which
