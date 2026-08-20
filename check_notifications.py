@@ -253,12 +253,21 @@ with app.test_request_context():
                      (read_already,))
         db().commit()
 
-        count = A.flush_notification_email()
+        A.flush_notification_email()
         mine = [m for m in sent_mail if m[0].startswith("nt_busy")]
         check("three things due become one email", len(mine) == 1, len(mine))
         check("...and it says how many", "2 things" in mine[0][1], mine[0][1])
-        check("something already read is never mailed", count == 2, count)
-        check("mail is not sent twice", A.flush_notification_email() == 0)
+        # Scoped to this run's rows: the flush is service-wide, so its return
+        # count also carries whatever else the database happened to owe.
+        check("something already read is never mailed",
+              "Third thing" not in mine[0][2] and "First thing" in mine[0][2])
+        check("...and its row is left alone rather than marked sent",
+              db().execute("SELECT emailed_at FROM notifications WHERE id = ?",
+                           (read_already,)).fetchone()["emailed_at"] is None)
+        before = len(sent_mail)
+        A.flush_notification_email()
+        check("mail is not sent twice",
+              not [m for m in sent_mail[before:] if m[0].startswith("nt_busy")])
         check("the email offers a way to turn it off",
               "settings" in mine[0][2].lower())
     finally:

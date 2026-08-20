@@ -393,6 +393,13 @@
       margin: -0.75rem 0 1.15rem;
     }
 
+    /* The same correction .switch-row + .hint makes further down, for the
+       other place there is no input margin to reclaim. Headings carry
+       margin: 0, so a .hint used as a page lede -- which is what it is on
+       /faq, /admin/reports, /admin/announce and /notifications -- was pulled
+       twelve pixels up into the descenders of the title above it. */
+    h1 + .hint, h2 + .hint, h3 + .hint { margin-top: 0; }
+
     /* A form section break: violet hairline, because it divides your own
        attributes from what you're asking of someone else. */
     .field-group {

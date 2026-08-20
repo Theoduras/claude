@@ -69,20 +69,27 @@
 
     <form method="post" action="{{ url_for('update_notification_prefs') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {#- .switch-row is the design system's own control for a checkbox with a
+          sentence beside it: it undoes the global `label` rule (which would
+          set these as uppercase eyebrows) and the global `input` rule (which
+          would stretch the box to full width), and it carries the violet
+          accent colour. Laid out as a wrapping flex row so the three
+          channels sit side by side wherever there is room for them. -#}
+      {% set channel_labels = {'browser': 'In this tab', 'push': 'On my devices',
+                               'email': 'By email'} %}
       {% for kind, heading, blurb in notify_kinds %}
-        <div style="margin: 0 0 1.1rem;">
+        <div style="margin: 0 0 1.3rem;">
           <strong style="display:block;">{{ heading }}</strong>
-          <span class="hint" style="display:block; margin: 0 0 0.4rem;">{{ blurb }}</span>
-          {% for channel in notify_channels %}
-            <label style="display:inline-flex; align-items:center; gap:0.35rem;
-                          margin-right: 1rem; font-weight: 400;">
-              <input type="checkbox" name="{{ kind }}.{{ channel }}" value="1"
-                     style="width:auto; margin:0;"
-                     {% if notify_prefs[kind][channel] %}checked{% endif %}>
-              {{ {'browser': 'In this tab', 'push': 'On my devices',
-                  'email': 'By email'}[channel] }}
-            </label>
-          {% endfor %}
+          <span class="hint" style="display:block; margin: 0.15rem 0 0.5rem;">{{ blurb }}</span>
+          <div style="display:flex; flex-wrap:wrap; column-gap:1.2rem;">
+            {% for channel in notify_channels %}
+              <label class="switch-row">
+                <input type="checkbox" name="{{ kind }}.{{ channel }}" value="1"
+                       {% if notify_prefs[kind][channel] %}checked{% endif %}>
+                <span>{{ channel_labels[channel] }}</span>
+              </label>
+            {% endfor %}
+          </div>
         </div>
       {% endfor %}
       <button class="btn" type="submit">Save notification settings</button>
