@@ -13,6 +13,11 @@
      request browsers make regardless of what is declared here. #}
   <link rel="icon" href="{{ url_for('static', filename='velvt-icon.svg') }}" type="image/svg+xml">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='velvt-icon.svg') }}">
+  {# iOS hands out a push subscription only to a web app that was added to
+     the home screen, and it will only offer that for a page with a manifest
+     declaring display: standalone. Everywhere else this is a nicety; on an
+     iPhone it is the difference between the push channel existing and not. #}
+  <link rel="manifest" href="{{ url_for('web_manifest') }}">
   {# The stylesheet is 134KB and identical on every page. Inlined, it was
      re-sent on every navigation and could never be cached; as its own URL,
      carrying a hash of its contents, it is fetched once and then served
@@ -61,6 +66,14 @@
     <a href="{{ url_for('terms') }}">{{ t("footer.terms") }}</a>
     <a href="{{ url_for('privacy') }}">{{ t("footer.privacy") }}</a>
     <a href="{{ url_for('imprint') }}">{{ t("footer.imprint") }}</a>
+    {%- if current_user %}
+      {#- The count is read here rather than passed by every route: this
+          macro is rendered on every page, and a badge that only some screens
+          knew about would be worse than none. -#}
+      {% set unread = unread_notifications() %}
+      <a href="{{ url_for('notifications_inbox') }}">
+        {{ t("footer.notifications") }}{% if unread %} ({{ unread }}){% endif %}</a>
+    {%- endif %}
     {% if current_user %}<a href="{{ url_for('settings') }}">{{ t("footer.settings") }}</a>{% endif %}
     <a href="mailto:{{ support_email }}">{{ t("footer.contact") }}</a>
   {% endmacro %}
@@ -101,6 +114,7 @@
         <a href="{{ url_for('admin_members') }}">Members</a>
         <a href="{{ url_for('admin_reports') }}">Reports</a>
         <a href="{{ url_for('admin_new_profile') }}">{{ t("nav.new_profile") }}</a>
+        <a href="{{ url_for('admin_announce') }}">Announce</a>
       {% endif %}
       {#- Signing out lives in the tab bar's Info sheet on a phone and in the
           footer on a desktop. It was here as well, which made a destructive
@@ -213,6 +227,68 @@
     </div>
   </div>
   </div>
+  {%- if current_user %}
+  {# The browser channel, entire. A tab cannot be pushed to, so it asks --
+     and only while somebody is looking at it: a background tab raising a
+     notification is one nobody asked for, and the poll behind it is work
+     with no reader. The server never marks these seen itself; this does,
+     after it has actually raised them, so a visitor who never granted
+     permission does not silently lose every notice. #}
+  <script nonce="{{ csp_nonce() }}">
+    (function () {
+      var EVERY = 45000;
+      var feed = "{{ url_for('notifications_feed') }}";
+      var seenUrl = "{{ url_for('notifications_seen') }}";
+      var timer = null;
+
+      function raise(items) {
+        if (!("Notification" in window) || Notification.permission !== "granted") {
+          return;
+        }
+        var shown = [];
+        items.forEach(function (item) {
+          try {
+            var note = new Notification(item.title, {
+              body: item.body,
+              icon: "{{ url_for('static', filename='velvt-icon.svg') }}",
+              tag: "velvt-" + item.kind
+            });
+            note.onclick = function () { window.focus(); location.href = item.url; };
+            shown.push(item.id);
+          } catch (err) { /* a browser that refuses is not an error to report */ }
+        });
+        if (shown.length) {
+          fetch(seenUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json",
+                       "X-CSRF-Token": window.velvtCsrf() },
+            body: JSON.stringify({ ids: shown })
+          });
+        }
+      }
+
+      function poll() {
+        if (document.visibilityState !== "visible") return;
+        fetch(feed, { headers: { "Accept": "application/json" } })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) { if (data && data.fresh.length) raise(data.fresh); })
+          .catch(function () { /* offline; the next tick will do */ });
+      }
+
+      function start() {
+        if (timer) return;
+        timer = setInterval(poll, EVERY);
+        poll();
+      }
+      function stop() { clearInterval(timer); timer = null; }
+
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") { start(); } else { stop(); }
+      });
+      start();
+    })();
+  </script>
+  {%- endif %}
   <script nonce="{{ csp_nonce() }}">
     (function () {
       var trigger = document.getElementById("more-trigger");

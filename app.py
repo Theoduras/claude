@@ -54,6 +54,7 @@ from flask import (
 from markupsafe import Markup, escape
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import webpush
 from translations import (
     DEFAULT_LANGUAGE,
     LANGUAGES,
@@ -319,6 +320,19 @@ AUTH_EVENT_RETENTION_DAYS = 90
 # accountable after the fact.
 RESOLVED_REPORT_RETENTION_DAYS = 365
 
+# A notification is a receipt for something that has already happened -- the
+# message, the match, the announcement all still exist wherever they live.
+# Two months is long enough to scroll back through and find the one you
+# dismissed on a bus, and there is nothing here that is not recoverable from
+# the thing it points at.
+NOTIFICATION_RETENTION_DAYS = 60
+
+# A push subscription is an address for one browser on one device. Measured
+# from its last successful delivery, not its creation, so a device in daily
+# use is never dropped -- but a laptop that was replaced a year ago stops
+# being an endpoint we hold for someone.
+PUSH_SUBSCRIPTION_RETENTION_DAYS = 180
+
 # The GDPR Article 9 consent. Gender plus who you are seeking makes sexual
 # orientation inferable, which is special category data and needs explicit
 # consent on top of the Article 6 basis.
@@ -374,7 +388,8 @@ CSRF_MAX_AGE_SECONDS = 60 * 60 * 12
 # path nothing upstream claims, so external uptime monitoring can see it.
 HEALTH_PATHS = ("/healthz", "/-/health")
 
-CSRF_EXEMPT_PATHS = {*HEALTH_PATHS, "/tasks/purge-deletions"}
+CSRF_EXEMPT_PATHS = {*HEALTH_PATHS, "/tasks/purge-deletions",
+                     "/tasks/notifications"}
 CSRF_SERIALIZER = URLSafeTimedSerializer(app.secret_key, salt="velvt-csrf")
 
 # --- outbound mail ------------------------------------------------------
@@ -391,6 +406,101 @@ MAIL_FROM = os.environ.get("MAIL_FROM", "Velvt <onboarding@resend.dev>")
 MAIL_REPLY_TO = os.environ.get("MAIL_REPLY_TO", "").strip()
 # Needed to build absolute links in email; falls back to CANONICAL_HOST.
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
+
+
+# --- notifications ------------------------------------------------------
+# Four things worth interrupting someone for, and three ways of doing it.
+#
+# The kinds are the *reasons*, not the transports: "a new message" is one
+# thing whether it arrives as mail, as a push, or as a toast in an open tab.
+# Splitting them the other way round -- an email setting and a push setting
+# and nothing saying what either is about -- gives someone the choice between
+# all of it and none of it, which is how people end up turning everything off.
+#
+# Each entry is (key, heading, what it means). The order is the order of the
+# settings screen, most-wanted first.
+NOTIFY_KINDS = [
+    ("message", "New messages",
+     "Someone you matched with has written to you."),
+    ("pool", "Someone you could match with",
+     "A member whose search fits yours has just started looking. "
+     "We never say who."),
+    ("reminder", "Reminders",
+     "The occasional nudge -- an unfinished profile, or a quiet month."),
+    ("feature", "New features",
+     "What has changed in Velvt. A few times a year at most."),
+]
+NOTIFY_KIND_KEYS = [key for key, _, _ in NOTIFY_KINDS]
+NOTIFY_CHANNELS = ("browser", "push", "email")
+
+# What each kind does for someone who has never opened the settings screen.
+#
+# Two of these are deliberately off. An announcement about a new feature is
+# marketing however carefully it is written, and mailing it to people who
+# never asked is the thing PECR and the ePrivacy Directive exist about -- so
+# it is opt-in, and until then it waits quietly in the app. A pool notice is
+# off by email for a plainer reason: it is true for about five minutes, and
+# an inbox is not a five-minute medium.
+NOTIFY_DEFAULTS = {
+    "message": {"browser": True, "push": True, "email": True},
+    "pool": {"browser": True, "push": True, "email": False},
+    "reminder": {"browser": True, "push": True, "email": True},
+    "feature": {"browser": True, "push": False, "email": False},
+}
+
+# How long a notice of the same kind about the same thing stays "already
+# said". Ten messages in one conversation are one notification; a second pool
+# notice twenty minutes after the first is nagging.
+NOTIFY_DEDUPE_MINUTES = {
+    "message": 15,
+    "pool": 180,
+    "reminder": 60 * 24,
+    "feature": 60 * 24 * 365,
+}
+
+# The gap between a notification appearing and its email being allowed to
+# leave. Long enough that anyone reading their messages on a phone never gets
+# mail about them; short enough to still be the same evening.
+NOTIFY_EMAIL_DELAY_MINUTES = 15
+
+# Reminders. Both are once-and-then-quiet, which is the difference between a
+# reminder and a nag.
+PROFILE_NUDGE_AFTER_DAYS = 2      # registered, still cannot search
+DORMANT_NUDGE_AFTER_DAYS = 21     # active account, nobody has searched
+DORMANT_NUDGE_EVERY_DAYS = 60     # and at most this often, forever
+
+# A new search tells people whose own criteria fit it. Bounded because the
+# alternative is one person starting a search and a hundred phones lighting
+# up: the pool is small enough that a handful is plenty, and the cap is what
+# stops this becoming a broadcast channel with extra steps.
+POOL_NOTICE_MAX_RECIPIENTS = 12
+# Only members who searched recently enough for that search to still describe
+# what they are looking for. A criteria set from a year ago is a guess.
+POOL_NOTICE_LOOKBACK_DAYS = 45
+
+# --- web push -----------------------------------------------------------
+# The application server keys. `python webpush.py` mints a pair. Unset means
+# push is simply off -- the other two channels carry on, which is the right
+# failure mode for a transport that needs keys the deployment may not have
+# been given yet.
+#
+# Rotating these invalidates every existing subscription: a browser remembers
+# the key it subscribed with and the push service checks the signature
+# against it. So the pair is generated once and kept.
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "").strip()
+# RFC 8292 asks for a way to reach whoever is sending. Not decoration: it is
+# how a push service tells us we are doing something wrong instead of simply
+# dropping us.
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "").strip() or f"mailto:{SUPPORT_EMAIL}"
+
+# Consecutive failures before a subscription is given up on. Generous, because
+# the cost of being wrong is someone silently stopping receiving anything.
+PUSH_FAILURE_LIMIT = 5
+# A push is one HTTPS call to somebody else's service, and one of them lives
+# on the path that sends a chat message. Short enough that a slow push service
+# cannot make the app feel slow.
+PUSH_TIMEOUT_SECONDS = 4
 
 app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=SESSION_LIFETIME_DAYS),
@@ -1207,6 +1317,96 @@ CREATE TABLE IF NOT EXISTS rate_hits (
 );
 
 CREATE INDEX IF NOT EXISTS rate_hits_window_idx ON rate_hits (window_start);
+
+-- --- notifications ------------------------------------------------------
+-- One row per thing that happened to one person. The ledger comes first and
+-- the three transports read from it, rather than each transport deciding for
+-- itself what to send: a push that fired and an email that did not would
+-- otherwise be two independent stories about the same event, and nothing
+-- could say which of them a person actually saw.
+--
+-- It is also what makes the in-page channel possible at all. A browser tab
+-- has nowhere to receive anything -- it polls -- so "notify the open tab"
+-- can only mean "leave a row where the tab will find it".
+--
+-- The four timestamps are the whole delivery record: seen_at is "an open tab
+-- raised it", read_at is "they opened it", and pushed_at / emailed_at are the
+-- two transports that leave the building. All nullable, because most rows
+-- never take every route.
+CREATE TABLE IF NOT EXISTS notifications (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '/',
+    -- What this notice is *about*, so a second one about the same thing can
+    -- be recognised and dropped. Ten messages in a chat are one notice.
+    dedupe_key TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    seen_at TIMESTAMPTZ,
+    read_at TIMESTAMPTZ,
+    pushed_at TIMESTAMPTZ,
+    emailed_at TIMESTAMPTZ,
+    -- Deliberately later than created_at: email is the slow channel, and one
+    -- sent the instant a message arrives is an email about something the
+    -- recipient read on their phone thirty seconds later.
+    email_due_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS notifications_user_idx
+    ON notifications (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS notifications_unread_idx
+    ON notifications (user_id) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS notifications_dedupe_idx
+    ON notifications (user_id, dedupe_key, created_at DESC) WHERE dedupe_key IS NOT NULL;
+-- The two queues the scheduled task drains, each indexed on exactly the
+-- rows it looks for rather than on the whole table.
+CREATE INDEX IF NOT EXISTS notifications_push_queue_idx
+    ON notifications (created_at) WHERE pushed_at IS NULL;
+CREATE INDEX IF NOT EXISTS notifications_mail_queue_idx
+    ON notifications (email_due_at)
+    WHERE emailed_at IS NULL AND read_at IS NULL AND email_due_at IS NOT NULL;
+
+-- Which transports each kind of notice may use, per person. Absent means the
+-- defaults in NOTIFY_DEFAULTS, so a new account needs no rows and a new kind
+-- needs no migration -- and the defaults stay in code where the reasoning
+-- for each one can sit next to it.
+CREATE TABLE IF NOT EXISTS notification_prefs (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    email BOOLEAN NOT NULL DEFAULT TRUE,
+    push BOOLEAN NOT NULL DEFAULT TRUE,
+    browser BOOLEAN NOT NULL DEFAULT TRUE,
+    PRIMARY KEY (user_id, kind)
+);
+
+-- One row per browser that has agreed to receive push. The endpoint is the
+-- push service's address for that browser, and it is unique service-wide,
+-- so it is the natural key: signing in as someone else on the same browser
+-- must move the subscription rather than leave the previous account's
+-- notifications going to this device.
+--
+-- p256dh and auth are the browser's half of the encryption. They are not
+-- secrets we chose and not secrets we could re-derive: without them the
+-- endpoint is undeliverable, which is the correct outcome after a wipe.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    user_agent TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_ok_at TIMESTAMPTZ,
+    -- Consecutive transport failures. A push service that is merely having a
+    -- bad minute must not cost someone their subscription, but one that has
+    -- refused this endpoint repeatedly is telling us something.
+    failures INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx
+    ON push_subscriptions (user_id);
 """
 
 # Arbitrary but fixed keys for Postgres advisory locks. Any instance taking
@@ -1793,6 +1993,16 @@ def inject_user():
         # renders at all comes up in the profile form, the search wizard and
         # the criteria screen alike.
         "single_city": SINGLE_CITY,
+        # The badge in the "More" sheet, on every page. A callable so a page
+        # that never renders the sheet -- the landing screen, signed out --
+        # does not pay for the query.
+        "unread_notifications": (
+            lambda: unread_notification_count(current_uid()) if current_uid() else 0),
+        # Handed to the browser so it can subscribe. Public by design: it is
+        # the key every push service checks our signature against, and an
+        # empty string is how the settings screen knows push is not
+        # configured on this deployment.
+        "vapid_public_key": VAPID_PUBLIC_KEY,
     }
 
 
@@ -1914,6 +2124,12 @@ CSP = (
     "img-src 'self' data: blob:; "
     "font-src 'self'; "
     "connect-src 'self'; "
+    # The push service worker, and the manifest iOS needs before it will
+    # hand out a subscription at all. Both same-origin, both named rather
+    # than left to default-src, so removing default-src later cannot
+    # silently take the push channel with it.
+    "worker-src 'self'; "
+    "manifest-src 'self'; "
     "form-action 'self'; "
     "base-uri 'self'; "
     "object-src 'none'; "
@@ -3212,6 +3428,14 @@ def settings():
         (me["id"], CONSENT_SENSITIVE),
     ).fetchone()
 
+    devices = db.execute(
+        """
+        SELECT id, user_agent, created_at, last_ok_at FROM push_subscriptions
+        WHERE user_id = ? ORDER BY created_at DESC
+        """,
+        (me["id"],),
+    ).fetchall()
+
     return render_template(
         "settings.html",
         me=me,
@@ -3219,6 +3443,11 @@ def settings():
         blocked=blocked,
         consent=consent,
         deletion_grace_days=DELETION_GRACE_DAYS,
+        notify_kinds=NOTIFY_KINDS,
+        notify_channels=NOTIFY_CHANNELS,
+        notify_prefs=notification_prefs(me["id"]),
+        push_devices=devices,
+        push_ready=push_configured(),
     )
 
 
@@ -3352,6 +3581,15 @@ def export_data():
         ),
         "consents": rows("SELECT * FROM consents WHERE user_id = ?"),
         "terms_accepted": rows("SELECT * FROM legal_acceptances WHERE user_id = ?"),
+        "notifications": rows(
+            "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at"),
+        "notification_settings": rows(
+            "SELECT * FROM notification_prefs WHERE user_id = ?"),
+        # Without the keys, which are the browser's half of the encryption
+        # and would let anyone holding this file push to that device.
+        "push_devices": rows(
+            "SELECT id, user_agent, created_at, last_ok_at FROM push_subscriptions"
+            " WHERE user_id = ?"),
     }
 
     body = json.dumps(payload, indent=2, default=str)
@@ -3449,8 +3687,11 @@ def purge_due_deletions():
     for row in due:
         uid = row["id"]
         # Everything that is only ever about them.
+        # notifications carry the other person's name in their text, and a
+        # push subscription is a live address for a device. Neither survives.
         for table in ("photos", "searches", "sessions", "email_tokens", "consents",
-                      "legal_acceptances"):
+                      "legal_acceptances", "notifications", "notification_prefs",
+                      "push_subscriptions"):
             db.execute(f"DELETE FROM {table} WHERE user_id = ?", (uid,))
         db.execute("DELETE FROM profiles WHERE user_id = ?", (uid,))
         db.execute(
@@ -3584,10 +3825,845 @@ def purge_expired_data():
         "DELETE FROM sessions WHERE expires_at < NOW()"
     ).rowcount
 
+    # A notification is a receipt. Everything it describes -- the message, the
+    # match, the announcement -- either still exists or has been purged by one
+    # of the rules above, so keeping the receipt longer than the thing would
+    # be keeping a record of something the schedule has already erased.
+    counts["notifications"] = db.execute(
+        "DELETE FROM notifications WHERE created_at < NOW() - (? * INTERVAL '1 day')",
+        (NOTIFICATION_RETENTION_DAYS,),
+    ).rowcount
+
+    # A subscription nothing has successfully pushed to in a long time is an
+    # address for a device that is not listening. Kept on age since its last
+    # success rather than its creation, so an active device is never dropped.
+    counts["push_subscriptions"] = db.execute(
+        """
+        DELETE FROM push_subscriptions
+        WHERE COALESCE(last_ok_at, created_at) < NOW() - (? * INTERVAL '1 day')
+        """,
+        (PUSH_SUBSCRIPTION_RETENTION_DAYS,),
+    ).rowcount
+
     db.commit()
     app.logger.info("retention purge: %s",
                     ", ".join(f"{k}={v}" for k, v in counts.items() if v))
     return counts
+
+
+# =========================================================================
+# Notifications
+# =========================================================================
+# Three ways of reaching someone -- an open tab, a push to a browser that is
+# closed, an email -- over one ledger of things that happened. The ledger is
+# what makes them one system rather than three: without it, "did we tell
+# them?" has three separate answers and no way to reconcile them.
+#
+# Turning every channel off does not stop notifications being recorded. It
+# stops them interrupting. /notifications is a history, not a fourth channel,
+# and somebody who wants no push, no mail and no toast should still be able
+# to find out what they missed.
+#
+# The text is stored rendered, in English, at the moment the notice is made.
+# The same choice the transactional email already makes, and for the same
+# reason: mail and push leave the building with no request and no session, so
+# there is no language to render into -- and a notification that was written
+# in one language and is read back in another is a translation of a record,
+# which is a different thing from a translated interface.
+
+
+def notification_prefs(user_id):
+    """{kind: {channel: bool}}, with NOTIFY_DEFAULTS filling every gap.
+
+    A row per (user, kind) only exists once someone has changed something, so
+    this is the only place that knows what "no row" means -- which keeps the
+    defaults in code, next to the reasoning for each one, rather than frozen
+    into whatever the table happened to be seeded with.
+    """
+    stored = {
+        row["kind"]: row
+        for row in get_db().execute(
+            "SELECT * FROM notification_prefs WHERE user_id = ?", (user_id,)
+        ).fetchall()
+    }
+    prefs = {}
+    for kind in NOTIFY_KIND_KEYS:
+        row = stored.get(kind)
+        prefs[kind] = {
+            channel: bool(row[channel]) if row is not None
+            else NOTIFY_DEFAULTS[kind][channel]
+            for channel in NOTIFY_CHANNELS
+        }
+    return prefs
+
+
+def wants(user_id, kind, channel):
+    return notification_prefs(user_id)[kind][channel]
+
+
+def save_notification_prefs(user_id, chosen):
+    """Write every kind at once from `chosen`, a {kind: {channel: bool}}.
+
+    All four kinds are written on every save, including the ones left at
+    their defaults. A partial write would make "unchanged" and "explicitly
+    the same as the default" indistinguishable, and the difference matters
+    the day a default changes: someone who chose it should keep it.
+    """
+    db = get_db()
+    for kind in NOTIFY_KIND_KEYS:
+        row = chosen.get(kind, {})
+        db.execute(
+            """
+            INSERT INTO notification_prefs (user_id, kind, email, push, browser)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (user_id, kind) DO UPDATE SET
+                email = excluded.email, push = excluded.push,
+                browser = excluded.browser
+            """,
+            (user_id, kind, bool(row.get("email")), bool(row.get("push")),
+             bool(row.get("browser"))),
+        )
+    db.commit()
+
+
+def push_configured():
+    return bool(VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY)
+
+
+def push_to_user(user_id, payload, urgency="normal"):
+    """Send one payload to every browser this person has subscribed.
+
+    Returns True once the row can be considered dealt with -- which includes
+    "they have no subscriptions" and "push is not configured here". Only a
+    transport failure returns False, because that is the only case where
+    trying again later could produce a different answer.
+
+    Never raises. A push service having a bad minute must not turn sending a
+    chat message into a 500.
+    """
+    if not push_configured():
+        return True
+
+    db = get_db()
+    subs = db.execute(
+        "SELECT * FROM push_subscriptions WHERE user_id = ?", (user_id,)
+    ).fetchall()
+    if not subs:
+        return True
+
+    blob = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    delivered = False
+    for sub in subs:
+        try:
+            webpush.send(
+                {"endpoint": sub["endpoint"], "p256dh": sub["p256dh"],
+                 "auth": sub["auth"]},
+                blob, VAPID_PRIVATE_KEY, VAPID_SUBJECT,
+                urgency=urgency, timeout=PUSH_TIMEOUT_SECONDS,
+            )
+        except webpush.PushGone:
+            # The browser is gone -- data cleared, permission revoked, app
+            # uninstalled. Retrying this forever is the failure mode this
+            # branch exists to avoid.
+            db.execute("DELETE FROM push_subscriptions WHERE id = ?", (sub["id"],))
+            delivered = True     # nothing left to deliver to, which is settled
+        except Exception as exc:
+            app.logger.warning("push to %s failed: %s",
+                               sub["endpoint"][:60], exc)
+            db.execute(
+                """
+                UPDATE push_subscriptions SET failures = failures + 1 WHERE id = ?
+                """,
+                (sub["id"],),
+            )
+            db.execute(
+                "DELETE FROM push_subscriptions WHERE id = ? AND failures >= ?",
+                (sub["id"], PUSH_FAILURE_LIMIT),
+            )
+        else:
+            db.execute(
+                """
+                UPDATE push_subscriptions SET last_ok_at = NOW(), failures = 0
+                WHERE id = ?
+                """,
+                (sub["id"],),
+            )
+            delivered = True
+    db.commit()
+    return delivered
+
+
+def notify(user_id, kind, title, body="", url="/", dedupe_key=None,
+           push_now=False):
+    """Record one notice and start it on its way. Returns its id, or None.
+
+    None means nothing was recorded: an unknown recipient, a demo member (no
+    browser, no inbox, no address), or a notice we have already made about
+    this same thing recently -- see NOTIFY_DEDUPE_MINUTES.
+
+    `push_now` is for the one case where waiting is wrong. A chat message
+    should light up a phone while the conversation is still happening, and
+    that is one HTTPS call to one person's subscriptions. Everything else
+    leaves pushed_at NULL and is picked up by the scheduled task, so a search
+    starting never costs the searcher a dozen sequential round trips to
+    somebody else's push service.
+    """
+    if kind not in NOTIFY_DEFAULTS:
+        raise ValueError(f"unknown notification kind: {kind!r}")
+
+    db = get_db()
+    person = db.execute(
+        "SELECT id, email, email_verified_at, is_bot, status FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    # Demo members auto-reply in chat, so they generate exactly the events
+    # this system exists to report, aimed at an account with nobody behind it.
+    if person is None or person["is_bot"] or person["status"] != "active":
+        return None
+
+    if dedupe_key:
+        window = NOTIFY_DEDUPE_MINUTES.get(kind, 0)
+        recent = db.execute(
+            """
+            SELECT 1 AS hit FROM notifications
+            WHERE user_id = ? AND dedupe_key = ?
+              AND created_at > NOW() - (? * INTERVAL '1 minute')
+            LIMIT 1
+            """,
+            (user_id, dedupe_key, window),
+        ).fetchone()
+        if recent:
+            return None
+
+    prefs = notification_prefs(user_id)[kind]
+    # No verified address means no mail, whatever the preference says: an
+    # unconfirmed address is one we have no reason to believe belongs to the
+    # person who typed it, and notifications about their matches are exactly
+    # what must not go to it.
+    mailable = prefs["email"] and person["email"] and person["email_verified_at"]
+
+    new_id = db.insert_returning_id(
+        """
+        INSERT INTO notifications
+            (user_id, kind, title, body, url, dedupe_key, email_due_at)
+        VALUES (?, ?, ?, ?, ?, ?,
+                CASE WHEN ? THEN NOW() + (? * INTERVAL '1 minute') END)
+        """,
+        (user_id, kind, title, body, url, dedupe_key,
+         bool(mailable), NOTIFY_EMAIL_DELAY_MINUTES),
+    )
+    db.commit()
+
+    if not prefs["push"]:
+        # Retire it from the push queue rather than leaving the task to
+        # rediscover a row it will never send, every run, for an hour.
+        db.execute("UPDATE notifications SET pushed_at = NOW() WHERE id = ?",
+                   (new_id,))
+        db.commit()
+    elif push_now:
+        deliver_push(new_id)
+
+    return new_id
+
+
+def deliver_push(notification_id):
+    """Push one ledger row, and stamp it if the push channel is done with it."""
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM notifications WHERE id = ? AND pushed_at IS NULL",
+        (notification_id,),
+    ).fetchone()
+    if row is None:
+        return False
+
+    settled = push_to_user(
+        row["user_id"],
+        {"id": row["id"], "kind": row["kind"], "title": row["title"],
+         "body": row["body"], "url": row["url"]},
+        # A conversation happening now is worth waking a sleeping phone for.
+        # An announcement about a new feature is not, and saying so is what
+        # keeps the push allowance for the notices that need it.
+        urgency="normal" if row["kind"] in ("message", "pool") else "low",
+    )
+    if settled:
+        db.execute("UPDATE notifications SET pushed_at = NOW() WHERE id = ?",
+                   (row["id"],))
+        db.commit()
+    return settled
+
+
+# --- the four things worth saying ---------------------------------------
+
+def notify_new_message(match_id, sender_id, recipient_id, body):
+    """"Someone wrote to you" -- once per conversation, not once per line.
+
+    The message itself is deliberately not in the notice. A push payload is
+    encrypted end to end and an email is not, and a preview on a lock screen
+    is readable by whoever is holding the phone: none of those are reasons to
+    put a stranger's first message where the person did not choose to open it.
+    """
+    sender = get_db().execute(
+        "SELECT COALESCE(p.name, u.username) AS name FROM users u "
+        "LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?", (sender_id,)
+    ).fetchone()
+    name = (sender["name"] if sender else None) or "Someone"
+    return notify(
+        recipient_id, "message",
+        f"{name} sent you a message",
+        "Open the chat to read it.",
+        url=url_for("chat", match_id=match_id),
+        dedupe_key=f"message:{match_id}",
+        push_now=True,
+    )
+
+
+def notify_pool_candidates(searcher_id):
+    """Tell people whose own criteria fit the search that just started.
+
+    Not a broadcast: a candidate qualifies only if their most recent search
+    and this one are mutually compatible by the same searches_compatible()
+    the matcher itself uses. If the two would not be paired, saying "someone
+    you could match with" is not true.
+
+    Nobody is named, in either direction. These two have not matched and may
+    never; the notice says a fact about the pool, not about a person.
+
+    Anyone already searching is skipped -- they are in the pool, so the
+    matcher will pair them, and being told about a candidate you are
+    already being matched against is noise.
+    """
+    db = get_db()
+    mine = db.execute(
+        """
+        SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level,
+               p.hair_color, p.eye_color, p.tattoos
+        FROM searches s JOIN profiles p ON p.user_id = s.user_id
+        WHERE s.user_id = ? AND s.status = 'waiting'
+        """,
+        (searcher_id,),
+    ).fetchone()
+    if mine is None:
+        return 0
+
+    others = db.execute(
+        f"""
+        SELECT s.*, p.gender, p.age, p.height_cm, p.body_type, p.fitness_level,
+               p.hair_color, p.eye_color, p.tattoos
+        FROM searches s
+        JOIN profiles p ON p.user_id = s.user_id
+        JOIN users u ON u.id = s.user_id
+        WHERE s.user_id <> ?
+          AND s.status <> 'waiting'
+          AND u.status = 'active' AND u.is_bot = FALSE
+          AND s.created_at > NOW() - (? * INTERVAL '1 day')
+          AND NOT EXISTS (
+              SELECT 1 FROM consents c
+              WHERE c.user_id = s.user_id AND c.purpose = ?
+                AND c.withdrawn_at IS NOT NULL
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM matches m
+              WHERE m.status IN ('timed', 'active')
+                AND (m.user_a = s.user_id OR m.user_b = s.user_id)
+          )
+          {NOT_BLOCKED_SQL}
+        ORDER BY s.created_at DESC
+        """,
+        (searcher_id, POOL_NOTICE_LOOKBACK_DAYS, CONSENT_SENSITIVE,
+         searcher_id, searcher_id),
+    ).fetchall()
+
+    told = 0
+    for other in others:
+        if told >= POOL_NOTICE_MAX_RECIPIENTS:
+            break
+        if not searches_compatible(mine, other):
+            continue
+        made = notify(
+            other["user_id"], "pool",
+            "Someone you could match with is searching",
+            "They are looking right now. Start a search to be paired.",
+            url=url_for("live_search"),
+            dedupe_key="pool",
+        )
+        if made:
+            told += 1
+    return told
+
+
+def announce_feature(title, body, url="/"):
+    """One notice to every active member. Returns how many were written.
+
+    Written as a single statement rather than a loop of notify() calls: this
+    is the one notification that goes to everybody at once, and doing it a
+    row at a time would put a query-per-member on an admin's request. The
+    email preference is resolved in the same statement, defaulting to
+    NOTIFY_DEFAULTS the same way notification_prefs() does -- which is why
+    that default is a parameter here and not written into the SQL.
+
+    The dedupe key makes a second press of the button a no-op rather than a
+    second notification.
+    """
+    key = "feature:" + hashlib.sha256(
+        (title + "\x00" + body + "\x00" + url).encode("utf-8")
+    ).hexdigest()[:16]
+    db = get_db()
+    written = db.execute(
+        """
+        INSERT INTO notifications
+            (user_id, kind, title, body, url, dedupe_key, email_due_at)
+        SELECT u.id, 'feature', ?, ?, ?, ?,
+               CASE WHEN COALESCE(np.email, ?)
+                      AND u.email IS NOT NULL AND u.email_verified_at IS NOT NULL
+                    THEN NOW() + (? * INTERVAL '1 minute') END
+        FROM users u
+        LEFT JOIN notification_prefs np
+               ON np.user_id = u.id AND np.kind = 'feature'
+        WHERE u.status = 'active' AND u.is_bot = FALSE
+          AND NOT EXISTS (
+              SELECT 1 FROM notifications n
+              WHERE n.user_id = u.id AND n.dedupe_key = ?
+          )
+        RETURNING id
+        """,
+        (title, body, url, key, NOTIFY_DEFAULTS["feature"]["email"],
+         NOTIFY_EMAIL_DELAY_MINUTES, key),
+    ).fetchall()
+    db.commit()
+    return len(written)
+
+
+def queue_reminders():
+    """The scheduled nudges. Returns {reason: how many}.
+
+    Both are once-and-then-quiet, which is the whole difference between a
+    reminder and a nag: the dedupe key is the reason, and its window is how
+    long that reason stays said.
+    """
+    db = get_db()
+    counts = {}
+
+    # Registered, confirmed, and still cannot search -- so the thing they
+    # signed up for has not happened yet, and the reason is fixable in a
+    # minute. Sent once: if they do not want to finish it, that is an answer.
+    stalled = db.execute(
+        """
+        SELECT u.id FROM users u
+        WHERE u.status = 'active' AND u.is_bot = FALSE
+          AND u.email_verified_at IS NOT NULL
+          AND u.created_at < NOW() - (? * INTERVAL '1 day')
+          AND NOT EXISTS (SELECT 1 FROM searches s WHERE s.user_id = u.id)
+        """,
+        (PROFILE_NUDGE_AFTER_DAYS,),
+    ).fetchall()
+    made = 0
+    for row in stalled:
+        state = profile_completeness(row["id"])
+        if state["ready"]:
+            continue
+        missing = ", ".join(state["missing"][:3]).lower()
+        if notify(row["id"], "reminder",
+                  "Your profile is nearly there",
+                  f"You still need {missing} before you can search.",
+                  url=url_for("edit_profile"),
+                  dedupe_key="reminder:profile"):
+            made += 1
+    counts["profile"] = made
+
+    # Nobody has searched in a long while. Once every DORMANT_NUDGE_EVERY_DAYS
+    # at the very most, which the dedupe window enforces rather than this
+    # query -- the query only has to find who is quiet.
+    quiet = db.execute(
+        """
+        SELECT u.id FROM users u
+        WHERE u.status = 'active' AND u.is_bot = FALSE
+          AND EXISTS (SELECT 1 FROM searches s WHERE s.user_id = u.id)
+          AND NOT EXISTS (
+              SELECT 1 FROM searches s
+              WHERE s.user_id = u.id
+                AND s.created_at > NOW() - (? * INTERVAL '1 day')
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM notifications n
+              WHERE n.user_id = u.id AND n.dedupe_key = 'reminder:dormant'
+                AND n.created_at > NOW() - (? * INTERVAL '1 day')
+          )
+        """,
+        (DORMANT_NUDGE_AFTER_DAYS, DORMANT_NUDGE_EVERY_DAYS),
+    ).fetchall()
+    made = 0
+    for row in quiet:
+        if notify(row["id"], "reminder",
+                  "Still here whenever you are",
+                  "People are searching in Maastricht most evenings. "
+                  "One search takes about a minute.",
+                  url=url_for("live_search"),
+                  dedupe_key="reminder:dormant"):
+            made += 1
+    counts["dormant"] = made
+    return counts
+
+
+# --- draining the two slow queues ---------------------------------------
+
+def flush_pending_push():
+    """Push everything the ledger still owes, and retire what it does not.
+
+    Everything except a chat message arrives here rather than being pushed
+    where it was made: a search that notifies twelve people would otherwise
+    hold that person's request open for twelve sequential calls to somebody
+    else's server.
+
+    Bounded to the last hour. A push about something that happened this
+    morning is not a push, and a queue with no floor is a queue that retries
+    a dead push service forever.
+    """
+    db = get_db()
+    pending = db.execute(
+        """
+        SELECT id, user_id, kind FROM notifications
+        WHERE pushed_at IS NULL AND created_at > NOW() - INTERVAL '1 hour'
+        ORDER BY created_at
+        LIMIT 500
+        """
+    ).fetchall()
+
+    sent = 0
+    for row in pending:
+        if not wants(row["user_id"], row["kind"], "push"):
+            db.execute("UPDATE notifications SET pushed_at = NOW() WHERE id = ?",
+                       (row["id"],))
+            db.commit()
+            continue
+        if deliver_push(row["id"]):
+            sent += 1
+    return sent
+
+
+def flush_notification_email():
+    """Mail what is still unread once its delay has run out. Returns a count.
+
+    One email per person per run, not one per notification: three things
+    happening in the same quarter of an hour is one thing to tell somebody
+    about. Anything already read is never selected at all, which is the whole
+    point of the delay -- most of these rows are read before they are due.
+    """
+    db = get_db()
+    due = db.execute(
+        """
+        SELECT n.*, u.email FROM notifications n
+        JOIN users u ON u.id = n.user_id
+        WHERE n.emailed_at IS NULL AND n.read_at IS NULL
+          AND n.email_due_at IS NOT NULL AND n.email_due_at <= NOW()
+          AND u.status = 'active' AND u.email IS NOT NULL
+          AND u.email_verified_at IS NOT NULL
+        ORDER BY n.user_id, n.created_at
+        LIMIT 500
+        """
+    ).fetchall()
+
+    by_person = {}
+    for row in due:
+        by_person.setdefault((row["user_id"], row["email"]), []).append(row)
+
+    sent = 0
+    for (user_id, address), rows in by_person.items():
+        subject = (rows[0]["title"] if len(rows) == 1
+                   else f"{len(rows)} things happened on Velvt")
+        items = "".join(
+            f"<p><strong>{escape(r['title'])}</strong><br>"
+            f"{escape(r['body'])}<br>"
+            f"<a href=\"{escape(app_url(r['url']))}\">Open it</a></p>"
+            for r in rows
+        )
+        ok = send_email(
+            address, subject,
+            items + f"""<hr>
+            <p style="font-size:12px;color:#666">
+              You are getting this because of your notification settings.
+              <a href="{escape(app_url(url_for('settings')))}">Change what
+              Velvt emails you</a>.
+            </p>""",
+        )
+        # Only a send that was accepted counts. One that was not stays due,
+        # so a mail provider outage delays these rather than losing them.
+        if not ok:
+            continue
+        db.execute(
+            "UPDATE notifications SET emailed_at = NOW() WHERE id = ANY(?)",
+            ([r["id"] for r in rows],),
+        )
+        db.commit()
+        sent += len(rows)
+    return sent
+
+
+def unread_notification_count(user_id):
+    """Cached on `g`, because base.html asks twice.
+
+    more_links() is rendered from the desktop footer and again inside the tab
+    bar's sheet -- the same list, said once, in two places -- so an uncached
+    count would be two queries on every page in the app.
+    """
+    cached = getattr(g, "unread_notifications", None)
+    if cached is not None:
+        return cached
+    row = get_db().execute(
+        "SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL",
+        (user_id,),
+    ).fetchone()
+    g.unread_notifications = row["n"] if row else 0
+    return g.unread_notifications
+
+
+# --- what the browser talks to ------------------------------------------
+
+@app.route("/notifications")
+@login_required
+def notifications_inbox():
+    """Everything that happened, whether or not any channel carried it.
+
+    Opening this marks the lot read. There is no per-item read state to
+    curate: this is a list of things that already happened elsewhere, and a
+    badge that outlives the glance that answered it is just a chore.
+    """
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT * FROM notifications WHERE user_id = ?
+        ORDER BY created_at DESC LIMIT 100
+        """,
+        (current_uid(),),
+    ).fetchall()
+    db.execute(
+        "UPDATE notifications SET read_at = NOW() WHERE user_id = ? AND read_at IS NULL",
+        (current_uid(),),
+    )
+    db.commit()
+    return render_template(
+        "notifications.html", rows=rows,
+        kind_labels={k: label for k, label, _ in NOTIFY_KINDS},
+        notification_retention_days=NOTIFICATION_RETENTION_DAYS)
+
+
+@app.route("/notifications/feed")
+@login_required
+def notifications_feed():
+    """What an open tab has not raised yet, plus the unread count.
+
+    This is the browser channel's entire transport. A tab cannot be pushed
+    to, so it asks -- and it asks only while it is visible, because a
+    background tab has nobody looking at it and a notification it raises is
+    one nobody asked for.
+
+    Read-only on purpose. The rows are marked seen by POST /notifications/seen
+    once the browser has actually raised them: marking them here would
+    silently swallow every notice for anyone who has not granted permission.
+    """
+    prefs = notification_prefs(current_uid())
+    allowed = [kind for kind in NOTIFY_KIND_KEYS if prefs[kind]["browser"]]
+    fresh = []
+    if allowed:
+        fresh = get_db().execute(
+            """
+            SELECT id, kind, title, body, url FROM notifications
+            WHERE user_id = ? AND seen_at IS NULL AND kind = ANY(?)
+              AND created_at > NOW() - INTERVAL '1 day'
+            ORDER BY created_at LIMIT 5
+            """,
+            (current_uid(), allowed),
+        ).fetchall()
+    return {
+        "unread": unread_notification_count(current_uid()),
+        "fresh": [dict(row) for row in fresh],
+    }
+
+
+@app.route("/notifications/seen", methods=["POST"])
+@login_required
+def notifications_seen():
+    """The browser reporting which notices it actually raised."""
+    ids = (request.get_json(silent=True) or {}).get("ids") or []
+    ids = [int(i) for i in ids if str(i).isdigit()][:20]
+    if ids:
+        db = get_db()
+        db.execute(
+            """
+            UPDATE notifications SET seen_at = NOW()
+            WHERE user_id = ? AND id = ANY(?) AND seen_at IS NULL
+            """,
+            (current_uid(), ids),
+        )
+        db.commit()
+    return {"ok": True}
+
+
+@app.route("/settings/notifications", methods=["POST"])
+@login_required
+def update_notification_prefs():
+    """One checkbox grid, saved whole. See save_notification_prefs()."""
+    chosen = {
+        kind: {channel: bool(request.form.get(f"{kind}.{channel}"))
+               for channel in NOTIFY_CHANNELS}
+        for kind in NOTIFY_KIND_KEYS
+    }
+    save_notification_prefs(current_uid(), chosen)
+    flash("Notification settings saved.")
+    return redirect(url_for("settings"))
+
+
+@app.route("/push/subscribe", methods=["POST"])
+@login_required
+@rate_limited("push_subscribe", limit=20, window_seconds=3600, by="user")
+def push_subscribe():
+    """Store the PushSubscription a browser just minted.
+
+    Keyed on the endpoint rather than on (user, endpoint): an endpoint
+    identifies one browser installation, service-wide. Signing in as someone
+    else on a shared laptop must *move* the subscription, or the previous
+    account's notifications would keep arriving on a device that is no longer
+    theirs.
+    """
+    data = request.get_json(silent=True) or {}
+    keys = data.get("keys") or {}
+    endpoint, p256dh, auth = data.get("endpoint"), keys.get("p256dh"), keys.get("auth")
+    if not (endpoint and p256dh and auth):
+        return {"error": "incomplete subscription"}, 400
+    if not str(endpoint).startswith("https://"):
+        return {"error": "endpoint must be https"}, 400
+
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT (endpoint) DO UPDATE SET
+            user_id = excluded.user_id, p256dh = excluded.p256dh,
+            auth = excluded.auth, user_agent = excluded.user_agent,
+            failures = 0
+        """,
+        (current_uid(), endpoint, p256dh, auth,
+         request.headers.get("User-Agent", "")[:300]),
+    )
+    db.commit()
+    return {"ok": True}
+
+
+@app.route("/push/unsubscribe", methods=["POST"])
+@login_required
+def push_unsubscribe():
+    endpoint = (request.get_json(silent=True) or {}).get("endpoint", "")
+    db = get_db()
+    db.execute(
+        "DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?",
+        (current_uid(), endpoint),
+    )
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/sw.js")
+def service_worker():
+    """The service worker, served from the root so its scope is the whole app.
+
+    A worker registered from /static/ may only control /static/, and a push
+    handler that cannot open the page it is notifying about is no use. The
+    alternative is a Service-Worker-Allowed header on a static file, which is
+    the same thing with a second place to forget it.
+
+    Not cached: this file decides what every future push looks like, and a
+    year-old copy in a browser is not something a deploy can reach.
+    """
+    return Response(
+        render_template("sw.js"),
+        mimetype="text/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+    )
+
+
+@app.get("/manifest.webmanifest")
+def web_manifest():
+    """Present because iOS grants push only to an installed web app.
+
+    Safari on iOS will not hand out a push subscription to a page in a tab,
+    however many permissions the person grants -- it has to have been added
+    to the home screen, and that needs a manifest with display: standalone.
+    Everywhere else this is a nicety; there it is the difference between the
+    push channel existing and not.
+    """
+    icon = url_for("static", filename="velvt-icon.svg")
+    return {
+        "name": "Velvt",
+        "short_name": "Velvt",
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#12081F",
+        "theme_color": "#12081F",
+        "icons": [{"src": icon, "sizes": "any", "type": "image/svg+xml",
+                   "purpose": "any"}],
+    }
+
+
+@app.route("/admin/announce", methods=["GET", "POST"])
+@admin_required
+def admin_announce():
+    """Tell everyone about something new. English only, like the rest of /admin.
+
+    A preview step would be theatre -- the form *is* the message -- but the
+    dedupe key means a double submit writes nothing the second time, which is
+    the failure this actually needed protecting from.
+    """
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        body = request.form.get("body", "").strip()
+        link = request.form.get("url", "").strip() or "/"
+        if not title:
+            flash("An announcement needs a title.")
+        elif not link.startswith("/"):
+            # Same rule as the language switcher's redirect: this URL is
+            # opened by a service worker on someone else's device, and an
+            # absolute one would make this form an open redirect with a
+            # push notification attached.
+            flash("The link must be a path on this site, starting with /.")
+        else:
+            made = announce_feature(title, body, link)
+            log_admin_action(current_uid(), None, "announce", title)
+            flash(f"Announced to {made} members."
+                  if made else "Nobody new to tell — that announcement already went out.")
+            return redirect(url_for("admin_announce"))
+
+    recent = get_db().execute(
+        """
+        SELECT title, body, url, MIN(created_at) AS sent_at, COUNT(*) AS people
+        FROM notifications WHERE kind = 'feature'
+        GROUP BY title, body, url ORDER BY MIN(created_at) DESC LIMIT 10
+        """
+    ).fetchall()
+    return render_template("admin_announce.html", recent=recent)
+
+
+@app.post("/tasks/notifications")
+def run_notification_tasks():
+    """The slow half of delivery, on a clock of its own.
+
+    Separate from /tasks/purge-deletions because the cadences genuinely
+    differ, not because it was easier: deletions are a daily job and mail
+    that waits a day is not a notification. Every few minutes is right here.
+
+    Same shared secret, same reason -- the caller is a scheduler, not a
+    browser with a session.
+    """
+    if not TASK_TOKEN:
+        return "task endpoint disabled: TASK_TOKEN is not set", 503
+    if not secrets.compare_digest(request.headers.get("X-Task-Token", ""), TASK_TOKEN):
+        return "forbidden", 403
+    # Reminders first, so anything they raise goes out on this same run
+    # rather than waiting for the next one.
+    reminders = queue_reminders()
+    return {"reminders": reminders,
+            "pushed": flush_pending_push(),
+            "emailed": flush_notification_email()}, 200
 
 
 @app.route("/report/<int:user_id>", methods=["GET", "POST"])
@@ -4501,6 +5577,14 @@ def save_search(
         ),
     )
     db.commit()
+
+    # Here rather than at the two call sites: both screens can start a search,
+    # and a third one added later would silently not tell anybody. Best effort
+    # -- a notification failing must never cost somebody their search.
+    try:
+        notify_pool_candidates(user_id)
+    except Exception:
+        app.logger.exception("could not notify the pool about a new search")
 
 
 def touch_search(user_id):
@@ -6325,6 +7409,15 @@ def send_message(match_id):
         (match_id, sender_id, body),
     )
     db.commit()
+
+    # The message is committed before anyone is told about it, and telling
+    # them cannot fail the send: the point of a notification is that the
+    # thing already happened.
+    recipient_id = match["user_b"] if sender_id == match["user_a"] else match["user_a"]
+    try:
+        notify_new_message(match_id, sender_id, recipient_id, body)
+    except Exception:
+        app.logger.exception("could not raise a notification for message %s", new_id)
 
     if wants_json:
         row = db.execute(
