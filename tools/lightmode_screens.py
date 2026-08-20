@@ -1302,10 +1302,10 @@ LANDING_CSS = """
 .vl .film::after {
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(180deg,
-    var(--scrim) 0%,
-    color-mix(in srgb, var(--scrim) 86%, transparent) 22%,
-    color-mix(in srgb, var(--scrim) 60%, transparent) 38%,
-    color-mix(in srgb, var(--scrim) 54%, transparent) 50%,
+    color-mix(in srgb, var(--scrim) 94%, transparent) 0%,
+    color-mix(in srgb, var(--scrim) 72%, transparent) 22%,
+    color-mix(in srgb, var(--scrim) 50%, transparent) 38%,
+    color-mix(in srgb, var(--scrim) 44%, transparent) 50%,
     color-mix(in srgb, var(--scrim) 10%, transparent) 60%,
     color-mix(in srgb, var(--scrim) 0%, transparent) 66%,
     color-mix(in srgb, var(--scrim) 0%, transparent) 93%,
