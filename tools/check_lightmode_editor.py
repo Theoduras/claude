@@ -302,12 +302,14 @@ with sync_playwright() as p:
            })""")
     ok(moved[0] != moved[1], "the fill travels rather than sitting still (%s)" % moved)
 
-    # ---- the film is a band, and it clears the copy and the buttons ------
-    # Three layouts failed here before this check existed, all of them
-    # looking fine in a still of the first frame. Full-bleed on the floor of
-    # the screen put the arms under the two buttons -- two heads and no hug.
-    # Hung from the top it lost the faces behind the headline. Both only show
-    # up at the end of the film, so the check drives to the embrace first.
+    # ---- the film shows the whole frame, and clears the buttons ----------
+    # Three layouts failed here before this check existed, all of them looking
+    # fine in a still of the first frame. `cover` scaled past 1:1 and cut
+    # through both faces. Full-bleed on the floor of the screen put the arms
+    # under the two buttons -- two heads and no hug. Cropping to a band around
+    # the embrace took the hands off instead, because the arms hang nearly to
+    # the hem of the frame. All of it only shows at the end of the film, so
+    # the check drives to the embrace before it measures anything.
     film = page.evaluate(
         """async () => {
           const s = document.querySelector('.vl[data-screen="landing"]');
@@ -329,6 +331,14 @@ with sync_playwright() as p:
                   inside: band.top >= screen.top - 1 && band.bottom <= screen.bottom + 1,
                   tall: (band.height / screen.height),
                   wide: Math.abs(band.width - screen.width) < 2,
+                  // Where the frame is actually painted. `contain` fits the
+                  // tighter of the two axes, and which one that is has
+                  // already flipped once here -- so it is computed, not
+                  // assumed. The slack sits at the top, so the drawn rect
+                  // starts at the layer's top, and its bottom is the number
+                  // that decides whether the arms clear the buttons.
+                  drawnBottom: (band.top - screen.top) + Math.min(
+                      band.width * v.videoHeight / v.videoWidth, band.height),
                   // Where the scrim actually lets the film through, read off
                   // the gradient rather than assumed: the first and last stop
                   // whose alpha is zero. Chromium prints a fully transparent
@@ -360,12 +370,18 @@ with sync_playwright() as p:
         ok(film["clear"]["top"] >= film["copyEnds"],
            "and opens below the last line of copy (open from %dpx, copy ends %dpx)"
            % (film["clear"]["top"], film["copyEnds"]))
-    ok(film["inside"] and film["wide"], "the band spans the screen and stays inside it")
-    ok(0.3 < film["tall"] < 0.6,
-       "it is a band, not the whole page (%d%% of the screen)"
-       % round(100 * film["tall"]))
-    ok(film["fit"] == "cover",
-       "cropped to the part of the shot that carries the message (%s)" % film["fit"])
+        ok(film["clear"]["bottom"] - film["clear"]["top"] > 60,
+           "with a real window, not a seam (%dpx)"
+           % (film["clear"]["bottom"] - film["clear"]["top"]))
+    ok(film["inside"] and film["wide"], "the layer spans the screen and stays inside it")
+    ok(film["fit"] == "contain",
+       "the whole frame is shown, nothing cropped (%s)" % film["fit"])
+    # The arms hang almost to the hem of the frame and they are what the shot
+    # is about, so the *drawn* rectangle -- not the layer -- has to finish
+    # above the buttons. Bottom-anchoring it put them underneath.
+    ok(film["drawnBottom"] <= film["ctaStarts"],
+       "the film finishes above the buttons (%dpx, buttons at %dpx)"
+       % (film["drawnBottom"], film["ctaStarts"]))
     # The film's alpha is real, so anything painted behind it shows through --
     # and a still of a *different* moment of the same shot came through as a
     # second, offset pair. The still belongs on the video's own poster, which
