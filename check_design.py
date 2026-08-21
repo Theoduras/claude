@@ -32,6 +32,7 @@ def clear():
     with app.test_request_context():
         db = A.get_db()
         db.execute("DELETE FROM design_tokens")
+        db.execute("DELETE FROM app_settings WHERE key = 'design_mode'")
         db.commit()
     A.design_overrides(force=True)
 
@@ -43,15 +44,26 @@ def sheet():
         return dict(A._render_stylesheet())
 
 
-def store(name, value):
+def set_mode(mode):
+    with app.test_request_context():
+        db = A.get_db()
+        db.execute(
+            """INSERT INTO app_settings (key, value) VALUES ('design_mode', ?)
+               ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""",
+            (mode,))
+        db.commit()
+    A.design_overrides(force=True)
+
+
+def store(name, value, mode="dark"):
     with app.test_request_context():
         db = A.get_db()
         db.execute(
             """
-            INSERT INTO design_tokens (name, value) VALUES (?, ?)
-            ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value
+            INSERT INTO design_tokens (mode, name, value) VALUES (?, ?, ?)
+            ON CONFLICT (mode, name) DO UPDATE SET value = EXCLUDED.value
             """,
-            (name, value),
+            (mode, name, value),
         )
         db.commit()
     A.design_overrides(force=True)
@@ -198,8 +210,11 @@ client.post("/admin/design",
 with app.test_request_context():
     saved = A.get_db().execute(
         "SELECT id, tokens FROM design_palettes WHERE name = 'probe-one'").fetchone()
-check("a palette stores what was live", saved is not None
-      and saved["tokens"].get("--violet") == "#010203", saved and saved["tokens"])
+check("a palette stores what was live, and which world it was for",
+      saved is not None
+      and saved["tokens"].get("mode") == "dark"
+      and saved["tokens"].get("tokens", {}).get("--violet") == "#010203",
+      saved and saved["tokens"])
 
 # Changing the live design must not change the saved palette.
 store("--violet", "#0A0B0C")
@@ -230,8 +245,9 @@ with app.test_request_context():
     db = A.get_db()
     db.execute(
         "INSERT INTO design_palettes (name, tokens) VALUES ('probe-bad', ?)",
-        (A.json.dumps({"--violet": "red; } body { display: none",
-                       "--not-a-token": "#123456"}),),
+        (A.json.dumps({"mode": "dark",
+                       "tokens": {"--violet": "red; } body { display: none",
+                                  "--not-a-token": "#123456"}}),),
     )
     bad = db.execute(
         "SELECT id FROM design_palettes WHERE name = 'probe-bad'").fetchone()["id"]
@@ -246,6 +262,36 @@ with app.test_request_context():
     db = A.get_db()
     db.execute("DELETE FROM design_palettes WHERE name LIKE 'probe-%'")
     db.commit()
+
+# --- the two worlds ------------------------------------------------------
+clear()
+check("the light block was parsed out of the stylesheet",
+      len(A.DESIGN_MODE_DEFAULTS.get("light", {})) > 8,
+      len(A.DESIGN_MODE_DEFAULTS.get("light", {})))
+check("dark and light disagree about the page ground",
+      A.DESIGN_MODE_DEFAULTS["light"]["--ink"] != A.DESIGN_DEFAULTS["--ink"])
+check("but agree about anything structural, by falling through",
+      A._mode_defaults("light")["--radius"] == A.DESIGN_DEFAULTS["--radius"])
+
+check("the site starts in dark", A.design_mode() == "dark", A.design_mode())
+set_mode("light")
+check("and the switch is honoured", A.design_mode() == "light")
+check("without changing the stylesheet's bytes",
+      sheet()["body"] == base["body"],
+      "both worlds are always in the sheet; <html> decides which paints")
+set_mode("dark")
+
+# An override in one world must not leak into the other.
+store("--ink", "#111111", mode="dark")
+store("--ink", "#EEEEEE", mode="light")
+body = sheet()["body"]
+check("the dark override lands on :root",
+      "\n:root {\n  --ink: #111111;" in body)
+check("the light override lands on the light block only",
+      '[data-mode="light"] {\n  --ink: #EEEEEE;' in body)
+check("and neither is written into the other",
+      body.count("#111111") == 1 and body.count("#EEEEEE") == 1)
+clear()
 
 # --- the preview frame can actually frame ---------------------------------
 headers = client.get("/faq").headers

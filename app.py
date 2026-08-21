@@ -1535,6 +1535,25 @@ CREATE TABLE IF NOT EXISTS design_tokens (
     updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL
 );
 
+-- Overrides are per mode: the same token name has a different right answer in
+-- each world, so one column could only ever hold one of them. Added rather
+-- than declared in the CREATE above because the table shipped without it.
+ALTER TABLE design_tokens ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'dark';
+
+-- The primary key has to move with it. Dropping the old one by its generated
+-- name is why this is spelled out rather than left to a fresh CREATE: an
+-- existing deployment already has rows keyed on name alone.
+ALTER TABLE design_tokens DROP CONSTRAINT IF EXISTS design_tokens_pkey;
+ALTER TABLE design_tokens ADD PRIMARY KEY (mode, name);
+
+-- One row, one column, the app's own switches. A table rather than an
+-- environment variable because the point is that it changes without a deploy.
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Named palettes, the Restyler's "saved states". A palette is a whole set of
 -- overrides under a name, so a direction can be parked and come back later
 -- rather than being the thing you were too nervous to overwrite. Restoring
@@ -2129,6 +2148,8 @@ def inject_user():
         # A callable, not a value: base.html is rendered for every response,
         # and the sheet only needs rendering once per process.
         "css_digest": lambda: _render_stylesheet()["digest"],
+        # Which world <html> declares. The stylesheet always carries both.
+        "design_mode": design_mode,
         # Global rather than passed per-route: whether a location control
         # renders at all comes up in the profile form, the search wizard and
         # the criteria screen alike.
@@ -2448,16 +2469,41 @@ def admin_design():
     year.
     """
     db = get_db()
+    # Which world is being edited. Independent of which one the site is
+    # painting in: designing the light palette before switching to it is the
+    # normal way round, and an editor that could only edit the live mode
+    # would make that impossible.
+    editing = request.values.get("mode", "")
+    if editing not in DESIGN_MODES:
+        editing = design_mode()
+
     if request.method == "POST":
         action = request.form.get("action", "")
 
+        if action == "set_mode":
+            wanted = request.form.get("live_mode", "")
+            if wanted in DESIGN_MODES:
+                db.execute(
+                    """
+                    INSERT INTO app_settings (key, value) VALUES ('design_mode', ?)
+                    ON CONFLICT (key) DO UPDATE
+                       SET value = EXCLUDED.value, updated_at = NOW()
+                    """,
+                    (wanted,),
+                )
+                db.commit()
+                design_overrides(force=True)
+                security_event("design", "mode", user_id=current_uid(), detail=wanted)
+                flash(t("msg.design_mode_live") % wanted)
+            return redirect(url_for("admin_design", mode=editing))
+
         if action == "reset":
-            db.execute("DELETE FROM design_tokens")
+            db.execute("DELETE FROM design_tokens WHERE mode = ?", (editing,))
             db.commit()
             design_overrides(force=True)
-            security_event("design", "reset", user_id=current_uid())
+            security_event("design", "reset", user_id=current_uid(), detail=editing)
             flash(t("msg.design_reset"))
-            return redirect(url_for("admin_design"))
+            return redirect(url_for("admin_design", mode=editing))
 
         if action == "save_as":
             name = request.form.get("palette_name", "").strip()[:60]
@@ -2474,13 +2520,16 @@ def admin_design():
                 ON CONFLICT (name) DO UPDATE
                    SET tokens = EXCLUDED.tokens, created_at = NOW()
                 """,
-                (name, json.dumps(design_overrides(force=True)), current_uid()),
+                (name,
+                 json.dumps({"mode": editing,
+                             "tokens": design_overrides(force=True)["values"][editing]}),
+                 current_uid()),
             )
             db.commit()
             security_event("design", "palette_saved", user_id=current_uid(),
                            detail=name)
             flash(t("msg.design_palette_saved") % name)
-            return redirect(url_for("admin_design"))
+            return redirect(url_for("admin_design", mode=editing))
 
         if action in ("restore", "delete"):
             # Parsed rather than passed through: Postgres refuses a non-numeric
@@ -2501,26 +2550,35 @@ def admin_design():
                 db.execute("DELETE FROM design_palettes WHERE name = ?", (row["name"],))
                 db.commit()
                 flash(t("msg.design_palette_deleted") % row["name"])
-                return redirect(url_for("admin_design"))
+                return redirect(url_for("admin_design", mode=editing))
+            # A palette remembers which world it was designed for and goes
+            # back there, whatever is being edited now: restoring a light
+            # palette into the dark mode would silently produce a third
+            # design that is neither.
+            stored = row["tokens"] or {}
+            into = stored.get("mode", "dark")
+            if into not in DESIGN_MODES:
+                into = "dark"
+            tokens = stored.get("tokens", stored if "mode" not in stored else {})
             # Replace, never merge: a restore that kept whatever happened to
             # be live alongside it would land on a design nobody made.
-            db.execute("DELETE FROM design_tokens")
-            for name, value in (row["tokens"] or {}).items():
+            db.execute("DELETE FROM design_tokens WHERE mode = ?", (into,))
+            for name, value in (tokens or {}).items():
                 if name in DESIGN_DEFAULTS and design_value_ok(str(value)):
                     db.execute(
-                        "INSERT INTO design_tokens (name, value, updated_by)"
-                        " VALUES (?, ?, ?)",
-                        (name, str(value), current_uid()),
+                        "INSERT INTO design_tokens (mode, name, value, updated_by)"
+                        " VALUES (?, ?, ?, ?)",
+                        (into, name, str(value), current_uid()),
                     )
             db.commit()
             design_overrides(force=True)
             security_event("design", "palette_restored", user_id=current_uid(),
-                           detail=row["name"])
+                           detail=f"{row['name']} -> {into}")
             flash(t("msg.design_palette_restored") % row["name"])
-            return redirect(url_for("admin_design"))
+            return redirect(url_for("admin_design", mode=into))
 
         changed, refused = 0, []
-        for group, tokens in design_editable():
+        for _group, tokens in design_editable(editing):
             for name, _label, default, _is_colour in tokens:
                 if name not in request.form:
                     continue
@@ -2529,21 +2587,23 @@ def admin_design():
                 # the same string: otherwise every save would pin the whole
                 # palette and a later deploy could never change a colour.
                 if not value or value == default:
-                    db.execute("DELETE FROM design_tokens WHERE name = ?", (name,))
+                    db.execute(
+                        "DELETE FROM design_tokens WHERE mode = ? AND name = ?",
+                        (editing, name))
                     continue
                 if not design_value_ok(value):
                     refused.append(name[2:])
                     continue
                 db.execute(
                     """
-                    INSERT INTO design_tokens (name, value, updated_by)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT (name) DO UPDATE
+                    INSERT INTO design_tokens (mode, name, value, updated_by)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT (mode, name) DO UPDATE
                        SET value = EXCLUDED.value,
                            updated_at = NOW(),
                            updated_by = EXCLUDED.updated_by
                     """,
-                    (name, value, current_uid()),
+                    (editing, name, value, current_uid()),
                 )
                 changed += 1
         db.commit()
@@ -2551,23 +2611,27 @@ def admin_design():
         # others catch up within DESIGN_CACHE_SECONDS.
         design_overrides(force=True)
         security_event("design", "saved", user_id=current_uid(),
-                       detail=f"{changed} token(s)")
+                       detail=f"{changed} token(s) in {editing}")
         if refused:
             flash(t("msg.design_refused") % ", ".join(refused))
         else:
             flash(t("msg.design_saved"))
-        return redirect(url_for("admin_design"))
+        return redirect(url_for("admin_design", mode=editing))
 
     palettes = db.execute(
         "SELECT id, name, created_at FROM design_palettes ORDER BY created_at DESC"
     ).fetchall()
+    state = design_overrides(force=True)
     return render_template(
         "admin_design.html",
-        groups=design_editable(),
-        overrides=design_overrides(force=True),
+        groups=design_editable(editing),
+        overrides=state["values"][editing],
         locked=sorted(DESIGN_LOCKED),
         palettes=palettes,
         preview=DESIGN_PREVIEW,
+        editing=editing,
+        live_mode=state["mode"],
+        modes=DESIGN_MODES,
     )
 
 
@@ -7961,16 +8025,50 @@ def _parse_root_tokens():
     return {name: value.strip() for name, value in found}
 
 
+def _parse_mode_tokens():
+    """The per-mode :root blocks, e.g. :root[data-mode="light"]."""
+    path = os.path.join(app.root_path, "templates", "velvt.css")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            css = fh.read()
+    except OSError:
+        return {}
+    out = {}
+    for mode, block in re.findall(
+            r':root\[data-mode="(\w+)"\]\s*\{(.*?)\n\s*\}', css, re.S):
+        out[mode] = {
+            name: value.strip() for name, value in
+            re.findall(r"^\s*(--[\w-]+)\s*:\s*([^;]+);", block, re.M)
+        }
+    return out
+
+
 DESIGN_DEFAULTS = _parse_root_tokens()
+DESIGN_MODE_DEFAULTS = _parse_mode_tokens()
 
 
-def design_editable():
+def _mode_defaults(mode):
+    """The stylesheet's own answer for a mode, before any admin override.
+
+    Dark is the bare :root. Light is :root[data-mode="light"] laid over it --
+    the light block only restates the colours that differ, so everything
+    structural (radii, faces, the content measure) falls through to the same
+    value in both worlds, and the editor must show that rather than a blank.
+    """
+    if mode == "dark":
+        return dict(DESIGN_DEFAULTS)
+    merged = dict(DESIGN_DEFAULTS)
+    merged.update(DESIGN_MODE_DEFAULTS.get(mode, {}))
+    return merged
+
+
+def design_editable(mode="dark"):
     """The tokens the editor offers, grouped, in stylesheet order.
 
     Returns [(group, [(name, label, default, is_colour), ...]), ...].
     """
     buckets = {}
-    for name, default in DESIGN_DEFAULTS.items():
+    for name, default in _mode_defaults(mode).items():
         if name in DESIGN_LOCKED:
             continue
         group = "Other"
@@ -8018,11 +8116,32 @@ DESIGN_CACHE_SECONDS = 10
 # is uptime-based on Linux and can legitimately be a small number, which
 # would make a cold process treat its empty cache as fresh and serve the
 # shipped palette for the first few seconds after every scale-up.
-_DESIGN_CACHE = {"at": None, "values": {}}
+_DESIGN_CACHE = {"at": None,
+                 "values": {"values": {"dark": {}, "light": {}}, "mode": "dark"}}
+
+
+DESIGN_MODES = ("dark", "light")
+
+
+def _design_read():
+    """Everything the stylesheet needs, in one trip: overrides and the mode."""
+    rows = get_db().execute(
+        "SELECT mode, name, value FROM design_tokens").fetchall()
+    values = {mode: {} for mode in DESIGN_MODES}
+    for row in rows:
+        # Filtered against the stylesheet's own :root, so a token that has
+        # been renamed or removed in the file stops being emitted rather than
+        # lingering as dead CSS nobody can see to delete.
+        if row["mode"] in values and row["name"] in DESIGN_DEFAULTS:
+            values[row["mode"]][row["name"]] = row["value"]
+    setting = get_db().execute(
+        "SELECT value FROM app_settings WHERE key = 'design_mode'").fetchone()
+    mode = setting["value"] if setting and setting["value"] in DESIGN_MODES else "dark"
+    return {"values": values, "mode": mode}
 
 
 def design_overrides(force=False):
-    """The admin's token edits, cached per instance.
+    """The admin's token edits and the live mode, cached per instance.
 
     Failures are swallowed and the last known values kept: a design table
     that is briefly unreachable must not take the entire stylesheet down
@@ -8034,36 +8153,44 @@ def design_overrides(force=False):
     if fresh and not force:
         return _DESIGN_CACHE["values"]
     try:
-        rows = get_db().execute("SELECT name, value FROM design_tokens").fetchall()
+        _DESIGN_CACHE["values"] = _design_read()
     except Exception:
         return _DESIGN_CACHE["values"]
-    # Filtered against the stylesheet's own :root, so a token that has been
-    # renamed or removed in the file stops being emitted rather than
-    # lingering as dead CSS nobody can see to delete.
-    _DESIGN_CACHE["values"] = {
-        r["name"]: r["value"] for r in rows if r["name"] in DESIGN_DEFAULTS
-    }
     _DESIGN_CACHE["at"] = now
     return _DESIGN_CACHE["values"]
+
+
+def design_mode():
+    """Which world the site is painting in right now: "dark" or "light"."""
+    return design_overrides().get("mode", "dark")
 
 
 def _render_stylesheet():
     base = _STYLESHEET.get("body")
     if base is None:
         base = _STYLESHEET["body"] = render_template("velvt.css")
-    overrides = design_overrides()
-    # The stamp is the cache key: same overrides, same bytes, same digest.
-    stamp = tuple(sorted(overrides.items()))
+    state = design_overrides()
+    values = state.get("values", {})
+    # The stamp is the cache key: same overrides, same bytes, same digest. The
+    # mode is not in it -- both worlds are always in the sheet, and which one
+    # paints is decided by the attribute on <html>, so switching mode does not
+    # need a new stylesheet.
+    stamp = tuple(
+        (mode, tuple(sorted(values.get(mode, {}).items()))) for mode in DESIGN_MODES)
     if _SHEET.get("stamp") != stamp or "body" not in _SHEET:
         body = base
-        if overrides:
-            # Appended rather than merged into :root. Same specificity, later
-            # wins, and the file's own value stays visible above it -- so
-            # "what did the admin change?" is answerable by reading the CSS,
-            # which it would not be if the override were written in place.
-            body += "\n\n/* ---- set in /admin/design ---- */\n:root {\n"
-            body += "".join(
-                "  %s: %s;\n" % (name, value) for name, value in stamp)
+        for mode, pairs in stamp:
+            if not pairs:
+                continue
+            # Appended rather than merged into the mode's own block. Same
+            # specificity, later wins, and the file's own value stays visible
+            # above it -- so "what did the admin change?" is answerable by
+            # reading the CSS, which it would not be if the override were
+            # written in place.
+            scope = ":root" if mode == "dark" else ':root[data-mode="%s"]' % mode
+            body += "\n\n/* ---- %s, set in /admin/design ---- */\n%s {\n" % (
+                mode, scope)
+            body += "".join("  %s: %s;\n" % (name, value) for name, value in pairs)
             body += "}\n"
         _SHEET["stamp"] = stamp
         _SHEET["body"] = body

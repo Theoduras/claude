@@ -15,6 +15,31 @@
     </p>
   </header>
 
+  <div class="dsg-modes">
+    <div class="dsg-mode-pick">
+      <span class="dsg-screen-group">Editing</span>
+      {% for m in modes %}
+      <a class="dsg-chip {% if m == editing %}is-on{% endif %}"
+         href="{{ url_for('admin_design', mode=m) }}">{{ m|capitalize }}</a>
+      {% endfor %}
+    </div>
+    <div class="dsg-mode-live">
+      <span class="hint">The site is painting in <strong>{{ live_mode }}</strong>.</span>
+      {% for m in modes %}{% if m != live_mode %}
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="mode" value="{{ editing }}">
+        <input type="hidden" name="live_mode" value="{{ m }}">
+        <button class="btn btn-small" type="submit" name="action" value="set_mode"
+                formnovalidate
+                onclick="return confirm('Switch the whole site to {{ m }} for everyone?')">
+          Go {{ m }}
+        </button>
+      </form>
+      {% endif %}{% endfor %}
+    </div>
+  </div>
+
   <div class="dsg-grid">
     {# ---------------- left: the real app, in a frame ---------------- #}
     <section class="dsg-preview">
@@ -60,8 +85,9 @@
 
       <form method="post" id="dsg-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="mode" value="{{ editing }}">
 
-        <h2 class="dsg-h2">Palette</h2>
+        <h2 class="dsg-h2">Palette — {{ editing }}</h2>
         {% for group, tokens in groups %}
         <div class="dsg-group">
           <p class="dsg-group-name">{{ group }}</p>
@@ -118,6 +144,7 @@
           <span class="hint">{{ p.created_at.strftime('%b %d %H:%M') }}</span>
           <form method="post" class="dsg-palette-acts">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="mode" value="{{ editing }}">
             <input type="hidden" name="palette_id" value="{{ p.id }}">
             <button class="btn btn-small" type="submit" name="action" value="restore"
                     onclick="return confirm('Replace the live design with {{ p.name }}?')">
@@ -147,6 +174,11 @@
   .dsg { max-width: 100%; }
   .dsg-head { margin-bottom: 1.4rem; }
   .dsg-head h1 { margin: 0.4rem 0 0.6rem; }
+  .dsg-modes { display: flex; gap: 1.4rem; align-items: center; flex-wrap: wrap;
+               margin-bottom: 1.2rem; padding-bottom: 1rem;
+               border-bottom: 1px solid var(--ink-hairline); }
+  .dsg-mode-pick, .dsg-mode-live { display: flex; gap: 0.5rem; align-items: center; }
+  a.dsg-chip { text-decoration: none; display: inline-block; }
   .dsg-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
               gap: 1.6rem; align-items: start; }
   .dsg-h2 { font-size: 1rem; margin: 1.6rem 0 0.6rem; }
@@ -231,9 +263,16 @@
   // The same :root block the server appends to the stylesheet on save, so
   // what the frame shows while you drag is the mechanism that will paint
   // every page -- not an approximation of it.
+  var editingMode = {{ editing|tojson }};
+
   function paintFrame() {
     var doc = frame.contentDocument;
     if (!doc || !doc.head) return;          // cross-origin or not loaded yet
+    // The frame shows the world being edited, which is not necessarily the
+    // one the site is in. Designing light before switching to it is the
+    // normal order, and a preview stuck on the live mode would show the
+    // wrong palette for the entire time that work is going on.
+    doc.documentElement.setAttribute("data-mode", editingMode);
     var tag = doc.getElementById("dsg-preview-style");
     if (!tag) {
       tag = doc.createElement("style");

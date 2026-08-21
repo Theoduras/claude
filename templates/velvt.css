@@ -84,7 +84,64 @@
 
       /* fiber grain — inline so no external request is needed */
       --nap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+    
+      --gleam:       #FFFFFF;  /* the light side of this mode: inner glows, gleams */
+      --shade:       #000000;  /* its dark side: shadows, scrims, wells */
     }
+
+    /* ==================================================================
+       The light world.
+
+       Same token names, different answers. This is only possible because
+       every colour in this file is now a token or derived from one
+       (tools/tokenise_css.py) -- while 192 of them were literals, a second
+       palette repainted the tokens and left the literals painting the first
+       design underneath.
+
+       The values are the light column of the Restyler's own palette, which
+       is the design that was already reviewed, rather than a fresh guess at
+       one. Where a name encodes a *dark* role the light answer inverts the
+       role rather than the colour: `--violet-deep` is a ground behind violet
+       content, so on a light page it is a pale wash and not a dark one. A
+       token named for what it paints survives that; one named for its colour
+       would not have.
+
+       Two are worth stating outright:
+
+       --champagne is the light on the pile, and a pale gold on a near-white
+       page is invisible. It becomes the deep gold the Restyler uses for the
+       same job -- gold as *text* rather than gold as a highlight.
+
+       --shade is not black here. A shadow works by darkening what is under
+       it, and on a light ground pure black reads as a hole rather than as
+       lift; #242424 at the same alphas is the Restyler's own elevation.
+       ================================================================== */
+    :root[data-mode="light"] {
+      --ink:          #F4F3F0;
+      --ink-raised:   #FBFAF8;
+      --ink-hairline: #E5E3DE;
+
+      --violet:       #6D28D9;
+      --violet-crest: #8B5CF6;
+      --violet-deep:  #EDE4FE;
+
+      --teal:         #0E9F6E;
+      --teal-crest:   #12B981;
+      --teal-deep:    #D8F5F2;
+
+      --champagne:    #8A7C0C;
+
+      --text:         #14121A;
+      --text-muted:   #3D3A45;
+      --text-faint:   #8B8794;
+
+      --danger:       #EA4545;
+      --danger-deep:  #FDE7E7;
+
+      --gleam:        #FFFFFF;
+      --shade:        #242424;
+    }
+
 
     *, *::before, *::after { box-sizing: border-box; }
 
@@ -102,11 +159,11 @@
       /* the pile: light pooling where folds crest, violet on one side of the
          bolt, teal on the other, shadow gathering in the deep creases */
       background-image:
-        radial-gradient(58% 42% at 12% -4%,  rgba(168, 85, 247, 0.42), transparent 70%),
-        radial-gradient(46% 38% at 34% 26%,  rgba(138, 43, 226, 0.30), transparent 72%),
-        radial-gradient(52% 40% at 96% 12%,  rgba(29, 166, 162, 0.30), transparent 72%),
-        radial-gradient(44% 34% at 78% 52%,  rgba(18, 128, 127, 0.20), transparent 74%),
-        radial-gradient(70% 46% at 50% 96%,  rgba(59, 11, 102, 0.60), transparent 76%),
+        radial-gradient(58% 42% at 12% -4%,  color-mix(in srgb, var(--violet-crest) 42%, transparent), transparent 70%),
+        radial-gradient(46% 38% at 34% 26%,  color-mix(in srgb, var(--violet) 30%, transparent), transparent 72%),
+        radial-gradient(52% 40% at 96% 12%,  color-mix(in srgb, var(--teal-crest) 30%, transparent), transparent 72%),
+        radial-gradient(44% 34% at 78% 52%,  color-mix(in srgb, var(--teal) 20%, transparent), transparent 74%),
+        radial-gradient(70% 46% at 50% 96%,  color-mix(in srgb, var(--violet-deep) 60%, transparent), transparent 76%),
         radial-gradient(40% 30% at 8% 74%,   rgba(75, 20, 124, 0.34), transparent 76%);
       background-attachment: fixed;
     }
@@ -121,21 +178,21 @@
       z-index: 0;
       background-image:
         conic-gradient(from 195deg at 30% 18%,
-          rgba(255, 255, 255, 0.075) 0deg,
-          rgba(255, 255, 255, 0.02) 26deg,
-          rgba(0, 0, 0, 0.20) 74deg,
-          rgba(0, 0, 0, 0.34) 122deg,
-          rgba(0, 0, 0, 0.10) 186deg,
-          rgba(255, 255, 255, 0.05) 254deg,
-          rgba(0, 0, 0, 0.26) 318deg,
-          rgba(255, 255, 255, 0.075) 360deg),
+          color-mix(in srgb, var(--gleam) 7.5%, transparent) 0deg,
+          color-mix(in srgb, var(--gleam) 2%, transparent) 26deg,
+          color-mix(in srgb, var(--shade) 20%, transparent) 74deg,
+          color-mix(in srgb, var(--shade) 34%, transparent) 122deg,
+          color-mix(in srgb, var(--shade) 10%, transparent) 186deg,
+          color-mix(in srgb, var(--gleam) 5%, transparent) 254deg,
+          color-mix(in srgb, var(--shade) 26%, transparent) 318deg,
+          color-mix(in srgb, var(--gleam) 7.5%, transparent) 360deg),
         conic-gradient(from 40deg at 84% 72%,
-          rgba(255, 255, 255, 0.05) 0deg,
-          rgba(0, 0, 0, 0.24) 68deg,
-          rgba(255, 255, 255, 0.035) 148deg,
-          rgba(0, 0, 0, 0.28) 226deg,
-          rgba(255, 255, 255, 0.045) 300deg,
-          rgba(255, 255, 255, 0.05) 360deg);
+          color-mix(in srgb, var(--gleam) 5%, transparent) 0deg,
+          color-mix(in srgb, var(--shade) 24%, transparent) 68deg,
+          color-mix(in srgb, var(--gleam) 3.5%, transparent) 148deg,
+          color-mix(in srgb, var(--shade) 28%, transparent) 226deg,
+          color-mix(in srgb, var(--gleam) 4.5%, transparent) 300deg,
+          color-mix(in srgb, var(--gleam) 5%, transparent) 360deg);
       filter: blur(28px);
       opacity: 0.9;
     }
@@ -149,8 +206,8 @@
       background-image:
         var(--nap),
         repeating-linear-gradient(94deg,
-          rgba(255, 255, 255, 0.035) 0 1px,
-          rgba(0, 0, 0, 0.05) 1px 2px,
+          color-mix(in srgb, var(--gleam) 3.5%, transparent) 0 1px,
+          color-mix(in srgb, var(--shade) 5%, transparent) 1px 2px,
           transparent 2px 4px);
       background-size: 180px 180px, auto;
       opacity: 0.42;
@@ -219,7 +276,7 @@
       /* the chrome above the step gives height back too, or the step alone
          carries the whole trim on a short screen */
       padding: calc(0.85 * var(--fit)) clamp(1rem, 4vw, 2.5rem);
-      background: linear-gradient(180deg, rgba(21, 12, 34, 0.92), rgba(11, 7, 19, 0.72));
+      background: linear-gradient(180deg, color-mix(in srgb, var(--ink-raised) 92%, transparent), color-mix(in srgb, var(--ink) 72%, transparent));
       border-bottom: 1px solid var(--ink-hairline);
       backdrop-filter: blur(14px);
     }
@@ -269,7 +326,7 @@
     }
     nav a:not(.brand):hover {
       color: var(--text);
-      background: rgba(138, 43, 226, 0.16);
+      background: color-mix(in srgb, var(--violet) 16%, transparent);
     }
     nav form { margin: 0; }
 
@@ -309,11 +366,11 @@
       border: 1px solid var(--ink-hairline);
       background-color: var(--ink-raised);
       background-image:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 34%),
-        linear-gradient(155deg, rgba(75, 20, 124, 0.50), rgba(11, 7, 19, 0.88) 72%);
+        linear-gradient(180deg, color-mix(in srgb, var(--gleam) 7%, transparent), rgb(from var(--gleam) r g b / 0) 34%),
+        linear-gradient(155deg, rgba(75, 20, 124, 0.50), color-mix(in srgb, var(--ink) 88%, transparent) 72%);
       box-shadow:
-        0 26px 70px -28px rgba(0, 0, 0, 0.9),
-        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+        0 26px 70px -28px color-mix(in srgb, var(--shade) 90%, transparent),
+        inset 0 1px 0 color-mix(in srgb, var(--gleam) 7%, transparent);
       overflow: hidden;
     }
     /* sheen running off the panel's top-left crest */
@@ -324,9 +381,9 @@
       pointer-events: none;
       background-image:
         conic-gradient(from 200deg at 18% 0%,
-          rgba(255, 255, 255, 0.09) 0deg,
-          rgba(255, 255, 255, 0.01) 40deg,
-          rgba(0, 0, 0, 0.16) 110deg,
+          color-mix(in srgb, var(--gleam) 9%, transparent) 0deg,
+          color-mix(in srgb, var(--gleam) 1%, transparent) 40deg,
+          color-mix(in srgb, var(--shade) 16%, transparent) 110deg,
           transparent 190deg);
       filter: blur(18px);
     }
@@ -338,7 +395,7 @@
       background-image:
         var(--nap),
         repeating-linear-gradient(94deg,
-          rgba(255, 255, 255, 0.03) 0 1px,
+          color-mix(in srgb, var(--gleam) 3%, transparent) 0 1px,
           transparent 1px 3px);
       background-size: 180px 180px, auto;
       opacity: 0.3;
@@ -384,7 +441,7 @@
     input:focus, textarea:focus, select:focus {
       outline: none;
       border-color: var(--violet-crest);
-      box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.24);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet-crest) 24%, transparent);
     }
 
     .hint {
@@ -548,27 +605,27 @@
       font-size: 0.95rem;
       font-weight: 600;
       letter-spacing: 0.01em;
-      color: #fff;
+      color: var(--gleam);
       background-color: var(--violet);
       background-image: linear-gradient(160deg, var(--violet-crest), var(--violet) 45%, var(--violet-deep));
       border: none;
       border-radius: 999px;
       cursor: pointer;
       overflow: hidden;
-      box-shadow: 0 12px 30px -12px rgba(138, 43, 226, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+      box-shadow: 0 12px 30px -12px color-mix(in srgb, var(--violet) 85%, transparent), inset 0 1px 0 color-mix(in srgb, var(--gleam) 24%, transparent);
       transition: transform 0.18s ease, box-shadow 0.18s ease;
     }
     .btn::before {
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, 0.38) 50%, transparent 68%);
+      background: linear-gradient(105deg, transparent 32%, color-mix(in srgb, var(--gleam) 38%, transparent) 50%, transparent 68%);
       transform: translateX(-120%);
       transition: transform 0.55s ease;
     }
     .btn:hover {
       transform: translateY(-1px);
-      box-shadow: 0 16px 38px -12px rgba(168, 85, 247, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      box-shadow: 0 16px 38px -12px color-mix(in srgb, var(--violet-crest) 95%, transparent), inset 0 1px 0 color-mix(in srgb, var(--gleam) 30%, transparent);
     }
     .btn:hover::before { transform: translateX(120%); }
     .btn:focus-visible { outline: 2px solid var(--champagne); outline-offset: 3px; }
@@ -576,13 +633,13 @@
     .btn-secondary {
       color: var(--text);
       background-color: transparent;
-      background-image: linear-gradient(160deg, rgba(29, 166, 162, 0.32), rgba(6, 56, 59, 0.55));
-      border: 1px solid rgba(29, 166, 162, 0.4);
+      background-image: linear-gradient(160deg, color-mix(in srgb, var(--teal-crest) 32%, transparent), color-mix(in srgb, var(--teal-deep) 55%, transparent));
+      border: 1px solid color-mix(in srgb, var(--teal-crest) 40%, transparent);
       box-shadow: none;
     }
     .btn-secondary:hover {
-      background-image: linear-gradient(160deg, rgba(29, 166, 162, 0.5), rgba(6, 56, 59, 0.7));
-      box-shadow: 0 12px 28px -14px rgba(18, 128, 127, 0.9);
+      background-image: linear-gradient(160deg, color-mix(in srgb, var(--teal-crest) 50%, transparent), color-mix(in srgb, var(--teal-deep) 70%, transparent));
+      box-shadow: 0 12px 28px -14px color-mix(in srgb, var(--teal) 90%, transparent);
     }
     .btn-small { padding: 0.4rem 0.9rem; font-size: 0.82rem; }
 
@@ -591,8 +648,8 @@
       padding: 0.8rem 1rem;
       font-size: 0.9rem;
       border-radius: var(--radius-sm);
-      border: 1px solid rgba(29, 166, 162, 0.34);
-      background: linear-gradient(150deg, rgba(18, 128, 127, 0.24), rgba(6, 56, 59, 0.4));
+      border: 1px solid color-mix(in srgb, var(--teal-crest) 34%, transparent);
+      background: linear-gradient(150deg, color-mix(in srgb, var(--teal) 24%, transparent), color-mix(in srgb, var(--teal-deep) 40%, transparent));
       color: #D8F5F2;
     }
     .flash a { color: var(--champagne); text-decoration: underline; }
@@ -607,17 +664,17 @@
       text-transform: uppercase;
       color: #F0E2FF;
       border-radius: 999px;
-      border: 1px solid rgba(168, 85, 247, 0.42);
-      background: linear-gradient(150deg, rgba(138, 43, 226, 0.4), rgba(59, 11, 102, 0.55));
+      border: 1px solid color-mix(in srgb, var(--violet-crest) 42%, transparent);
+      background: linear-gradient(150deg, color-mix(in srgb, var(--violet) 40%, transparent), color-mix(in srgb, var(--violet-deep) 55%, transparent));
     }
     .tag-teal {
       color: #D8F5F2;
-      border-color: rgba(29, 166, 162, 0.45);
-      background: linear-gradient(150deg, rgba(18, 128, 127, 0.4), rgba(6, 56, 59, 0.6));
+      border-color: color-mix(in srgb, var(--teal-crest) 45%, transparent);
+      background: linear-gradient(150deg, color-mix(in srgb, var(--teal) 40%, transparent), color-mix(in srgb, var(--teal-deep) 60%, transparent));
     }
     .tag-outline {
       color: var(--text-muted);
-      border-color: rgba(168, 85, 247, 0.28);
+      border-color: color-mix(in srgb, var(--violet-crest) 28%, transparent);
       background: transparent;
     }
 
@@ -637,16 +694,16 @@
       border: 1px solid var(--ink-hairline);
       background-color: var(--ink-raised);
       background-image:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 30%),
-        linear-gradient(155deg, rgba(75, 20, 124, 0.42), rgba(11, 7, 19, 0.9) 70%);
-      box-shadow: 0 22px 60px -30px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        linear-gradient(180deg, color-mix(in srgb, var(--gleam) 6%, transparent), rgb(from var(--gleam) r g b / 0) 30%),
+        linear-gradient(155deg, rgba(75, 20, 124, 0.42), color-mix(in srgb, var(--ink) 90%, transparent) 70%);
+      box-shadow: 0 22px 60px -30px color-mix(in srgb, var(--shade) 90%, transparent), inset 0 1px 0 color-mix(in srgb, var(--gleam) 6%, transparent);
       transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
       overflow: hidden;
     }
     .profile-card:hover {
       transform: translateY(-3px);
-      border-color: rgba(168, 85, 247, 0.42);
-      box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(168, 85, 247, 0.16);
+      border-color: color-mix(in srgb, var(--violet-crest) 42%, transparent);
+      box-shadow: 0 30px 70px -30px color-mix(in srgb, var(--shade) 95%, transparent), 0 0 0 1px color-mix(in srgb, var(--violet-crest) 16%, transparent);
     }
     .profile-card h2 { font-size: 1.2rem; }
     .profile-card .meta {
@@ -661,7 +718,7 @@
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
-    .best-option { border-color: rgba(168, 85, 247, 0.55); }
+    .best-option { border-color: color-mix(in srgb, var(--violet-crest) 55%, transparent); }
 
     /* ---------- definition lists ------------------------------------- */
     dl { margin: 0; }
@@ -769,9 +826,9 @@
       padding-block: 1rem;
       margin-block: -1rem;
       -webkit-mask-image: linear-gradient(to bottom,
-        transparent 0, #000 1rem, #000 calc(100% - 1rem), transparent 100%);
+        transparent 0, var(--shade) 1rem, var(--shade) calc(100% - 1rem), transparent 100%);
       mask-image: linear-gradient(to bottom,
-        transparent 0, #000 1rem, #000 calc(100% - 1rem), transparent 100%);
+        transparent 0, var(--shade) 1rem, var(--shade) calc(100% - 1rem), transparent 100%);
     }
     /* .wiz-body is a flex column, so its children default to flex-shrink: 1
        -- they would squeeze themselves to fit the box rather than overflow
@@ -890,7 +947,7 @@
       transition: border-color 0.16s ease, background 0.16s ease,
                   transform 0.16s ease;
     }
-    .opt:hover { transform: translateY(-1px); background: rgba(59, 11, 102, 0.5); }
+    .opt:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--violet-deep) 50%, transparent); }
     .opt input:focus-visible ~ .opt-mark {
       outline: 2px solid var(--champagne);
       outline-offset: 3px;
@@ -902,7 +959,7 @@
       width: calc(2.4 * var(--fit));
       height: calc(2.4 * var(--fit));
       border-radius: 50%;
-      color: #FFF;
+      color: var(--gleam);
       background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
     }
     /* each row gets its own hue so a list reads as distinct choices rather
@@ -942,7 +999,7 @@
     .opt input:checked ~ .opt-label { color: var(--violet-crest); font-weight: 600; }
     .opt:has(input:checked) {
       border-color: var(--violet-crest);
-      background: rgba(138, 43, 226, 0.14);
+      background: color-mix(in srgb, var(--violet) 14%, transparent);
     }
 
     /* Pinned to the foot of the column, so it never moves between steps.
@@ -1005,9 +1062,9 @@
       width: calc(3.4 * var(--fit));
       height: calc(3.4 * var(--fit));
       border: none;
-      color: #FFF;
+      color: var(--gleam);
       background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
-      box-shadow: 0 10px 26px -12px rgba(138, 43, 226, 0.9);
+      box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--violet) 90%, transparent);
     }
     .wiz-next:hover { transform: translateX(2px); }
     .wiz-back svg, .wiz-next svg { width: 1.35rem; height: 1.35rem; }
@@ -1020,7 +1077,7 @@
          by a few pixels on the last step -- so it tracks the same token */
       height: calc(3.4 * var(--fit));
       background-image: linear-gradient(150deg, var(--teal-crest), var(--teal));
-      box-shadow: 0 10px 26px -12px rgba(29, 166, 162, 0.9);
+      box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--teal-crest) 90%, transparent);
     }
     .wiz-next.is-final svg { display: none; }
     .wiz-next.is-final::after {
@@ -1045,22 +1102,22 @@
       font-size: 0.92rem;
       font-weight: 600;
       letter-spacing: 0.01em;
-      color: #FFF;
+      color: var(--gleam);
       cursor: pointer;
       background-image: linear-gradient(150deg, var(--teal-crest), var(--teal));
-      box-shadow: 0 10px 26px -12px rgba(29, 166, 162, 0.9);
+      box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--teal-crest) 90%, transparent);
       transition: transform 0.16s ease;
     }
-    .wiz-go:hover { transform: translateX(2px); color: #FFF; }
+    .wiz-go:hover { transform: translateX(2px); color: var(--gleam); }
     .wiz-go:focus-visible { outline: 2px solid var(--champagne); outline-offset: 3px; }
     .wiz-go-violet {
       background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
-      box-shadow: 0 10px 26px -12px rgba(138, 43, 226, 0.9);
+      box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--violet) 90%, transparent);
     }
     /* leaving is a text button, never a filled one -- the loud control on
        these screens is always the one that keeps the match alive */
     .wiz-skip-danger { color: var(--danger); }
-    .wiz-skip-danger:hover { color: var(--danger); background: rgba(255, 122, 138, 0.12); }
+    .wiz-skip-danger:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
     /* ---------- waiting screen ---------------------------------------
        Borrows the wizard's column so the two screens read as one flow: the
        step chrome (.wiz-count/.wiz-q/.wiz-hint) is reused verbatim and only
@@ -1170,8 +1227,8 @@
       height: 1.35rem;
       padding: 0 0.35rem;
       border-radius: 999px;
-      border: 1px solid rgba(168, 85, 247, 0.4);
-      background: rgba(138, 43, 226, 0.14);
+      border: 1px solid color-mix(in srgb, var(--violet-crest) 40%, transparent);
+      background: color-mix(in srgb, var(--violet) 14%, transparent);
       color: var(--text);
       font-family: var(--mono);
       font-size: 0.72rem;
@@ -1202,8 +1259,8 @@
     .pill.is-static {
       cursor: default;
       color: var(--text);
-      border-color: rgba(168, 85, 247, 0.4);
-      background: rgba(138, 43, 226, 0.14);
+      border-color: color-mix(in srgb, var(--violet-crest) 40%, transparent);
+      background: color-mix(in srgb, var(--violet) 14%, transparent);
     }
     /* a stated chip that is context rather than the point of the list --
        the reveal's non-shared interests next to the shared ones */
@@ -1229,12 +1286,12 @@
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--text);
-      border-color: rgba(168, 85, 247, 0.4);
-      background: rgba(138, 43, 226, 0.14);
+      border-color: color-mix(in srgb, var(--violet-crest) 40%, transparent);
+      background: color-mix(in srgb, var(--violet) 14%, transparent);
     }
     .pill.pill-chip:hover {
-      border-color: rgba(168, 85, 247, 0.7);
-      background: rgba(138, 43, 226, 0.22);
+      border-color: color-mix(in srgb, var(--violet-crest) 70%, transparent);
+      background: color-mix(in srgb, var(--violet) 22%, transparent);
     }
     /* a filter the searcher has switched off -- the same faint reading
        "Any age" already had, still tappable so it can be switched back on */
@@ -1243,7 +1300,7 @@
       border-color: var(--ink-hairline);
       background: none;
     }
-    .pill.pill-chip.is-off:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
+    .pill.pill-chip.is-off:hover { color: var(--text); border-color: color-mix(in srgb, var(--violet-crest) 42%, transparent); }
 
     /* Both children only ever appear together (nothing fits), and both used
        to arrive out of nowhere and shove the nav row down -- the wider
@@ -1307,11 +1364,11 @@
          background-blend-mode buys the same texture without the extra box. */
       background-image:
         var(--nap),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0) 22%),
-        linear-gradient(158deg, rgba(75, 20, 124, 0.52), rgba(11, 7, 19, 0.97) 60%);
+        linear-gradient(180deg, color-mix(in srgb, var(--gleam) 5.5%, transparent), rgb(from var(--gleam) r g b / 0) 22%),
+        linear-gradient(158deg, rgba(75, 20, 124, 0.52), color-mix(in srgb, var(--ink) 97%, transparent) 60%);
       background-size: 180px 180px, auto, auto;
       background-blend-mode: overlay, normal, normal;
-      border-top-color: rgba(168, 85, 247, 0.3);
+      border-top-color: color-mix(in srgb, var(--violet-crest) 30%, transparent);
       padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
     }
     .sheet-outer .sheet-body { overflow: visible; }
@@ -1359,14 +1416,14 @@
     }
     .sheet-opt:hover {
       transform: translateY(-1px);
-      background: rgba(59, 11, 102, 0.5);
+      background: color-mix(in srgb, var(--violet-deep) 50%, transparent);
     }
     .sheet-opt:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
     /* the one in effect: lit like a checked .opt, with the crest rail down
        its left edge so the eye finds it without reading a word */
     .sheet-opt.is-current {
-      border-color: rgba(168, 85, 247, 0.55);
-      background-image: linear-gradient(150deg, rgba(138, 43, 226, 0.38), rgba(59, 11, 102, 0.5));
+      border-color: color-mix(in srgb, var(--violet-crest) 55%, transparent);
+      background-image: linear-gradient(150deg, color-mix(in srgb, var(--violet) 38%, transparent), color-mix(in srgb, var(--violet-deep) 50%, transparent));
     }
     .sheet-opt.is-current::before {
       content: "";
@@ -1387,8 +1444,8 @@
       flex: none;
       padding: 0.24rem 0.6rem;
       border-radius: 999px;
-      border: 1px solid rgba(29, 166, 162, 0.45);
-      background: linear-gradient(150deg, rgba(18, 128, 127, 0.42), rgba(6, 56, 59, 0.6));
+      border: 1px solid color-mix(in srgb, var(--teal-crest) 45%, transparent);
+      background: linear-gradient(150deg, color-mix(in srgb, var(--teal) 42%, transparent), color-mix(in srgb, var(--teal-deep) 60%, transparent));
       color: #D8F5F2;
       font-family: var(--mono);
       font-variant-numeric: tabular-nums;
@@ -1405,8 +1462,8 @@
       color: var(--text-faint);
     }
     .sheet-opt.is-current .sheet-opt-count {
-      border-color: rgba(232, 211, 169, 0.42);
-      background: linear-gradient(150deg, rgba(232, 211, 169, 0.22), rgba(59, 11, 102, 0.4));
+      border-color: color-mix(in srgb, var(--champagne) 42%, transparent);
+      background: linear-gradient(150deg, color-mix(in srgb, var(--champagne) 22%, transparent), color-mix(in srgb, var(--violet-deep) 40%, transparent));
       color: var(--champagne);
     }
     @media (prefers-reduced-motion: reduce) {
@@ -1443,7 +1500,7 @@
       background: var(--ink-raised);
       border-top: 1px solid var(--ink-hairline);
       border-radius: 1.6rem 1.6rem 0 0;
-      box-shadow: 0 -24px 60px -20px rgba(0, 0, 0, 0.85);
+      box-shadow: 0 -24px 60px -20px color-mix(in srgb, var(--shade) 85%, transparent);
       transform: translateY(100%);
       transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
     }
@@ -1532,7 +1589,7 @@
     .pill-more {
       border-style: dashed;
       color: var(--violet-crest);
-      border-color: rgba(168, 85, 247, 0.55);
+      border-color: color-mix(in srgb, var(--violet-crest) 55%, transparent);
     }
     @media (prefers-reduced-motion: reduce) {
       .sheet-backdrop, .sheet-panel { transition: none; }
@@ -1680,12 +1737,12 @@
     input[type="range"]::-webkit-slider-runnable-track {
       height: 0.35rem;
       border-radius: 999px;
-      background: linear-gradient(90deg, var(--violet-deep), rgba(168, 85, 247, 0.45));
+      background: linear-gradient(90deg, var(--violet-deep), color-mix(in srgb, var(--violet-crest) 45%, transparent));
     }
     input[type="range"]::-moz-range-track {
       height: 0.35rem;
       border-radius: 999px;
-      background: linear-gradient(90deg, var(--violet-deep), rgba(168, 85, 247, 0.45));
+      background: linear-gradient(90deg, var(--violet-deep), color-mix(in srgb, var(--violet-crest) 45%, transparent));
     }
     input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
@@ -1695,8 +1752,8 @@
       margin-top: -0.4rem;
       border-radius: 50%;
       background: radial-gradient(circle at 32% 28%, var(--violet-crest), var(--violet) 60%, var(--violet-deep));
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      box-shadow: 0 0 14px rgba(168, 85, 247, 0.8);
+      border: 1px solid color-mix(in srgb, var(--gleam) 50%, transparent);
+      box-shadow: 0 0 14px color-mix(in srgb, var(--violet-crest) 80%, transparent);
       cursor: pointer;
     }
     input[type="range"]::-moz-range-thumb {
@@ -1704,8 +1761,8 @@
       height: 1.15rem;
       border-radius: 50%;
       background: radial-gradient(circle at 32% 28%, var(--violet-crest), var(--violet) 60%, var(--violet-deep));
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      box-shadow: 0 0 14px rgba(168, 85, 247, 0.8);
+      border: 1px solid color-mix(in srgb, var(--gleam) 50%, transparent);
+      box-shadow: 0 0 14px color-mix(in srgb, var(--violet-crest) 80%, transparent);
       cursor: pointer;
     }
     input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--champagne); outline-offset: 2px; }
@@ -1737,7 +1794,7 @@
       height: 0.35rem;
       transform: translateY(-50%);
       border-radius: 999px;
-      background: rgba(168, 85, 247, 0.2);
+      background: color-mix(in srgb, var(--violet-crest) 20%, transparent);
     }
     .range-dual-fill {
       position: absolute;
@@ -1776,7 +1833,7 @@
       border: 1px solid var(--ink-hairline);
       border-radius: var(--radius-sm);
       background: var(--ink-raised);
-      box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.9);
+      box-shadow: 0 20px 50px -20px color-mix(in srgb, var(--shade) 90%, transparent);
     }
     .ac-list:empty { display: none; }
     .ac-option {
@@ -1786,7 +1843,7 @@
       cursor: pointer;
     }
     .ac-option:hover, .ac-option.active {
-      background: rgba(138, 43, 226, 0.28);
+      background: color-mix(in srgb, var(--violet) 28%, transparent);
       color: var(--text);
     }
 
@@ -1803,12 +1860,12 @@
       border: 1px solid var(--ink-hairline);
       border-radius: 999px;
     }
-    .countdown.countdown-low { color: var(--danger); border-color: rgba(255, 122, 138, 0.4); }
+    .countdown.countdown-low { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
     .btn-danger {
-      color: #fff;
+      color: var(--gleam);
       background-color: var(--danger);
       background-image: linear-gradient(160deg, #FF97A3, var(--danger) 55%, var(--danger-deep));
-      box-shadow: 0 12px 30px -12px rgba(255, 122, 138, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+      box-shadow: 0 12px 30px -12px color-mix(in srgb, var(--danger) 70%, transparent), inset 0 1px 0 color-mix(in srgb, var(--gleam) 24%, transparent);
     }
 
     /* ---------- veils: the two moments worth interrupting for ----------
@@ -1834,15 +1891,15 @@
       box-sizing: border-box;
       padding: 1.5rem 1.35rem 1.35rem;
       border-radius: 1.6rem;
-      border: 1px solid rgba(168, 85, 247, 0.28);
+      border: 1px solid color-mix(in srgb, var(--violet-crest) 28%, transparent);
       background-color: var(--ink-raised);
       background-image:
         var(--nap),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 26%),
-        linear-gradient(158deg, rgba(75, 20, 124, 0.55), rgba(11, 7, 19, 0.97) 62%);
+        linear-gradient(180deg, color-mix(in srgb, var(--gleam) 6%, transparent), rgb(from var(--gleam) r g b / 0) 26%),
+        linear-gradient(158deg, rgba(75, 20, 124, 0.55), color-mix(in srgb, var(--ink) 97%, transparent) 62%);
       background-size: 180px 180px, auto, auto;
       background-blend-mode: overlay, normal, normal;
-      box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.95);
+      box-shadow: 0 40px 90px -30px color-mix(in srgb, var(--shade) 95%, transparent);
       text-align: center;
       transform: translate(-50%, -46%) scale(0.94);
       opacity: 0;
@@ -1893,7 +1950,7 @@
       transition: border-color 0.16s ease, color 0.16s ease;
     }
     .veil-check:has(input:checked) {
-      border-color: rgba(255, 122, 138, 0.5);
+      border-color: color-mix(in srgb, var(--danger) 50%, transparent);
       color: var(--text);
     }
     .veil-check .opt-mark { flex: none; }
@@ -1923,7 +1980,7 @@
       height: 2.6rem;
       margin: -1.3rem 0 0 -1.3rem;
       border-radius: 50%;
-      box-shadow: 0 0 26px rgba(168, 85, 247, 0.55);
+      box-shadow: 0 0 26px color-mix(in srgb, var(--violet-crest) 55%, transparent);
     }
     .matchpop-orb-a {
       background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
@@ -1948,7 +2005,7 @@
       margin: -0.55rem 0 0 -0.55rem;
       border-radius: 50%;
       background: var(--champagne);
-      box-shadow: 0 0 34px 10px rgba(232, 211, 169, 0.7);
+      box-shadow: 0 0 34px 10px color-mix(in srgb, var(--champagne) 70%, transparent);
       animation: spark 0.9s ease-out 0.55s both;
     }
     @keyframes orb-in-left {
@@ -1999,8 +2056,8 @@
     }
     .room-leave-btn:hover {
       color: var(--danger);
-      border-color: rgba(255, 122, 138, 0.45);
-      background: rgba(255, 122, 138, 0.1);
+      border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+      background: color-mix(in srgb, var(--danger) 10%, transparent);
     }
 
     /* ---------- match screens (reveal / decide / ended) ----------------
@@ -2093,8 +2150,8 @@
       border-color: var(--ink-hairline);
       background: rgba(8, 5, 14, 0.6);
     }
-    .tag-timed { color: var(--champagne); border-color: rgba(232, 211, 169, 0.4);
-      background: linear-gradient(150deg, rgba(232, 211, 169, 0.22), rgba(59, 11, 102, 0.4)); }
+    .tag-timed { color: var(--champagne); border-color: color-mix(in srgb, var(--champagne) 40%, transparent);
+      background: linear-gradient(150deg, color-mix(in srgb, var(--champagne) 22%, transparent), color-mix(in srgb, var(--violet-deep) 40%, transparent)); }
 
     /* ---------- photos --------------------------------------------------
        The thumbnail grid that used to sit under the profile hero is gone:
@@ -2159,7 +2216,7 @@
       background: var(--ink-raised);
     }
     /* the real number, given the weight the fabricated one would have had */
-    .admin-tally-item.is-headline { border-color: rgba(168, 85, 247, 0.42); }
+    .admin-tally-item.is-headline { border-color: color-mix(in srgb, var(--violet-crest) 42%, transparent); }
     .admin-tally-item.is-muted { opacity: 0.62; }
     .admin-tally-n {
       display: block;
@@ -2196,7 +2253,7 @@
     .admin-member-head h2 { font-size: 1.02rem; margin: 0; }
     .admin-member-meta { margin: 0.2rem 0 0; word-break: break-word; }
     .admin-badges { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-    .tag.is-live { color: var(--teal-crest); border-color: rgba(29, 166, 162, 0.5); }
+    .tag.is-live { color: var(--teal-crest); border-color: color-mix(in srgb, var(--teal-crest) 50%, transparent); }
 
     /* ---------- searching state -------------------------------------- */
     /* Hand-rolled rather than a Lottie. The dotLottie player was loaded from
@@ -2243,12 +2300,12 @@
       margin: 0 auto 0.5rem;
       border-radius: 50%;
       background: radial-gradient(circle at 34% 30%, var(--violet-crest), var(--violet) 45%, var(--violet-deep) 78%);
-      box-shadow: 0 0 60px rgba(168, 85, 247, 0.6);
+      box-shadow: 0 0 60px color-mix(in srgb, var(--violet-crest) 60%, transparent);
       animation: breathe 2.4s ease-in-out infinite;
     }
     @keyframes breathe {
-      0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(168, 85, 247, 0.45); }
-      50% { transform: scale(1.07); box-shadow: 0 0 78px rgba(168, 85, 247, 0.75); }
+      0%, 100% { transform: scale(1); box-shadow: 0 0 40px color-mix(in srgb, var(--violet-crest) 45%, transparent); }
+      50% { transform: scale(1.07); box-shadow: 0 0 78px color-mix(in srgb, var(--violet-crest) 75%, transparent); }
     }
     @media (prefers-reduced-motion: reduce) {
       .pulse-heart { animation: none; }
@@ -2298,15 +2355,15 @@
     .bubble.left {
       align-self: flex-start;
       color: #D8F5F2;
-      background-image: linear-gradient(150deg, rgba(18, 128, 127, 0.5), rgba(6, 56, 59, 0.72));
-      border: 1px solid rgba(29, 166, 162, 0.3);
+      background-image: linear-gradient(150deg, color-mix(in srgb, var(--teal) 50%, transparent), color-mix(in srgb, var(--teal-deep) 72%, transparent));
+      border: 1px solid color-mix(in srgb, var(--teal-crest) 30%, transparent);
       border-bottom-left-radius: 0.3rem;
     }
     .bubble.right {
       align-self: flex-end;
       color: #F6ECFF;
-      background-image: linear-gradient(150deg, rgba(138, 43, 226, 0.6), rgba(59, 11, 102, 0.78));
-      border: 1px solid rgba(168, 85, 247, 0.36);
+      background-image: linear-gradient(150deg, color-mix(in srgb, var(--violet) 60%, transparent), color-mix(in srgb, var(--violet-deep) 78%, transparent));
+      border: 1px solid color-mix(in srgb, var(--violet-crest) 36%, transparent);
       border-bottom-right-radius: 0.3rem;
     }
     /* time (+ delivered/read ticks on a bubble I sent), right-aligned under
@@ -2350,7 +2407,7 @@
       color: var(--text);
       transition: border-color 0.18s ease, transform 0.18s ease;
     }
-    .chat-row:hover { border-color: rgba(168, 85, 247, 0.42); transform: translateY(-1px); }
+    .chat-row:hover { border-color: color-mix(in srgb, var(--violet-crest) 42%, transparent); transform: translateY(-1px); }
     .chat-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
     .chat-row-top { display: flex; align-items: baseline; gap: 0.5rem; }
     .chat-row-top strong {
@@ -2484,7 +2541,7 @@
       cursor: pointer;
       transition: color 0.15s ease, border-color 0.15s ease;
     }
-    .pro-close:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
+    .pro-close:hover { color: var(--text); border-color: color-mix(in srgb, var(--violet-crest) 42%, transparent); }
     .pro-close svg { width: 1.05rem; height: 1.05rem; }
 
     /* ---------- the carousel ------------------------------------------
@@ -2515,8 +2572,8 @@
       border: 1px solid var(--ink-hairline);
       background-color: #12081F;
       background-image:
-        radial-gradient(56% 46% at 18% 6%, rgba(168, 85, 247, 0.62), transparent 70%),
-        radial-gradient(52% 44% at 92% 16%, rgba(29, 166, 162, 0.5), transparent 72%);
+        radial-gradient(56% 46% at 18% 6%, color-mix(in srgb, var(--violet-crest) 62%, transparent), transparent 70%),
+        radial-gradient(52% 44% at 92% 16%, color-mix(in srgb, var(--teal-crest) 50%, transparent), transparent 72%);
     }
     .pro-frame > .ph { position: absolute; inset: 0; }
     .pro-slide {
@@ -2556,13 +2613,13 @@
       padding: 0;
       border: 0;
       border-radius: 50%;
-      color: #FFF;
-      background: rgba(11, 7, 19, 0.55);
+      color: var(--gleam);
+      background: color-mix(in srgb, var(--ink) 55%, transparent);
       backdrop-filter: blur(6px);
       cursor: pointer;
       transition: opacity 0.18s ease, background 0.18s ease;
     }
-    .pro-arrow:hover { background: rgba(11, 7, 19, 0.78); }
+    .pro-arrow:hover { background: color-mix(in srgb, var(--ink) 78%, transparent); }
     .pro-arrow.is-prev { left: 0.6rem; }
     .pro-arrow.is-next { right: 0.6rem; }
     .pro-arrow svg { width: 1.15rem; height: 1.15rem; }
@@ -2865,11 +2922,11 @@
       height: 0.95em;
       opacity: 0.75;
     }
-    .pill:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
+    .pill:hover { color: var(--text); border-color: color-mix(in srgb, var(--violet-crest) 42%, transparent); }
     .pill.is-on {
       color: #F0E2FF;
-      border-color: rgba(168, 85, 247, 0.42);
-      background-image: linear-gradient(150deg, rgba(138, 43, 226, 0.4), rgba(59, 11, 102, 0.55));
+      border-color: color-mix(in srgb, var(--violet-crest) 42%, transparent);
+      background-image: linear-gradient(150deg, color-mix(in srgb, var(--violet) 40%, transparent), color-mix(in srgb, var(--violet-deep) 55%, transparent));
     }
     .pill:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
 
@@ -2906,7 +2963,7 @@
        picked a photo. */
     .photo-tile:hover,
     .photo-tile:focus-within {
-      border-color: rgba(168, 85, 247, 0.55);
+      border-color: color-mix(in srgb, var(--violet-crest) 55%, transparent);
       transform: translateY(-2px);
     }
     .photo-tile.is-dragging {
@@ -2914,11 +2971,11 @@
       cursor: grabbing;
       transform: scale(1.06);
       border-color: var(--violet-crest);
-      box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.9);
+      box-shadow: 0 14px 30px -12px color-mix(in srgb, var(--shade) 90%, transparent);
     }
     .photo-tile.is-main {
-      border-color: rgba(232, 211, 169, 0.75);
-      box-shadow: 0 0 0 1px rgba(232, 211, 169, 0.35);
+      border-color: color-mix(in srgb, var(--champagne) 75%, transparent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--champagne) 35%, transparent);
     }
     .photo-tile.is-removed { border-style: dashed; }
     .photo-tile.is-removed > img { opacity: 0.22; filter: grayscale(1); }
@@ -2945,8 +3002,8 @@
       padding: 0;
       border: 0;
       border-radius: 50%;
-      color: #FFF;
-      background: rgba(11, 7, 19, 0.72);
+      color: var(--gleam);
+      background: color-mix(in srgb, var(--ink) 72%, transparent);
       backdrop-filter: blur(4px);
       cursor: pointer;
       opacity: 0;
@@ -2992,7 +3049,7 @@
       font-size: 0.5625rem;
       letter-spacing: 0.06em;
       color: var(--champagne);
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+      text-shadow: 0 1px 3px color-mix(in srgb, var(--shade) 90%, transparent);
     }
     .photo-tile.is-main .photo-tile-label { display: block; }
 
@@ -3011,7 +3068,7 @@
     .photo-tile-add:hover,
     .photo-tile-add:focus-within {
       color: var(--violet-crest);
-      border-color: rgba(168, 85, 247, 0.6);
+      border-color: color-mix(in srgb, var(--violet-crest) 60%, transparent);
       background: rgba(168, 133, 247, 0.07);
     }
     .photo-tile-add:active { transform: scale(0.96); }
@@ -3052,7 +3109,7 @@
     .strength-bar {
       height: 0.375rem;
       border-radius: 999px;
-      background: rgba(59, 11, 102, 0.9);
+      background: color-mix(in srgb, var(--violet-deep) 90%, transparent);
       overflow: hidden;
     }
     .strength-fill {
@@ -3074,7 +3131,7 @@
       border-radius: 50%;
       background: conic-gradient(
         var(--ring-color, var(--champagne)) 0deg var(--deg, 0deg),
-        rgba(59, 11, 102, 0.6) var(--deg, 0deg) 360deg);
+        color-mix(in srgb, var(--violet-deep) 60%, transparent) var(--deg, 0deg) 360deg);
     }
     .ring::after {
       content: "";
@@ -3129,13 +3186,13 @@
       flex: none;
       border-radius: 50%;
       object-fit: cover;
-      border: 1px solid rgba(168, 85, 247, 0.5);
-      box-shadow: 0 0 40px -8px rgba(168, 85, 247, 0.7);
+      border: 1px solid color-mix(in srgb, var(--violet-crest) 50%, transparent);
+      box-shadow: 0 0 40px -8px color-mix(in srgb, var(--violet-crest) 70%, transparent);
     }
     .pair > * + * {
       margin-left: -1.5rem;
-      border-color: rgba(29, 166, 162, 0.5);
-      box-shadow: 0 0 40px -8px rgba(29, 166, 162, 0.6);
+      border-color: color-mix(in srgb, var(--teal-crest) 50%, transparent);
+      box-shadow: 0 0 40px -8px color-mix(in srgb, var(--teal-crest) 60%, transparent);
     }
 
     /* the room strip: timer beside the explanation of what it means.
@@ -3270,7 +3327,7 @@
       border-radius: 50%;
       font-size: 1.1rem;
       background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
-      box-shadow: 0 10px 26px -12px rgba(138, 43, 226, 0.9);
+      box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--violet) 90%, transparent);
     }
     .btn-send:hover { transform: translateX(2px); }
 
@@ -3298,8 +3355,8 @@
        message is cut mid-word at the top. Fade it out instead. */
     .room .chat-log,
     .match .chat-log {
-      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 1.4rem);
-      mask-image: linear-gradient(to bottom, transparent 0, #000 1.4rem);
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, var(--shade) 1.4rem);
+      mask-image: linear-gradient(to bottom, transparent 0, var(--shade) 1.4rem);
     }
     .room .wiz-nav { margin-top: 0.85rem; }
     .room .chat-form { flex: 1; flex-wrap: nowrap; }
@@ -3311,7 +3368,7 @@
       padding: calc(0.7 * var(--fit)) 0.9rem;
       margin-bottom: calc(0.75 * var(--fit));
       border-radius: 1.15rem;
-      background: rgba(59, 11, 102, 0.42);
+      background: color-mix(in srgb, var(--violet-deep) 42%, transparent);
     }
 
     /* live telemetry: counts that tick while you watch. Monospace and
@@ -3362,16 +3419,16 @@
       inset: 0;
       background:
         linear-gradient(180deg,
-          rgba(11, 7, 19, 0.90) 0%,
-          rgba(11, 7, 19, 0.74) 30%,
-          rgba(11, 7, 19, 0.34) 54%,
-          rgba(11, 7, 19, 0.52) 80%,
-          rgba(11, 7, 19, 0.82) 100%),
+          color-mix(in srgb, var(--ink) 90%, transparent) 0%,
+          color-mix(in srgb, var(--ink) 74%, transparent) 30%,
+          color-mix(in srgb, var(--ink) 34%, transparent) 54%,
+          color-mix(in srgb, var(--ink) 52%, transparent) 80%,
+          color-mix(in srgb, var(--ink) 82%, transparent) 100%),
         /* The type is left-aligned, so the left third carries more of it. */
         linear-gradient(92deg,
-          rgba(11, 7, 19, 0.52) 0%,
-          rgba(11, 7, 19, 0.16) 46%,
-          rgba(11, 7, 19, 0.00) 80%);
+          color-mix(in srgb, var(--ink) 52%, transparent) 0%,
+          color-mix(in srgb, var(--ink) 16%, transparent) 46%,
+          rgb(from var(--ink) r g b / 0) 80%);
     }
     .hero-film-reel {
       width: 100%;
@@ -3427,13 +3484,13 @@
       html:not([data-viewport="mobile"]) .hero-film::after { content: none; }
       html:not([data-viewport="mobile"]) .hero-film {
         -webkit-mask-image:
-          linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.55) 12%,
-            #000 32%, #000 84%, transparent 100%),
-          linear-gradient(90deg, transparent 0%, #000 22%);
+          linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--shade) 55%, transparent) 12%,
+            var(--shade) 32%, var(--shade) 84%, transparent 100%),
+          linear-gradient(90deg, transparent 0%, var(--shade) 22%);
         mask-image:
-          linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.55) 12%,
-            #000 32%, #000 84%, transparent 100%),
-          linear-gradient(90deg, transparent 0%, #000 22%);
+          linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--shade) 55%, transparent) 12%,
+            var(--shade) 32%, var(--shade) 84%, transparent 100%),
+          linear-gradient(90deg, transparent 0%, var(--shade) 22%);
         -webkit-mask-composite: source-in;
         mask-composite: intersect;
       }
@@ -3461,7 +3518,7 @@
       font-size: min(clamp(2.6rem, 11vw, 3.6rem), calc(3.6 * var(--fit)), 5.6vh);
       line-height: 1.04;
       letter-spacing: -0.02em;
-      text-shadow: 0 2px 30px rgba(0, 0, 0, 0.5);
+      text-shadow: 0 2px 30px color-mix(in srgb, var(--shade) 50%, transparent);
     }
     .landing-lede {
       margin: calc(1.1 * var(--fit)) 0 0;
@@ -3515,7 +3572,7 @@
       background-size: 260% 100%;
       -webkit-mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") center / contain no-repeat;
       mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") center / contain no-repeat;
-      filter: drop-shadow(0 8px 34px rgba(138, 43, 226, 0.42));
+      filter: drop-shadow(0 8px 34px color-mix(in srgb, var(--violet) 42%, transparent));
       animation: landing-logo-in 900ms cubic-bezier(0.22, 1, 0.36, 1) both,
                  landing-logo-sheen 7s ease-in-out 900ms infinite;
     }
@@ -3861,7 +3918,7 @@
     .tabbar a.is-active { color: var(--violet-crest); }
     .tabbar a.is-active .tab-dot {
       background: var(--violet-crest);
-      box-shadow: 0 0 8px rgba(168, 85, 247, 0.9);
+      box-shadow: 0 0 8px color-mix(in srgb, var(--violet-crest) 90%, transparent);
     }
 
     /* The phone layout normally comes from a media query, but a manual
@@ -3935,7 +3992,7 @@
       padding: 0.15rem;
       border: 1px solid var(--ink-hairline);
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.03);
+      background: color-mix(in srgb, var(--gleam) 3%, transparent);
     }
     .lang-opt {
       display: inline-block;
@@ -3952,7 +4009,7 @@
     .lang-opt:hover { color: var(--text); }
     .lang-opt.is-on {
       color: var(--text);
-      background: rgba(168, 85, 247, 0.22);
+      background: color-mix(in srgb, var(--violet-crest) 22%, transparent);
     }
     /* The sheet's copy sits above the link list and is centred on it, since
        it is the only control in there that is not a full-width row. */

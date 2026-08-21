@@ -533,8 +533,42 @@ land on a design nobody made — and every restored value goes back through
 `design_value_ok()` and the known-token filter, so a palette cannot smuggle in
 what the form would have refused.
 
+**Two worlds, one set of names.** `:root` is dark and `:root[data-mode="light"]`
+restates only the 17 colours that differ; everything structural falls through,
+so a radius is one decision rather than two. `<html data-mode>` picks which
+paints, from `app_settings['design_mode']`, and **both worlds are always in the
+stylesheet** — switching mode does not change a byte of it, so it costs no
+digest and no refetch. Overrides are per mode (`design_tokens.mode`), because
+the same token has a different right answer in each. The editor edits a mode
+independently of the live one: designing light before switching to it is the
+normal order.
+
+The light values are the light column of the Restyler's own palette — the
+design that was already reviewed, not a fresh guess. **Where a name encodes a
+dark role, the light answer inverts the role rather than the colour**:
+`--violet-deep` is a ground behind violet content, so on a light page it is a
+pale wash. `--champagne` is the light on the pile, invisible as a pale gold on
+near-white, so it becomes gold-as-text. `--shade` is `#242424`, not black — on
+a light ground pure black reads as a hole rather than as lift.
+
+**None of that was possible while 192 colours were literals.**
+`tools/tokenise_css.py` rewrote them into `color-mix()` over the palette; until
+then a second palette would have repainted the tokens and left every literal
+painting the first design underneath. `tools/check_css_tokens.py` proves the
+rewrite in a real browser, because "color-mix against transparent
+premultiplies" is a claim about a browser, not something Python can assert —
+and it compares **numerically**, since Chromium serialises a color-mix result
+as `color(srgb ...)` and a literal as `rgba(...)`, so a string comparison calls
+every replacement a failure. A fully transparent literal is the one exception
+and uses `rgb(from var(--x) r g b / 0)`: `rgba(11, 7, 19, 0)` and `transparent`
+look identical alone but interpolate differently, and the difference is the
+grey seam at the top of every scrim. 38 near-palette colours are deliberately
+left as literals — snapping them to the nearest token would be a design change
+smuggled in as a refactor.
+
 `check_design.py` covers it, pairing every "this is applied" with a "this is
-refused", and asserting every previewable path actually renders.
+refused", asserting every previewable path renders, and that an override in one
+world never leaks into the other.
 
 ## Languages
 
