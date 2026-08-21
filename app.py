@@ -526,15 +526,6 @@ app.config.update(
 # later lands on the other looks logged out.
 CANONICAL_HOST = os.environ.get("CANONICAL_HOST", "").strip().lower()
 
-# Whether search engines may index this deployment. Off unless a deploy says
-# otherwise, because the unsafe direction is the silent one: a staging or
-# preview host that forgets the flag gets indexed as a second, near-identical
-# copy of the site, and nobody notices until it is ranking. Production sets
-# SEARCH_INDEXING=1 explicitly in .github/workflows/deploy-gcp.yml. Both
-# halves are needed -- robots.txt asks a crawler not to fetch, X-Robots-Tag
-# tells one that fetched anyway not to list the result.
-SEARCH_INDEXING = os.environ.get("SEARCH_INDEXING", "0") not in ("0", "false", "no")
-
 GENDERS = ["Woman", "Man", "Non-binary"]
 
 # Object pronoun for the reveal's "Ask {pronoun} about X" line, keyed on the
@@ -2353,8 +2344,6 @@ def security_headers(response):
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault(
         "Permissions-Policy", "geolocation=(self), camera=(), microphone=(), payment=()")
-    if not SEARCH_INDEXING:
-        response.headers.setdefault("X-Robots-Tag", "noindex, nofollow")
     # Only over TLS, and only in production: sending HSTS from a plain-http
     # dev server teaches the browser to refuse localhost over http for a year.
     if IS_PRODUCTION and request.is_secure:
@@ -7735,19 +7724,6 @@ def set_language(code):
     if not target.startswith("/") or target.startswith("//"):
         target = "/"
     return redirect(target)
-
-
-@app.get("/robots.txt")
-def robots_txt():
-    """Allow or disallow the whole site, per SEARCH_INDEXING.
-
-    Served from the app rather than static/ so it can differ per deployment:
-    velvt.nl and dev.velvt.nl run the same image, and the only thing that
-    should tell them apart to a crawler is an environment variable.
-    """
-    body = ("User-agent: *\nDisallow:\n" if SEARCH_INDEXING
-            else "User-agent: *\nDisallow: /\n")
-    return Response(body, mimetype="text/plain")
 
 
 @app.get("/healthz")
