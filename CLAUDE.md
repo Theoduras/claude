@@ -32,6 +32,7 @@ python check_pin.py       # every profile and search lands in the one city
 python check_notifications.py  # who is told what, how often, over which channel
 python check_landing.py   # the landing page's busyness line is true at every tier
 python check_design.py     # the admin design editor, and what it refuses
+python check_content.py    # rewriting words and re-pointing icons from admin
 python tools/check_hero_fits.py   # landing hero fits above the buttons (needs a browser)
 ```
 
@@ -184,6 +185,7 @@ read heavier than 2px on 24. The Restyler previews all of it and exports the dif
 - `webpush.py` — Web Push spoken directly: VAPID and aes128gcm. Run it to mint a key
   pair. Imported by `app.py` and nothing else
 - `check_design.py` — behaviour checks for the admin design editor
+- `check_content.py` — behaviour checks for the words and icons editors
 - `check_landing.py` — behaviour checks for the landing page's member/searcher line
 - `translations.py` — every user-facing string, `en` + `nl`; `check_i18n.py` and
   `tools/check_translations.py` guard it
@@ -570,6 +572,43 @@ smuggled in as a refactor.
 refused", asserting every previewable path renders, and that an override in one
 world never leaks into the other.
 
+## Words and icons, editable without a deploy
+
+Same rule as the design tokens, twice more. **`copy_overrides` and `icon_slots`
+hold only what differs**, so an empty table is exactly what shipped and a
+string edited in `translations.py` still reaches the site unless someone
+deliberately overrode that one key. Typing the shipped wording back into
+`/admin/copy` **deletes** the row rather than storing an identical copy —
+otherwise the first save would freeze that string against every future edit to
+the file.
+
+`say()` wraps `translate()` and is what `t()` and the template context now
+call. It falls through to `translate()` whenever there is no override, so a
+language with none behaves exactly as before, and it keeps `translate()`'s
+`.format()` guard — an admin-written string is precisely where a typo'd
+placeholder comes from, and that must degrade to unformatted text rather than
+500 a page.
+
+`/admin/icons` re-points a slot at a glyph. **The value can only ever be a name
+in `_icons.html`'s `ICONS`**, checked on the way in and again in the macro, so
+the table cannot introduce markup — the worst a wrong choice does is draw the
+wrong picture. `_icon_registry()` parses `ICONS` and `SLOTS` out of the
+template rather than restating them, so a glyph renamed there disappears from
+the picker instead of lingering as an option that draws nothing. Two slots ship
+empty on purpose (`pill.chip`, `pill.seeking`) and "— nothing —" stays a valid
+choice.
+
+The macro reads its override from a **Jinja global**, not the template context:
+`base.html` imports `icon` with `{% from ... import icon %}`, which does not
+carry context, so a context processor cannot reach inside it.
+
+All three editors — tokens, words, icons — read from **one cached snapshot on
+the same TTL**. Three independent caches expiring at three different moments
+would show a page with the new words and the old icons for a few seconds.
+
+`check_content.py` covers both, pairing each "the override is honoured" with a
+"the shipped value is what you get without one".
+
 ## Languages
 
 Two, `en` and `nl`, in `translations.py` — plain dicts, no gettext and no build step,
@@ -611,7 +650,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 | legal | `/terms`, `/privacy`, `/imprint`, `/safety`, `/faq` |
 | settings | `/settings`, `…/password`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/notifications`, `…/export`, `…/delete`, `…/delete/cancel` |
 | safety | `/report/<id>`, `/block/<id>`, `/unblock/<id>` |
-| moderation | `/admin/members`, `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate`, `/admin/announce`, `/admin/design` |
+| moderation | `/admin/members`, `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate`, `/admin/announce`, `/admin/design`, `/admin/copy`, `/admin/icons` |
 | notifications | `/notifications`, `…/feed`, `…/seen`, `/push/subscribe`, `/push/unsubscribe`, `/sw.js`, `/manifest.webmanifest` |
 | search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/chips` (GET+POST), `/search/status`, `/search/cancel` |
 | match lifecycle | `/match/<id>/state`, `/match/<id>/decide`, `/match/<id>/skip-reveal` |

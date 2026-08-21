@@ -62,6 +62,7 @@ from translations import (
     LANGUAGES,
     LANGUAGE_CODES,
     LANGUAGE_SHORT,
+    TRANSLATIONS,
     interest_label,
     normalize_language,
     option_label,
@@ -1548,6 +1549,30 @@ ALTER TABLE design_tokens ADD PRIMARY KEY (mode, name);
 
 -- One row, one column, the app's own switches. A table rather than an
 -- environment variable because the point is that it changes without a deploy.
+-- Copy the admin has rewritten, per language, keyed on translations.py's own
+-- key. Overrides only: an empty table is exactly the shipped copy, and a
+-- string edited in the file reaches the site unless someone has deliberately
+-- overridden that one -- the same rule design_tokens follows, for the same
+-- reason.
+CREATE TABLE IF NOT EXISTS copy_overrides (
+    lang TEXT NOT NULL,
+    key TEXT NOT NULL,
+    text TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    PRIMARY KEY (lang, key)
+);
+
+-- Which glyph a place uses. The slot is the place (tab.search, card.interests)
+-- and the value is a name in _icons.html's ICONS -- so this table can only
+-- ever re-point a slot at a drawing that exists, never introduce markup.
+CREATE TABLE IF NOT EXISTS icon_slots (
+    slot TEXT PRIMARY KEY,
+    glyph TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -2003,7 +2028,7 @@ def t(key, **kwargs):
     """Translate inside a request, for copy the server produces itself --
     flash messages and validation errors. Templates get their own `t` from
     the context processor; this is the Python-side twin."""
-    return translate(current_language(), key, **kwargs)
+    return say(current_language(), key, **kwargs)
 
 
 def opt_label_for(value):
@@ -2139,7 +2164,7 @@ def inject_user():
         # t() is the workhorse: every template calls it, so it is short on
         # purpose. opt_label() and interest_text() translate the *label* of a
         # value that stays canonical English in the database.
-        "t": lambda key, **kw: translate(lang, key, **kw),
+        "t": lambda key, **kw: say(lang, key, **kw),
         "opt_label": lambda value: option_label(lang, value),
         "interest_text": lambda value: interest_label(lang, value),
         "lang": lang,
@@ -2455,6 +2480,160 @@ def design_lab():
     just an unexplained page strangers can find.
     """
     return send_from_directory(MOCKUPS_DIR, "velvet-lab.html")
+
+
+def _icon_registry():
+    """ICONS and SLOTS, read out of the template that owns them.
+
+    Parsed rather than duplicated, for the reason the design tokens are:
+    a glyph renamed in _icons.html must disappear from the picker, not linger
+    in a second list as an option that draws nothing.
+    """
+    path = os.path.join(app.root_path, "templates", "_icons.html")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            markup = fh.read()
+    except OSError:
+        return [], {}
+    icons = re.search(r"set ICONS = \{(.*?)\n\}", markup, re.S)
+    slots = re.search(r"set SLOTS = \{(.*?)\n\}", markup, re.S)
+    names = re.findall(r"""^\s*['"]([\w-]+)['"]\s*:""", icons.group(1), re.M) if icons else []
+    places = re.findall(
+        r"""^\s*['"]([^'"]+)['"]\s*:\s*['"]([\w-]*)['"]""",
+        slots.group(1), re.M) if slots else []
+    return sorted(set(names)), dict(places)
+
+
+@app.route("/admin/copy", methods=["GET", "POST"])
+@admin_required
+def admin_copy():
+    """Rewrite any string in the app, per language, without a deploy.
+
+    Overrides only, like the design tokens: an empty table is exactly the
+    copy in translations.py, and a string edited in the file still reaches
+    the site unless someone has deliberately overridden that one.
+    """
+    db = get_db()
+    lang = request.values.get("lang", DEFAULT_LANGUAGE)
+    if lang not in {code for code, _label in LANGUAGES}:
+        lang = DEFAULT_LANGUAGE
+
+    if request.method == "POST":
+        if request.form.get("action") == "revert":
+            key = request.form.get("key", "")
+            db.execute("DELETE FROM copy_overrides WHERE lang = ? AND key = ?",
+                       (lang, key))
+            db.commit()
+            design_overrides(force=True)
+            flash(t("msg.copy_reverted") % key)
+            return redirect(url_for("admin_copy", lang=lang,
+                                    q=request.form.get("q", "")))
+
+        shipped = TRANSLATIONS.get(lang, {})
+        changed = 0
+        for field, value in request.form.items():
+            if not field.startswith("copy:"):
+                continue
+            key = field[5:]
+            if key not in shipped and key not in TRANSLATIONS[DEFAULT_LANGUAGE]:
+                continue
+            value = value.strip()
+            # Back to the shipped wording is a delete, so a later edit to
+            # translations.py is not silently overridden by a copy of what it
+            # used to say.
+            if not value or value == shipped.get(key):
+                db.execute("DELETE FROM copy_overrides WHERE lang = ? AND key = ?",
+                           (lang, key))
+                continue
+            db.execute(
+                """
+                INSERT INTO copy_overrides (lang, key, text, updated_by)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (lang, key) DO UPDATE
+                   SET text = EXCLUDED.text, updated_at = NOW(),
+                       updated_by = EXCLUDED.updated_by
+                """,
+                (lang, key, value[:2000], current_uid()),
+            )
+            changed += 1
+        db.commit()
+        design_overrides(force=True)
+        security_event("copy", "saved", user_id=current_uid(),
+                       detail=f"{changed} string(s) in {lang}")
+        flash(t("msg.copy_saved"))
+        return redirect(url_for("admin_copy", lang=lang, q=request.args.get("q", "")))
+
+    query = request.args.get("q", "").strip().lower()
+    overrides = design_overrides(force=True).get("copy", {}).get(lang, {})
+    shipped = TRANSLATIONS.get(lang, {}) or TRANSLATIONS[DEFAULT_LANGUAGE]
+    rows = []
+    for key in sorted(shipped):
+        text = shipped[key]
+        if query and query not in key.lower() and query not in str(text).lower():
+            continue
+        if not isinstance(text, str):
+            # A few entries are lists or dicts (option labels). Those are
+            # structure, not a sentence, and a textarea cannot edit them
+            # without turning one into the other.
+            continue
+        rows.append({"key": key, "shipped": text,
+                     "current": overrides.get(key, text),
+                     "overridden": key in overrides})
+    return render_template("admin_copy.html", rows=rows, lang=lang, q=query,
+                           languages=LANGUAGES, total=len(shipped),
+                           overridden=len(overrides))
+
+
+@app.route("/admin/icons", methods=["GET", "POST"])
+@admin_required
+def admin_icons():
+    """Re-point any slot at any glyph.
+
+    A slot's value can only ever be a name in ICONS, so this screen cannot
+    introduce markup -- the worst a wrong choice does is draw the wrong
+    picture, which is visible immediately and one click to undo.
+    """
+    db = get_db()
+    names, slots = _icon_registry()
+
+    if request.method == "POST":
+        if request.form.get("action") == "reset":
+            db.execute("DELETE FROM icon_slots")
+            db.commit()
+            design_overrides(force=True)
+            flash(t("msg.icons_reset"))
+            return redirect(url_for("admin_icons"))
+        changed = 0
+        for slot, shipped in slots.items():
+            chosen = request.form.get("slot:" + slot, "").strip()
+            if chosen == shipped or (not chosen and not shipped):
+                db.execute("DELETE FROM icon_slots WHERE slot = ?", (slot,))
+                continue
+            if chosen and chosen not in names:
+                continue
+            db.execute(
+                """
+                INSERT INTO icon_slots (slot, glyph, updated_by) VALUES (?, ?, ?)
+                ON CONFLICT (slot) DO UPDATE
+                   SET glyph = EXCLUDED.glyph, updated_at = NOW(),
+                       updated_by = EXCLUDED.updated_by
+                """,
+                (slot, chosen, current_uid()),
+            )
+            changed += 1
+        db.commit()
+        design_overrides(force=True)
+        security_event("icons", "saved", user_id=current_uid(),
+                       detail=f"{changed} slot(s)")
+        flash(t("msg.icons_saved"))
+        return redirect(url_for("admin_icons"))
+
+    chosen = design_overrides(force=True).get("icons", {})
+    rows = [{"slot": slot, "shipped": shipped,
+             "current": chosen.get(slot, shipped),
+             "overridden": slot in chosen}
+            for slot, shipped in sorted(slots.items())]
+    return render_template("admin_icons.html", rows=rows, names=names)
 
 
 @app.route("/admin/design", methods=["GET", "POST"])
@@ -8046,6 +8225,12 @@ def _parse_mode_tokens():
 DESIGN_DEFAULTS = _parse_root_tokens()
 DESIGN_MODE_DEFAULTS = _parse_mode_tokens()
 
+# base.html imports the icon macro with `{% from ... import icon %}`, which
+# does *not* carry the template context -- so a context processor cannot
+# reach inside it. A Jinja global can, and reads the same cached snapshot
+# everything else does.
+app.jinja_env.globals["icon_slot_override"] = lambda slot: icon_slot_override(slot)
+
 
 def _mode_defaults(mode):
     """The stylesheet's own answer for a mode, before any admin override.
@@ -8117,7 +8302,8 @@ DESIGN_CACHE_SECONDS = 10
 # would make a cold process treat its empty cache as fresh and serve the
 # shipped palette for the first few seconds after every scale-up.
 _DESIGN_CACHE = {"at": None,
-                 "values": {"values": {"dark": {}, "light": {}}, "mode": "dark"}}
+                 "values": {"values": {"dark": {}, "light": {}}, "mode": "dark",
+                            "copy": {}, "icons": {}}}
 
 
 DESIGN_MODES = ("dark", "light")
@@ -8137,7 +8323,20 @@ def _design_read():
     setting = get_db().execute(
         "SELECT value FROM app_settings WHERE key = 'design_mode'").fetchone()
     mode = setting["value"] if setting and setting["value"] in DESIGN_MODES else "dark"
-    return {"values": values, "mode": mode}
+
+    # Copy and icons ride along on the same trip and the same TTL. They are
+    # read on every render for the same reason the tokens are, and three
+    # independent caches expiring at three different moments would show a
+    # page with the new words and the old icons for a few seconds.
+    copy = {}
+    for row in get_db().execute("SELECT lang, key, text FROM copy_overrides"):
+        copy.setdefault(row["lang"], {})[row["key"]] = row["text"]
+
+    icons = {
+        row["slot"]: row["glyph"]
+        for row in get_db().execute("SELECT slot, glyph FROM icon_slots")
+    }
+    return {"values": values, "mode": mode, "copy": copy, "icons": icons}
 
 
 def design_overrides(force=False):
@@ -8163,6 +8362,30 @@ def design_overrides(force=False):
 def design_mode():
     """Which world the site is painting in right now: "dark" or "light"."""
     return design_overrides().get("mode", "dark")
+
+
+def say(lang, key, **kwargs):
+    """translate(), with the admin's rewrites laid over it.
+
+    Falls back through the same chain as translate() and then to it, so an
+    override that is missing for one language is simply not an override --
+    never a gap. The .format() guard is translate()'s, kept here because an
+    admin-written string is exactly where a typo'd placeholder will come from.
+    """
+    override = design_overrides().get("copy", {}).get(lang, {}).get(key)
+    if override is None:
+        return translate(lang, key, **kwargs)
+    if kwargs:
+        try:
+            return override.format(**kwargs)
+        except (KeyError, IndexError, ValueError):
+            return override
+    return override
+
+
+def icon_slot_override(slot):
+    """The glyph an admin has re-pointed this slot at, or None."""
+    return design_overrides().get("icons", {}).get(slot)
 
 
 def _render_stylesheet():

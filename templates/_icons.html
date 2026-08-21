@@ -144,7 +144,10 @@
     the <svg> and the shapes inherit them, which is why stripping them from the
     drawings was enough. -#}
 {%- macro icon(slot, cls="") -%}
-  {%- set name = SLOTS.get(slot, slot) -%}
+  {#- An admin can re-point a slot at another glyph from /admin/icons. The
+      override can only ever name something in ICONS, so the worst a bad row
+      can do is draw nothing -- never inject markup. -#}
+  {%- set name = icon_slot_override(slot) or SLOTS.get(slot, slot) -%}
   {%- set g = ICONS.get(name) -%}
   {%- if g -%}
     {%- set box = g[0].split(" ")[2] | float -%}
