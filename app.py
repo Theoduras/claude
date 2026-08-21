@@ -1521,6 +1521,19 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx
     ON push_subscriptions (user_id);
+
+-- Design tokens the admin has changed, and only those. An empty table means
+-- the stylesheet is exactly what is in templates/velvt.css, which is what a
+-- fresh deployment and every test expect. Storing the whole palette instead
+-- would fork it silently: a colour edited in the file would go on being
+-- overridden by a stale copy of its old value, with nothing on screen
+-- explaining why the deploy did nothing.
+CREATE TABLE IF NOT EXISTS design_tokens (
+    name TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL
+);
 """
 
 # Arbitrary but fixed keys for Postgres advisory locks. Any instance taking
@@ -2398,6 +2411,74 @@ def design_lab():
     just an unexplained page strangers can find.
     """
     return send_from_directory(MOCKUPS_DIR, "velvet-lab.html")
+
+
+@app.route("/admin/design", methods=["GET", "POST"])
+@admin_required
+def admin_design():
+    """Edit the design tokens, live, without a deploy.
+
+    The stylesheet's :root is the default and stays the default: only tokens
+    that differ are stored, so `Reset` is a DELETE and a fresh database is
+    exactly the shipped design. Saving changes the stylesheet's digest, which
+    is what makes the change reach browsers that cached the old sheet for a
+    year.
+    """
+    if request.method == "POST":
+        db = get_db()
+        if request.form.get("action") == "reset":
+            db.execute("DELETE FROM design_tokens")
+            db.commit()
+            design_overrides(force=True)
+            security_event("design", "reset", user_id=current_uid())
+            flash(t("msg.design_reset"))
+            return redirect(url_for("admin_design"))
+
+        changed, refused = 0, []
+        for group, tokens in design_editable():
+            for name, _label, default, _is_colour in tokens:
+                if name not in request.form:
+                    continue
+                value = request.form[name].strip()
+                # Back to the file's own value is a delete, not a store of
+                # the same string: otherwise every save would pin the whole
+                # palette and a later deploy could never change a colour.
+                if not value or value == default:
+                    db.execute("DELETE FROM design_tokens WHERE name = ?", (name,))
+                    continue
+                if not design_value_ok(value):
+                    refused.append(name[2:])
+                    continue
+                db.execute(
+                    """
+                    INSERT INTO design_tokens (name, value, updated_by)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT (name) DO UPDATE
+                       SET value = EXCLUDED.value,
+                           updated_at = NOW(),
+                           updated_by = EXCLUDED.updated_by
+                    """,
+                    (name, value, current_uid()),
+                )
+                changed += 1
+        db.commit()
+        # This instance shows the new sheet on the very next render; the
+        # others catch up within DESIGN_CACHE_SECONDS.
+        design_overrides(force=True)
+        security_event("design", "saved", user_id=current_uid(),
+                       detail=f"{changed} token(s)")
+        if refused:
+            flash(t("msg.design_refused") % ", ".join(refused))
+        else:
+            flash(t("msg.design_saved"))
+        return redirect(url_for("admin_design"))
+
+    return render_template(
+        "admin_design.html",
+        groups=design_editable(),
+        overrides=design_overrides(force=True),
+        locked=sorted(DESIGN_LOCKED),
+    )
 
 
 # Below this, the member count is not shown at all -- not replaced with a
@@ -7660,20 +7741,171 @@ def run_purge_deletions():
     return {"purged": purged, "expired": expired}, 200
 
 
+# ---------------------------------------------------------------------------
+# The design tokens, and who is allowed to change them
+#
+# The names and their defaults are read out of templates/velvt.css rather
+# than restated here. A second list would be a second source of truth, and
+# the failure is silent in the worst direction: a token renamed in the file
+# would still be offered in the editor, saved happily, and paint nothing.
+# ---------------------------------------------------------------------------
+
+# Which group a token belongs to, longest prefix first, and how to label it.
+# Anything unmatched falls into "Other" -- a new token in the stylesheet shows
+# up in the editor without being named here, it is just grouped last.
+DESIGN_GROUPS = [
+    ("--ink", "Ground"),
+    ("--violet", "Violet"),
+    ("--teal", "Teal"),
+    ("--champagne", "Delight"),
+    ("--text", "Text"),
+    ("--danger", "Status"),
+    ("--radius", "Shape"),
+    ("--card-pad", "Shape"),
+    ("--measure", "Shape"),
+    ("--serif", "Type"),
+    ("--sans", "Type"),
+    ("--mono", "Type"),
+]
+
+# Tokens the editor does not offer. --fit and --fit-tight are the height
+# curve, --tabbar-h is derived from it and --nap is a base64 SVG: all four
+# are arithmetic or payload rather than taste, and a colour picker has
+# nothing useful to say about any of them. Editing them by hand through this
+# screen would be a way to break every screen's layout at once with no undo.
+DESIGN_LOCKED = {"--fit", "--fit-tight", "--tabbar-h", "--nap"}
+
+# A value is written into a stylesheet served to every visitor, so it is
+# checked rather than trusted -- admin or not. Anything that could close the
+# declaration and start another rule is refused: that is the whole attack,
+# and it is also how a typo silently destroys the sheet from that point on.
+DESIGN_VALUE_MAX = 200
+DESIGN_VALUE_BANNED = (";", "{", "}", "<", ">", "@", "/*", "*/", "\\")
+
+
+def _parse_root_tokens():
+    """Read templates/velvt.css's :root block into name -> default."""
+    path = os.path.join(app.root_path, "templates", "velvt.css")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            css = fh.read()
+    except OSError:
+        return {}
+    match = re.search(r":root\s*\{(.*?)\n\s*\}", css, re.S)
+    if not match:
+        return {}
+    found = re.findall(r"^\s*(--[\w-]+)\s*:\s*([^;]+);", match.group(1), re.M)
+    return {name: value.strip() for name, value in found}
+
+
+DESIGN_DEFAULTS = _parse_root_tokens()
+
+
+def design_editable():
+    """The tokens the editor offers, grouped, in stylesheet order.
+
+    Returns [(group, [(name, label, default, is_colour), ...]), ...].
+    """
+    buckets = {}
+    for name, default in DESIGN_DEFAULTS.items():
+        if name in DESIGN_LOCKED:
+            continue
+        group = "Other"
+        for prefix, label in DESIGN_GROUPS:
+            if name == prefix or name.startswith(prefix + "-"):
+                group = label
+                break
+        label = name[2:].replace("-", " ")
+        is_colour = bool(re.fullmatch(r"#[0-9a-fA-F]{6}", default))
+        buckets.setdefault(group, []).append((name, label, default, is_colour))
+    order = []
+    for _, label in DESIGN_GROUPS:
+        if label in buckets and label not in order:
+            order.append(label)
+    if "Other" in buckets:
+        order.append("Other")
+    return [(group, buckets[group]) for group in order]
+
+
+def design_value_ok(value):
+    """Whether a submitted token value may be written into the stylesheet."""
+    value = value.strip()
+    if not value or len(value) > DESIGN_VALUE_MAX:
+        return False
+    return not any(bad in value for bad in DESIGN_VALUE_BANNED)
+
+
 # Rendered once per process and held here. The stylesheet is a Jinja
 # template (it interpolates url_for() for the wordmark mask) but it depends
 # on nothing request-specific, so re-rendering 134KB on every page view was
 # work with no result. The digest is of the rendered bytes, so a deploy that
-# changes a colour changes the URL and nobody serves a stale sheet.
+# changes a colour changes the URL and nobody serves a stale sheet -- and so
+# does an admin changing one through /admin/design, since the overrides are
+# hashed with it.
 _STYLESHEET = {}
+_SHEET = {}
+
+# How long an instance may serve a stylesheet without re-reading the
+# overrides. Cloud Run runs many instances and only the one that took the
+# save knows immediately; the rest notice within this window. It is a read of
+# at most 26 short rows, but css_digest() runs on every page render, so it
+# cannot be a query per page.
+DESIGN_CACHE_SECONDS = 10
+# "at" is None until the first successful read, never 0.0: time.monotonic()
+# is uptime-based on Linux and can legitimately be a small number, which
+# would make a cold process treat its empty cache as fresh and serve the
+# shipped palette for the first few seconds after every scale-up.
+_DESIGN_CACHE = {"at": None, "values": {}}
+
+
+def design_overrides(force=False):
+    """The admin's token edits, cached per instance.
+
+    Failures are swallowed and the last known values kept: a design table
+    that is briefly unreachable must not take the entire stylesheet down
+    with it. An unstyled site is a worse outcome than a stale colour.
+    """
+    now = time.monotonic()
+    fresh = _DESIGN_CACHE["at"] is not None and (
+        now - _DESIGN_CACHE["at"] < DESIGN_CACHE_SECONDS)
+    if fresh and not force:
+        return _DESIGN_CACHE["values"]
+    try:
+        rows = get_db().execute("SELECT name, value FROM design_tokens").fetchall()
+    except Exception:
+        return _DESIGN_CACHE["values"]
+    # Filtered against the stylesheet's own :root, so a token that has been
+    # renamed or removed in the file stops being emitted rather than
+    # lingering as dead CSS nobody can see to delete.
+    _DESIGN_CACHE["values"] = {
+        r["name"]: r["value"] for r in rows if r["name"] in DESIGN_DEFAULTS
+    }
+    _DESIGN_CACHE["at"] = now
+    return _DESIGN_CACHE["values"]
 
 
 def _render_stylesheet():
-    if not _STYLESHEET:
-        body = render_template("velvt.css")
-        _STYLESHEET["body"] = body
-        _STYLESHEET["digest"] = hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
-    return _STYLESHEET
+    base = _STYLESHEET.get("body")
+    if base is None:
+        base = _STYLESHEET["body"] = render_template("velvt.css")
+    overrides = design_overrides()
+    # The stamp is the cache key: same overrides, same bytes, same digest.
+    stamp = tuple(sorted(overrides.items()))
+    if _SHEET.get("stamp") != stamp or "body" not in _SHEET:
+        body = base
+        if overrides:
+            # Appended rather than merged into :root. Same specificity, later
+            # wins, and the file's own value stays visible above it -- so
+            # "what did the admin change?" is answerable by reading the CSS,
+            # which it would not be if the override were written in place.
+            body += "\n\n/* ---- set in /admin/design ---- */\n:root {\n"
+            body += "".join(
+                "  %s: %s;\n" % (name, value) for name, value in stamp)
+            body += "}\n"
+        _SHEET["stamp"] = stamp
+        _SHEET["body"] = body
+        _SHEET["digest"] = hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
+    return _SHEET
 
 
 @app.get("/favicon.ico")

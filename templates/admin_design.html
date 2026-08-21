@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Design — Velvt admin{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">Admin</p>
+  <h1 style="margin-top: 0.5rem;">Design tokens</h1>
+
+  <p class="hint" style="margin-bottom: 1.2rem;">
+    Every colour and measure the whole app paints from. Changes preview on this
+    page as you make them — this screen wears the same stylesheet as everything
+    else — and go live for everyone on Save.
+    Anything left at its shipped value is not stored, so
+    <strong>Reset</strong> puts the design back exactly as it is in
+    <code>templates/velvt.css</code>.
+  </p>
+
+  <form method="post" id="design-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% for group, tokens in groups %}
+    <section style="margin-bottom: 1.6rem;">
+      <h2 style="font-size: 1rem; margin: 0 0 0.7rem;">{{ group }}</h2>
+
+      {% for name, label, default, is_colour in tokens %}
+      {% set current = overrides.get(name, default) %}
+      <div class="dt-row" data-token="{{ name }}">
+        <label for="dt{{ name }}" class="dt-label">
+          {{ label }}
+          <span class="dt-name">{{ name }}</span>
+        </label>
+
+        {% if is_colour %}
+        <input type="color" class="dt-swatch" value="{{ current }}"
+               aria-label="{{ label }} colour picker">
+        {% endif %}
+
+        <input id="dt{{ name }}" name="{{ name }}" type="text"
+               class="dt-value" value="{{ current }}" maxlength="200"
+               spellcheck="false" autocomplete="off">
+
+        <button type="button" class="dt-revert" title="Back to {{ default }}"
+                data-default="{{ default }}"
+                {% if name not in overrides %}hidden{% endif %}>Revert</button>
+      </div>
+      {% endfor %}
+    </section>
+    {% endfor %}
+
+    <div style="display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: center;">
+      <button class="btn" type="submit">Save</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="reset"
+              formnovalidate
+              onclick="return confirm('Put every token back to the shipped value?')">
+        Reset all
+      </button>
+      <span class="hint" id="dt-count"></span>
+    </div>
+  </form>
+
+  <p class="hint" style="margin-top: 1.4rem;">
+    Not editable here: {% for name in locked %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+    The first three are the height curve every screen sizes itself from, and
+    the last is an embedded texture — a colour picker has nothing to say about
+    any of them, and a bad value would break every layout at once.
+  </p>
+</div>
+
+<style>
+  .dt-row {
+    display: grid;
+    grid-template-columns: 1fr auto minmax(9rem, 14rem) auto;
+    gap: 0.6rem;
+    align-items: center;
+    padding: 0.35rem 0;
+  }
+  .dt-row + .dt-row { border-top: 1px solid var(--ink-hairline); }
+  .dt-label { display: flex; flex-direction: column; gap: 0.1rem; margin: 0; }
+  .dt-name { color: var(--text-faint); font-family: var(--mono); font-size: 0.75rem; }
+  .dt-swatch { width: 2.6rem; height: 2.1rem; padding: 0; border-radius: var(--radius-sm); }
+  .dt-value { font-family: var(--mono); font-size: 0.85rem; margin: 0; }
+  .dt-row.is-changed .dt-name { color: var(--champagne); }
+  .dt-revert { background: none; border: 0; color: var(--text-faint);
+               font-size: 0.8rem; cursor: pointer; padding: 0.2rem 0.3rem; }
+  .dt-revert:hover { color: var(--text); }
+  @media (max-width: 640px) {
+    .dt-row { grid-template-columns: 1fr auto; grid-template-areas:
+      "label swatch" "value revert"; }
+    .dt-label { grid-area: label; }
+    .dt-swatch { grid-area: swatch; }
+    .dt-value { grid-area: value; }
+    .dt-revert { grid-area: revert; justify-self: end; }
+  }
+</style>
+
+<script nonce="{{ csp_nonce() }}">
+(function () {
+  var form = document.getElementById("design-form");
+  if (!form) return;
+
+  // The preview is a :root block appended to the document, which is exactly
+  // what the server appends to the stylesheet on save -- so what this page
+  // shows while you drag is the same mechanism that will paint every other
+  // page, not an approximation of it.
+  var preview = document.createElement("style");
+  document.head.appendChild(preview);
+
+  var rows = Array.prototype.slice.call(form.querySelectorAll(".dt-row"));
+
+  function repaint() {
+    var lines = [], changed = 0;
+    rows.forEach(function (row) {
+      var field = row.querySelector(".dt-value");
+      var revert = row.querySelector(".dt-revert");
+      var isChanged = field.value.trim() !== revert.dataset.default;
+      row.classList.toggle("is-changed", isChanged);
+      revert.hidden = !isChanged;
+      if (isChanged) { changed++; }
+      // Emitted whether or not it differs: a value being previewed is the
+      // point, and :root repeating its own default is harmless.
+      lines.push(row.dataset.token + ": " + field.value + ";");
+    });
+    preview.textContent = ":root {" + lines.join("") + "}";
+    document.getElementById("dt-count").textContent =
+      changed === 0 ? "Nothing changed yet"
+                    : changed + (changed === 1 ? " token" : " tokens") + " changed";
+  }
+
+  rows.forEach(function (row) {
+    var field = row.querySelector(".dt-value");
+    var swatch = row.querySelector(".dt-swatch");
+    var revert = row.querySelector(".dt-revert");
+
+    field.addEventListener("input", function () {
+      if (swatch && /^#[0-9a-fA-F]{6}$/.test(field.value.trim())) {
+        swatch.value = field.value.trim();
+      }
+      repaint();
+    });
+    if (swatch) {
+      swatch.addEventListener("input", function () {
+        field.value = swatch.value;
+        repaint();
+      });
+    }
+    revert.addEventListener("click", function () {
+      field.value = revert.dataset.default;
+      if (swatch && /^#[0-9a-fA-F]{6}$/.test(field.value)) {
+        swatch.value = field.value;
+      }
+      repaint();
+    });
+  });
+
+  repaint();
+})();
+</script>
+{% endblock %}

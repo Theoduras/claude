@@ -31,6 +31,7 @@ python check_i18n.py      # both languages complete, and they still match each o
 python check_pin.py       # every profile and search lands in the one city
 python check_notifications.py  # who is told what, how often, over which channel
 python check_landing.py   # the landing page's busyness line is true at every tier
+python check_design.py     # the admin design editor, and what it refuses
 python tools/check_hero_fits.py   # landing hero fits above the buttons (needs a browser)
 ```
 
@@ -182,6 +183,7 @@ read heavier than 2px on 24. The Restyler previews all of it and exports the dif
 - `check_notifications.py` — behaviour checks for the notification system
 - `webpush.py` — Web Push spoken directly: VAPID and aes128gcm. Run it to mint a key
   pair. Imported by `app.py` and nothing else
+- `check_design.py` — behaviour checks for the admin design editor
 - `check_landing.py` — behaviour checks for the landing page's member/searcher line
 - `translations.py` — every user-facing string, `en` + `nl`; `check_i18n.py` and
   `tools/check_translations.py` guard it
@@ -468,6 +470,45 @@ asks whether something was sent. It also decrypts a real payload the way a brows
 would, because if `encrypt()` and the browser ever disagree every push in production is
 an undecryptable blob and nothing else would say so.
 
+## Design tokens, editable without a deploy
+
+`/admin/design` edits the stylesheet's `:root` live. The names and their
+defaults are **read out of `templates/velvt.css`** (`_parse_root_tokens()`),
+never restated in `app.py` — a second list would be a second source of truth,
+and it fails silently in the worst direction: a token renamed in the file would
+still be offered, saved happily, and paint nothing.
+
+**Only what differs is stored.** `design_tokens` holds the changed rows and
+nothing else, so an empty table *is* the shipped design and Reset is a
+`DELETE`. Storing the whole palette instead would fork it: a colour edited in
+the file would go on being overridden by a stale copy of its old value, with
+nothing on screen explaining why the deploy did nothing.
+
+The overrides are **appended** to the sheet rather than merged into `:root` —
+same specificity, later wins — so the file's own value stays visible above
+them, and "what did the admin change?" is answerable by reading the CSS.
+
+`_render_stylesheet()` hashes the overrides with the body, so a saved colour is
+a new digest and a new URL: a browser holding the `immutable` sheet for a year
+fetches the new one. `design_overrides()` caches per instance for
+`DESIGN_CACHE_SECONDS` (10) — `css_digest()` runs on every page render, so it
+cannot be a query per page, but Cloud Run runs many instances and only the one
+that took the save knows immediately.
+
+**Values are validated, admin or not**, because they land in a stylesheet
+served to every visitor: anything that could close the declaration and open a
+new rule (`;{}<>@`, comment markers) is refused, and 200 characters is the cap.
+That is the whole attack, and it is also how a typo silently destroys the sheet
+from that point on.
+
+`DESIGN_LOCKED` keeps `--fit`, `--fit-tight`, `--tabbar-h` and `--nap` out of
+the editor — the height curve, the bar height derived from it, and an embedded
+texture. A colour picker has nothing useful to say about any of them and a bad
+value breaks every layout at once.
+
+`check_design.py` covers it, pairing every "this is applied" with a "this is
+refused".
+
 ## Languages
 
 Two, `en` and `nl`, in `translations.py` — plain dicts, no gettext and no build step,
@@ -509,7 +550,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 | legal | `/terms`, `/privacy`, `/imprint`, `/safety`, `/faq` |
 | settings | `/settings`, `…/password`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/notifications`, `…/export`, `…/delete`, `…/delete/cancel` |
 | safety | `/report/<id>`, `/block/<id>`, `/unblock/<id>` |
-| moderation | `/admin/members`, `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate`, `/admin/announce` |
+| moderation | `/admin/members`, `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate`, `/admin/announce`, `/admin/design` |
 | notifications | `/notifications`, `…/feed`, `…/seen`, `/push/subscribe`, `/push/unsubscribe`, `/sw.js`, `/manifest.webmanifest` |
 | search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/chips` (GET+POST), `/search/status`, `/search/cancel` |
 | match lifecycle | `/match/<id>/state`, `/match/<id>/decide`, `/match/<id>/skip-reveal` |

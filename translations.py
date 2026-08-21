@@ -460,6 +460,9 @@ TRANSLATIONS = {
         # --- server-side messages ---
         "msg.sign_in_first": "Please sign in first.",
         "msg.admin_only": "Only the admin can do that.",
+        "msg.design_saved": "Design saved. Every page is repainting.",
+        "msg.design_reset": "Design reset to the shipped stylesheet.",
+        "msg.design_refused": "Saved, but these were refused as unsafe values: %s",
         "msg.welcome": "Welcome! Now set up your profile.",
         "msg.throttled": "Too many attempts. Wait a few minutes before trying again.",
         "msg.bad_credentials": "Invalid username or password.",
@@ -919,6 +922,9 @@ TRANSLATIONS = {
         # --- server-side messages ---
         "msg.sign_in_first": "Meld je eerst aan.",
         "msg.admin_only": "Alleen de beheerder kan dat doen.",
+        "msg.design_saved": "Ontwerp opgeslagen. Elke pagina wordt opnieuw getekend.",
+        "msg.design_reset": "Ontwerp teruggezet naar de meegeleverde stylesheet.",
+        "msg.design_refused": "Opgeslagen, maar deze zijn geweigerd als onveilige waarden: %s",
         "msg.welcome": "Welkom! Stel nu je profiel in.",
         "msg.throttled": "Te veel pogingen. Wacht een paar minuten voordat je het opnieuw probeert.",
         "msg.bad_credentials": "Ongeldige gebruikersnaam of wachtwoord.",
