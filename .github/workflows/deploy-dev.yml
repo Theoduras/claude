@@ -5,12 +5,12 @@ name: Deploy to dev.velvt.nl
 # its own database -- so anything you do here, including seeding or wiping,
 # cannot reach a real member's account.
 #
-# Pushing to main deploys production (deploy-gcp.yml), not this. Use
-# "Run workflow" and pick a branch, or push to the "dev" branch.
+# Pushing to main deploys production (deploy-gcp.yml), not this. Every push
+# to "development" lands here, and "Run workflow" deploys any other branch.
 on:
   push:
     branches:
-      - dev
+      - development
   workflow_dispatch: {}
 
 env:

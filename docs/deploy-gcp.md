@@ -284,8 +284,10 @@ database.
 
 ### Deploy it once, then map the domain
 
-Run **Actions → Deploy to dev.velvt.nl → Run workflow** and pick a branch.
-The service has to exist before a domain can be mapped to it.
+Every push to **`development`** deploys here; **Actions → Deploy to
+dev.velvt.nl → Run workflow** deploys any other branch instead. The service
+has to exist before a domain can be mapped to it, so do this before the
+mapping below.
 
 ```bash
 gcloud beta run domain-mappings create \
