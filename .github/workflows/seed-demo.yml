@@ -13,7 +13,13 @@ on:
     paths:
       - .github/workflows/seed-demo.yml
       - seed_demo.py
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      database:
+        description: 'Which database to seed'
+        type: choice
+        default: velvet
+        options: [velvet, velvet_dev]
 
 env:
   PROJECT: velvet-app-505108
@@ -62,5 +68,5 @@ jobs:
           python -m pip install -q -r requirements.txt
 
           # token_urlsafe by construction, so it is safe in a URL.
-          DATABASE_URL="postgresql://velvet_app:${DB_PASS}@127.0.0.1:5432/velvet" \
+          DATABASE_URL="postgresql://velvet_app:${DB_PASS}@127.0.0.1:5432/${{ inputs.database || 'velvet' }}" \
             python seed_demo.py --reset

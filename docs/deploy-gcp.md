@@ -238,6 +238,120 @@ is never returned over plain http on localhost. `/healthz` is exempt from the
 redirect — Cloud Run's startup probe reaches the container directly rather
 than through the mapped domain, so redirecting it would fail every deploy.
 
+## 6b. The dev subdomain (`dev.velvt.nl`)
+
+`dev.velvt.nl` is a **second Cloud Run service** — `velvet-dev` — running the
+same image from a branch you choose, against its **own database** on the same
+Cloud SQL instance. One instance, two databases: a dev deploy costs no extra
+Cloud SQL money, and `python seed_demo.py --reset` against it cannot touch a
+real member's account. Sharing the production database instead would have
+made the one thing a dev site is for — trying destructive changes — the one
+thing you could not do on it.
+
+`.github/workflows/deploy-dev.yml` does the deploying. Steps 1–4 of this
+document are already done; the one-time setup below is what is left.
+
+### One time
+
+```bash
+export PROJECT_ID=velvet-app-505108
+export REGION=europe-west4
+export INSTANCE=velvet-db-eu
+
+# Its own database, same instance and same user.
+gcloud sql databases create velvet_dev --instance="$INSTANCE"
+
+# Its own session key and admin password. Sharing APP_SECRET_KEY with
+# production would mean one signing key across two trust boundaries, which
+# is not a saving worth making for one `gcloud secrets create`.
+python3 -c 'import secrets; print(secrets.token_hex(32), end="")' \
+  | gcloud secrets create velvet-dev-secret-key --data-file=-
+python3 -c 'import secrets; print(secrets.token_urlsafe(18), end="")' \
+  | gcloud secrets create velvet-dev-admin-pass --data-file=-
+
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+for s in velvet-dev-secret-key velvet-dev-admin-pass; do
+  gcloud secrets add-iam-policy-binding "$s" \
+    --member="serviceAccount:${SA}" --role=roles/secretmanager.secretAccessor
+done
+```
+
+Read the dev admin password back with
+`gcloud secrets versions access latest --secret=velvet-dev-admin-pass`. As in
+step 3, it is only consulted the **first** time the app reaches the empty
+database.
+
+### Deploy it once, then map the domain
+
+Every push to **`development`** deploys here; **Actions → Deploy to
+dev.velvt.nl → Run workflow** deploys any other branch instead. The service
+has to exist before a domain can be mapped to it, so do this before the
+mapping below.
+
+```bash
+gcloud beta run domain-mappings create \
+  --service=velvet-dev --domain=dev.velvt.nl --region="$REGION"
+```
+
+No extra domain verification is needed: the Search Console **Domain**
+property for `velvt.nl` from step 6 covers every subdomain, which is exactly
+why that property type was the one to add.
+
+### The DNS record at Mijndomein
+
+`dev` is a subdomain, not the apex, so it is a single `CNAME` — none of the
+four `A` records the apex needs:
+
+| Type | Name / host | Value | TTL |
+|---|---|---|---|
+| `CNAME` | `dev` | `ghs.googlehosted.com.` | default (1h) |
+
+In Mijndomein's control panel this is under the domain's **DNS-instellingen**
+(*Mijn domeinen → velvt.nl → DNS*). Enter the host as `dev` alone, not
+`dev.velvt.nl` — Mijndomein appends the domain itself, and typing the full
+name yields `dev.velvt.nl.velvt.nl`, which resolves to nothing and looks
+identical to a typo you cannot see in the form. Keep the trailing dot on the
+value.
+
+Confirm the record before blaming the certificate:
+
+```bash
+dig +short dev.velvt.nl CNAME     # expect ghs.googlehosted.com.
+```
+
+Then wait for the managed certificate exactly as in step 6 —
+`CertificateProvisioned: Unknown` with `Retry: True` is normal progress, and
+a certificate warning until it lands is expected rather than broken:
+
+```bash
+gcloud beta run domain-mappings describe --domain=dev.velvt.nl --region="$REGION" \
+  --format="value(status.conditions[].type, status.conditions[].status)"
+```
+
+### What dev does differently
+
+The workflow sets three things production does not, and each is the reason
+this must never be the production service:
+
+- `ALLOW_BOT_MATCHES=1` — without it the seeded demo members are excluded
+  from every search pool and a search on dev would never pair, which makes
+  the site untestable by one person.
+- `DB_NAME=velvet_dev` and its own secrets, per above.
+- `SEARCH_INDEXING` **left unset**, so the app serves a disallow-all
+  `robots.txt` and an `X-Robots-Tag: noindex, nofollow` header. A public
+  near-duplicate of the site is a real SEO problem, not a theoretical one,
+  and the flag defaults to off so a future preview host that forgets it is
+  still safe. Production sets `SEARCH_INDEXING=1` explicitly in
+  `deploy-gcp.yml` — that line is what keeps velvt.nl indexable, so do not
+  remove it.
+
+`CANONICAL_HOST=dev.velvt.nl` also applies, so the `*.run.app` URL redirects
+to the mapped domain and the session cookie is `Secure`, same as production.
+
+Seed dev's demo members with **Actions → Seed the demo profiles → Run
+workflow**, choosing `velvet_dev` as the database.
+
 ## 7. Seed the demo profiles (optional)
 
 The seeder needs to reach the database. Easiest is the Cloud SQL Auth Proxy
