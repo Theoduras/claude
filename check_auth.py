@@ -1054,6 +1054,114 @@ check("an oversized request is refused with a 413", huge.status_code == 413,
 check("...on a page that explains itself",
       "Each photo can be up to" in huge.get_data(as_text=True))
 
+# --- the email confirmation gate ----------------------------------------
+# The gate only exists where mail does, so these checks configure a key the
+# way a real deployment would and put it back afterwards. Without that they
+# would silently pass by testing a gate that was never armed.
+_real_key, _real_send = A.RESEND_API_KEY, A.send_email
+A.RESEND_API_KEY = "check-auth-key"
+_outbox = []
+A.send_email = lambda to, subject, html: _outbox.append((to, subject, html)) or True
+
+try:
+    gate = app.test_client()
+    gate_name, gate_reply = register(gate)
+    gate_email = f"{gate_name}@example.test"
+
+    check("registering lands on the confirmation screen",
+          gate_reply.headers.get("Location", "").endswith("/verify/pending"),
+          gate_reply.headers.get("Location", ""))
+
+    for path in ("/search", "/chats", "/profile/edit", "/notifications",
+                 "/how-matching-works", "/photo/1"):
+        landed = gate.get(path)
+        check(f"an unconfirmed account cannot reach {path}",
+              landed.status_code == 302
+              and landed.headers.get("Location", "").endswith("/verify/pending"),
+              f"{landed.status_code} {landed.headers.get('Location', '')}")
+
+    # A gate with no exits is a locked account. Each of these is a way out.
+    for path in ("/verify/pending", "/settings", "/terms", "/faq"):
+        check(f"...but {path} stays reachable", gate.get(path).status_code == 200,
+              str(gate.get(path).status_code))
+
+    pending = gate.get("/verify/pending").get_data(as_text=True)
+    check("the screen names the address the link went to", gate_email in pending)
+    check("...and offers to send it again", "/verify/resend" in pending)
+    check("...and offers to correct it", "/verify/email" in pending)
+    check("the shell drops its in-app nav while the gate holds",
+          "/chats" not in pending)
+
+    # The typo case: the only route to a wrong address must not run through
+    # that same wrong address.
+    _outbox.clear()
+    fixed = f"{gate_name}.fixed@example.test"
+    gate.post("/verify/email",
+              data={"email": fixed, "csrf_token": token(gate, "/verify/pending")})
+    check("correcting the address sends the link to the new one",
+          bool(_outbox) and _outbox[-1][0] == fixed,
+          _outbox[-1][0] if _outbox else "nothing sent")
+
+    with app.test_request_context():
+        moved = A.get_db().execute(
+            "SELECT email, email_verified_at FROM users WHERE username = ?",
+            (gate_name,)).fetchone()
+    check("...and the account moves to it", moved["email"] == fixed, moved["email"])
+    check("...still unconfirmed, so the gate has not been talked past",
+          moved["email_verified_at"] is None)
+    check("...and it is still held", gate.get("/search").status_code == 302)
+
+    # Read the link out now: the next fixture registers an account of its
+    # own, and its confirmation mail would otherwise be the one on the end
+    # of the outbox when this is used below.
+    link = re.search(r"/verify/([A-Za-z0-9_-]+)\"", _outbox[-1][2]).group(1)
+
+    # An address someone else holds must not be claimable, and must not
+    # report back whether it exists.
+    other = app.test_client()
+    other_name, _ = register(other)
+    taken = gate.post("/verify/email",
+                      data={"email": f"{other_name}@example.test",
+                            "csrf_token": token(gate, "/verify/pending")},
+                      follow_redirects=True).get_data(as_text=True)
+    check("an address already registered is refused", "use that address" in taken)
+    with app.test_request_context():
+        held = A.get_db().execute(
+            "SELECT email FROM users WHERE username = ?", (gate_name,)).fetchone()
+    check("...without moving the account", held["email"] == fixed, held["email"])
+
+    gate.get(f"/verify/{link}")
+    check("following the link opens the app",
+          gate.get("/chats").status_code == 200,
+          str(gate.get("/chats").status_code))
+    check("...and the nav comes back",
+          "/chats" in gate.get("/settings").get_data(as_text=True))
+
+    # An account with no address on file was never mailed a link, so holding
+    # it would be holding it forever: the admin, the demo members and every
+    # admin-created profile are in that group.
+    with app.test_request_context():
+        A.get_db().execute(
+            "UPDATE users SET email = NULL, email_verified_at = NULL "
+            "WHERE username = ?", (other_name,))
+        A.get_db().commit()
+    check("an account with no address is not held",
+          other.get("/chats").status_code == 200,
+          str(other.get("/chats").status_code))
+finally:
+    A.RESEND_API_KEY, A.send_email = _real_key, _real_send
+
+# A deployment with no mail provider cannot send a link, so a gate there
+# would be a wall with no door. .env leaves RESEND_API_KEY unset, which is
+# why every check above this line had to arm it by hand.
+nomail = app.test_client()
+register(nomail)
+check("with no mail provider the gate is off, not a wall",
+      nomail.get("/chats").status_code == 200,
+      f"RESEND_API_KEY={'set' if A.RESEND_API_KEY else 'unset'} "
+      f"-> {nomail.get('/chats').status_code}")
+
+
 failed = [n for n, ok, _ in RESULTS if not ok]
 print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
 if failed:

@@ -397,8 +397,13 @@
        other place there is no input margin to reclaim. Headings carry
        margin: 0, so a .hint used as a page lede -- which is what it is on
        /faq, /admin/reports, /admin/announce and /notifications -- was pulled
-       twelve pixels up into the descenders of the title above it. */
-    h1 + .hint, h2 + .hint, h3 + .hint { margin-top: 0; }
+       twelve pixels up into the descenders of the title above it.
+
+       .subtitle is the same case one step down: it is a paragraph with its
+       own bottom margin, not an input, so there is nothing there to reclaim
+       and a hint after it lands on top of its last line. */
+    h1 + .hint, h2 + .hint, h3 + .hint,
+    .subtitle + .hint { margin-top: 0; }
 
     /* A .hint that is refusing something rather than explaining it. Same
        size and position, so nothing moves when it changes register -- only
