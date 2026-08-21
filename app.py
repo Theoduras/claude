@@ -2120,6 +2120,13 @@ def inject_user():
         "photo_max_mb": PHOTO_MAX_MB,
         "photo_max_bytes": PHOTO_MAX_BYTES,
         "photo_upload_max_edge": PHOTO_UPLOAD_MAX_EDGE,
+        # What the photos in one save may add up to, with the form's own
+        # fields already subtracted. The browser checks against this so the
+        # answer is a message on the form rather than a page someone has to
+        # navigate back from.
+        "upload_budget_bytes": app.config["MAX_CONTENT_LENGTH"] - UPLOAD_SLACK_BYTES,
+        "upload_budget_mb": (
+            (app.config["MAX_CONTENT_LENGTH"] - UPLOAD_SLACK_BYTES) // (1024 * 1024)),
         # Handed to the browser so it can subscribe. Public by design: it is
         # the key every push service checks our signature against, and an
         # empty string is how the settings screen knows push is not

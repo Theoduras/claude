@@ -900,6 +900,20 @@ check("the request cap stays under what the platform allows",
       app.config["MAX_CONTENT_LENGTH"] < A.CLOUD_RUN_REQUEST_CEILING,
       "%d MB, ceiling %d MB" % (app.config["MAX_CONTENT_LENGTH"] // MB,
                                 A.CLOUD_RUN_REQUEST_CEILING // MB))
+# The browser is given a budget to check against so a save that is too big is
+# a message on the form, not a page someone has to navigate back from. It has
+# to be under the real cap, or the guard would wave through what the server
+# then refuses.
+with app.test_request_context():
+    _ctx = A.inject_user()
+check("the browser's budget is under the cap it protects",
+      _ctx["upload_budget_bytes"] < app.config["MAX_CONTENT_LENGTH"],
+      "%d MB of %d MB, the rest is the form's own fields"
+      % (_ctx["upload_budget_bytes"] // MB,
+         app.config["MAX_CONTENT_LENGTH"] // MB))
+check("...and still fits a full-size photo",
+      _ctx["upload_budget_bytes"] > A.PHOTO_MAX_BYTES)
+
 check("...while still carrying a full-size photo",
       app.config["MAX_CONTENT_LENGTH"] > A.PHOTO_MAX_BYTES,
       "%d MB for a %d MB photo" % (app.config["MAX_CONTENT_LENGTH"] // MB,

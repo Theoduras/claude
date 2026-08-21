@@ -336,6 +336,11 @@
     primaryField.value = main ? keyOf(main) : "";
 
     addSlot.hidden = kept.length >= max;
+
+    // A refusal describes the strip as it was. Removing a photo is the fix
+    // it asked for, so the message goes with the thing it was about -- the
+    // change handler says its piece again afterwards if it still applies.
+    if (notice && notice.classList.contains("is-error")) { say("", false); }
   }
 
   function controls(tile) {
@@ -371,7 +376,38 @@
   var maxBytes = {{ photo_max_bytes }};
   var maxMb = {{ photo_max_mb }};
   var maxEdge = {{ photo_upload_max_edge }};
+  var budget = {{ upload_budget_bytes }};
+  var budgetMb = {{ upload_budget_mb }};
   var notice = document.getElementById("photo-notice");
+
+  {#- The form this strip belongs to, taken from the input rather than by id:
+      the same include is used by the admin's create-profile form, and a
+      submit button sitting outside the <form> is still in form.elements when
+      it carries a form= attribute. -#}
+  var form = input.form;
+  var preparing = 0;
+
+  function say(text, isError) {
+    notice.textContent = text;
+    notice.classList.toggle("is-error", !!isError);
+    notice.hidden = !text;
+  }
+
+  {#- Saving is held while a photo is still being re-encoded. Without this,
+      a quick Save uploads the *originals*: the input still holds what was
+      picked until sync() replaces it, which cannot happen until the
+      re-encode resolves. Ten megabytes instead of one, and three of them
+      would be refused outright. -#}
+  function busy(delta) {
+    preparing += delta;
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (el.type === "submit") { el.disabled = preparing > 0; }
+    });
+  }
+
+  function megabytes(bytes) {
+    return (bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0);
+  }
 
   {#- Re-encode before upload. A phone camera makes a 4-25MB file several
       thousand pixels across; the biggest one is ever *shown* is a profile
@@ -428,11 +464,12 @@
     var picked = Array.prototype.slice.call(input.files);
     if (!picked.length) return;
 
-    notice.textContent = picked.length === 1
-      ? "Preparing your photo\u2026" : "Preparing your photos\u2026";
-    notice.hidden = false;
+    say(picked.length === 1 ? "Preparing your photo\u2026"
+                            : "Preparing your photos\u2026", false);
+    busy(1);
 
     Promise.all(picked.map(shrink)).then(function (ready) {
+    busy(-1);
     var oversized = [];
     ready.forEach(function (file) {
       if (live().length >= max) return;
@@ -486,15 +523,39 @@
         removal, with no second mechanism of its own. -#}
     sync();
     if (oversized.length) {
-      notice.textContent = oversized.length === 1
+      say(oversized.length === 1
         ? oversized[0] + " is larger than " + maxMb + " MB, so it wasn't added."
         : oversized.length + " photos are larger than " + maxMb +
-          " MB, so they weren't added.";
-      notice.hidden = false;
+          " MB, so they weren't added.", true);
     } else {
-      notice.hidden = true;
+      say("", false);
     }
+    }).catch(function () {
+      busy(-1);
+      say("Those photos couldn't be prepared. Try picking them again.", true);
     });
+  });
+
+  {#- The last thing between a too-large save and the 413 page. That page
+      still exists and is still correct -- a client with no JavaScript, or one
+      that is not a browser, has to land somewhere better than Werkzeug's
+      default -- but nobody should meet it by using the form. Being told on
+      the form beats being sent to a page you then have to navigate back
+      from, having lost nothing but also having been told nothing useful. -#}
+  form.addEventListener("submit", function (ev) {
+    if (preparing > 0) {
+      ev.preventDefault();
+      say("Still preparing your photos \u2014 one moment.", false);
+      return;
+    }
+    var total = files.reduce(function (sum, f) { return sum + f.size; }, 0);
+    if (total > budget) {
+      ev.preventDefault();
+      say("Those photos come to " + megabytes(total) + " MB, and one save can "
+          + "carry " + budgetMb + " MB. Remove one, or save them a few at a "
+          + "time \u2014 nothing has been lost.", true);
+      notice.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
   });
 
   // A removed tile's preview is the one thing that can be thrown away for

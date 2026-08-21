@@ -400,6 +400,16 @@
        twelve pixels up into the descenders of the title above it. */
     h1 + .hint, h2 + .hint, h3 + .hint { margin-top: 0; }
 
+    /* A .hint that is refusing something rather than explaining it. Same
+       size and position, so nothing moves when it changes register -- only
+       the colour and the rule down its edge, which is what makes it read as
+       an answer to what you just did instead of more advice. */
+    .hint.is-error {
+      color: var(--danger);
+      border-left: 2px solid var(--danger);
+      padding-left: 0.6rem;
+    }
+
     /* A form section break: violet hairline, because it divides your own
        attributes from what you're asking of someone else. */
     .field-group {
