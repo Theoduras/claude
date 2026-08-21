@@ -504,9 +504,9 @@ PUSH_TIMEOUT_SECONDS = 4
 
 app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=SESSION_LIFETIME_DAYS),
-    # Refuse an oversized upload before Werkzeug reads it into memory,
-    # rather than after, where PHOTO_MAX_BYTES catches it.
-    MAX_CONTENT_LENGTH=8 * 1024 * 1024,
+    # MAX_CONTENT_LENGTH is set beside PHOTO_MAX_BYTES instead of here: it
+    # is that limit times the number of photos a form may carry, and the two
+    # only stay in step while they are written down together.
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     # Keyed to production, not to CANONICAL_HOST: a deployment that has not
@@ -691,9 +691,30 @@ TIMED_CHAT_SECONDS = 300     # 5 minutes to talk before a decision is forced
 DECISION_GRACE_SECONDS = 86400  # no answer within a day counts as unmatch
 
 # --- photos -----------------------------------------------------------
-PHOTO_MAX_BYTES = 2 * 1024 * 1024
+# 2MB rejected an ordinary photo taken on an ordinary phone -- a 12MP HEIC
+# converted to JPEG lands around 4-8MB, and a recent iPhone's 48MP mode is
+# well past that -- so the limit was being enforced against the camera
+# rather than against anything the app cares about.
+PHOTO_MAX_BYTES = 25 * 1024 * 1024
 PHOTO_MAX_PER_USER = 6
+# Stated once, for the copy that has to name it. A limit written out by hand
+# anywhere else is one that drifts the first time this number moves.
+PHOTO_MAX_MB = PHOTO_MAX_BYTES // (1024 * 1024)
 PHOTO_ALLOWED_MIMES = {"image/jpeg", "image/png", "image/webp"}
+
+# The whole-request cap, and the reason it is derived rather than typed: the
+# edit form can carry every photo at once, so any number smaller than this
+# refuses a save that each individual file was within its rights to make --
+# and the person doing it gets a 413 naming a limit none of their photos
+# broke. The slack is for the form fields travelling with them.
+#
+# Werkzeug spools the body past a few hundred KB to a temporary file rather
+# than holding it in memory, but on Cloud Run /tmp is a tmpfs, so a full
+# six-photo save is still real memory on the instance serving it. That is
+# the number to size an instance against -- see docs/deploy-gcp.md.
+UPLOAD_SLACK_BYTES = 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = (
+    PHOTO_MAX_PER_USER * PHOTO_MAX_BYTES + UPLOAD_SLACK_BYTES)
 
 
 def sniff_image_mime(data):
@@ -1998,6 +2019,11 @@ def inject_user():
         # does not pay for the query.
         "unread_notifications": (
             lambda: unread_notification_count(current_uid()) if current_uid() else 0),
+        # So the copy on the photo form, the client-side check that runs
+        # before an upload starts, and the server's own rejection all name
+        # one number.
+        "photo_max_mb": PHOTO_MAX_MB,
+        "photo_max_bytes": PHOTO_MAX_BYTES,
         # Handed to the browser so it can subscribe. Public by design: it is
         # the key every push service checks our signature against, and an
         # empty string is how the settings screen knows push is not
@@ -2235,6 +2261,28 @@ def security_headers(response):
 
 
 MOCKUPS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mockups")
+
+
+@app.errorhandler(413)
+def upload_too_large(_exc):
+    """Werkzeug refuses the body; this decides what the person sees.
+
+    Without a handler here that is a bare white page reading "Request Entity
+    Too Large", which is the app at its least helpful precisely when someone
+    has just spent a minute uploading over mobile data. It cannot say which
+    file was the problem -- the request was refused before it was parsed --
+    so it says what the limits are and sends them back to the form.
+
+    413 is also reachable without any file at all, by posting a large enough
+    body to any endpoint, so this is a general handler rather than something
+    the photo route owns.
+    """
+    return render_template(
+        "upload_too_large.html",
+        photo_max_mb=PHOTO_MAX_MB,
+        photo_max_per_user=PHOTO_MAX_PER_USER,
+        request_max_mb=app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024),
+    ), 413
 
 
 @app.route("/lab")
@@ -3155,7 +3203,7 @@ def edit_profile():
                 continue
             data = f.read(PHOTO_MAX_BYTES + 1)
             if len(data) > PHOTO_MAX_BYTES:
-                error = error or t("msg.photo_too_big")
+                error = error or t("msg.photo_too_big", size=PHOTO_MAX_MB)
                 break
             mime = sniff_image_mime(data)
             if mime is None or mime not in PHOTO_ALLOWED_MIMES:

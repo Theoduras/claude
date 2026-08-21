@@ -869,6 +869,90 @@ try:
 finally:
     A.CANONICAL_HOST = _host
 
+# --- photo upload limits ------------------------------------------------
+# The per-photo cap and the whole-request cap are two different refusals with
+# two different failure modes, and only one of them can name the file that
+# caused it. Both are checked, along with the relationship between them --
+# a request cap below what the form is allowed to carry would refuse a save
+# that every individual photo was within its rights to make.
+import io as _io
+
+MB = 1024 * 1024
+_buf = _io.BytesIO()
+try:
+    from PIL import Image as _Image
+    _Image.new("RGB", (64, 64), (120, 60, 200)).save(_buf, "JPEG")
+    JPEG_HEAD = _buf.getvalue()
+except ImportError:                       # Pillow is not a dependency of the app
+    JPEG_HEAD = bytes.fromhex("ffd8ffe000104a46494600010100000100010000")
+
+
+def jpeg(size_bytes):
+    """A real JPEG header padded to length -- what the app measures."""
+    return (_io.BytesIO(JPEG_HEAD + b"\x00" * (size_bytes - len(JPEG_HEAD))),
+            "photo.jpg")
+
+
+check("the request cap can carry a full form of photos",
+      app.config["MAX_CONTENT_LENGTH"] >= A.PHOTO_MAX_BYTES * A.PHOTO_MAX_PER_USER,
+      "%d MB for %d x %d MB" % (app.config["MAX_CONTENT_LENGTH"] // MB,
+                                A.PHOTO_MAX_PER_USER, A.PHOTO_MAX_MB))
+import translations as _T
+check("the size in the copy is the size in the code",
+      all("{size}" in _T.TRANSLATIONS[code]["msg.photo_too_big"]
+          for code in _T.LANGUAGE_CODES),
+      "in every language, so none of them can drift when the limit moves")
+
+with app.test_request_context():
+    db = A.get_db()
+    up = db.execute(
+        "INSERT INTO users (username, password_hash) VALUES (?, 'x') RETURNING id",
+        ("upload_" + A.secrets.token_hex(3),)).fetchone()["id"]
+    db.execute(
+        "INSERT INTO profiles (user_id, name, age, gender, seeking)"
+        " VALUES (?, 'Upload', 30, 'Man', 'Everyone')", (up,))
+    db.commit()
+
+up_client = app.test_client()
+login_as(up_client, up)
+_token = up_client.get("/profile/edit").get_data(as_text=True).split(
+    'name="csrf-token" content="')[1].split('"')[0]
+
+
+def save_photo(size_bytes):
+    return up_client.post("/profile/edit", data={
+        "csrf_token": _token, "name": "Upload", "age": "30",
+        "gender": "Man", "seeking": "Everyone", "photos": jpeg(size_bytes),
+    }, content_type="multipart/form-data", follow_redirects=True)
+
+
+def stored():
+    with app.test_request_context():
+        return A.get_db().execute(
+            "SELECT COUNT(*) AS n FROM photos WHERE user_id = ?", (up,)
+        ).fetchone()["n"]
+
+
+save_photo(A.PHOTO_MAX_BYTES - MB)
+check("a photo just inside the limit is stored", stored() == 1, str(stored()))
+
+reply = save_photo(A.PHOTO_MAX_BYTES + MB)
+check("a photo over it is refused by name",
+      "under %d MB" % A.PHOTO_MAX_MB in reply.get_data(as_text=True))
+check("...and nothing of it is kept", stored() == 1, str(stored()))
+
+# Past the whole-request cap there is no parsed form and no filename to
+# blame, so this is the one that used to be a bare Werkzeug error page.
+huge = up_client.post(
+    "/profile/edit",
+    data={"csrf_token": _token, "name": "Upload",
+          "photos": jpeg(app.config["MAX_CONTENT_LENGTH"] + MB)},
+    content_type="multipart/form-data")
+check("an oversized request is refused with a 413", huge.status_code == 413,
+      str(huge.status_code))
+check("...on a page that explains itself",
+      "Each photo can be up to" in huge.get_data(as_text=True))
+
 failed = [n for n, ok, _ in RESULTS if not ok]
 print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
 if failed:

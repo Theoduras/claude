@@ -95,6 +95,22 @@ under 1KB, and sets `Vary: Accept-Encoding` either way.
 `PHOTO_MAX_BYTES` again — six of those to a profile is the heaviest thing the app
 serves, and it comes out of Postgres through the app with no CDN in front of it.
 
+**`PHOTO_MAX_BYTES` is 25MB, and nothing downscales.** 2MB was rejecting an ordinary
+photo from an ordinary phone, so the limit was being enforced against the camera rather
+than against anything the app cares about. What it costs is stated plainly: an original
+is stored in `photos.data` at full size and served back at full size, and
+`MAX_CONTENT_LENGTH` is *derived* from it (`PHOTO_MAX_PER_USER * PHOTO_MAX_BYTES`,
+~151MB) because the edit form can carry every photo at once — any smaller number refuses
+a save each individual file was entitled to make. On Cloud Run `/tmp` is a tmpfs, so
+Werkzeug's spill of a body that size is real instance memory: see the `--memory` note in
+`docs/deploy-gcp.md`. **Resizing on upload is the outstanding fix**, and it needs an
+image library the dependency list does not have.
+
+A 413 is now a rendered page (`upload_too_large.html`) rather than Werkzeug's bare one —
+there was no `errorhandler` at all before, which at a 25MB limit people would actually
+have met. `_profile_fields.html` also checks each picked file's size before anything is
+sent, because the server's answer cannot arrive until the whole upload has.
+
 **`overflow: hidden` hides bugs, not just content.** `.wiz-fit` clips rather than
 scrolls, which is right for a step whose contents are known — but it means a box
 whose content outgrows it paints *over* what follows instead of scrolling, and

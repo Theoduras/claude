@@ -118,8 +118,24 @@ gcloud run deploy velvet \
   --min-instances=0 \
   --max-instances=10 \
   --concurrency=80 \
+  --memory=1Gi \
   --startup-probe=httpGet.path=/healthz,periodSeconds=5,timeoutSeconds=5,failureThreshold=6
 ```
+
+**`--memory` is sized against uploads, not against the app.** Velvet idles in
+well under Cloud Run's 512Mi default, but `MAX_CONTENT_LENGTH` is
+`PHOTO_MAX_PER_USER * PHOTO_MAX_BYTES` — six 25MB photos, ~151MB — and
+Werkzeug spools a body that size to a temporary file rather than holding it
+in memory. On Cloud Run `/tmp` is a tmpfs, so that spill *is* memory on the
+instance serving it, and with `--concurrency=80` two people saving a full set
+of photos at the same time is 300MB before the app has done anything with
+them. 1Gi is the headroom for that; raising `PHOTO_MAX_BYTES` without raising
+this is how an instance gets OOM-killed mid-upload.
+
+The durable fix is to downscale on upload rather than to keep buying memory:
+a 25MB original is stored in Postgres at full size and served back through
+the app with no CDN, which the ETag on `/photo/<id>` softens but does not
+solve. That needs an image library the app does not currently carry.
 
 The app creates its schema and the admin account on boot, guarded by a
 Postgres advisory lock so simultaneous instance starts don't collide.

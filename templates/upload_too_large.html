@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}That was too much at once — Velvt{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <p class="eyebrow">Upload</p>
+  <h1 style="margin-top: 0.5rem;">That was too much at once.</h1>
+  {#- The request was refused before it was parsed, so there is no way to say
+      which file was the problem. Saying what the limits are is the most this
+      page can honestly do. -#}
+  <p class="subtitle" style="margin-bottom: 1.2rem;">
+    Nothing was saved. Each photo can be up to {{ photo_max_mb }} MB, and one
+    save can carry {{ photo_max_per_user }} of them — about
+    {{ request_max_mb }} MB in total.
+  </p>
+  <p class="hint">
+    Go back and add a few at a time, or pick smaller versions.
+    If they were already within the limit, tell us at
+    <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+  </p>
+  <a class="btn" href="{{ url_for('edit_profile') }}">Back to your photos</a>
+</div>
+{% endblock %}

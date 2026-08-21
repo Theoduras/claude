@@ -85,8 +85,14 @@
   <p class="hint" style="margin-top: 0;">
     Tap a photo to make it the main one, drag to reorder. Only visible to
     someone else once you've both chosen to continue a match. JPEG, PNG or
-    WebP, up to 2 MB each, {{ photo_max_per_user }} total.
+    WebP, up to {{ photo_max_mb }} MB each, {{ photo_max_per_user }} total.
   </p>
+
+  {#- Filled by the change handler when a picked file is over the limit.
+      A <p> in the flow rather than an alert(): the tiles that *were* added
+      are on screen and worth seeing next to the reason the others were
+      not. -#}
+  <p class="hint" id="photo-notice" role="status" style="margin-top: 0;" hidden></p>
 
   <input class="visually-hidden" id="photos" name="photos" type="file"
          accept="image/jpeg,image/png,image/webp" multiple>
@@ -356,10 +362,20 @@
 
   tiles().forEach(controls);
 
+  {#- The server checks this too, and its answer is the one that counts.
+      This one exists because the server's cannot be given until the whole
+      file has been uploaded: on a phone on mobile data that is a minute of
+      waiting to be told no. Rejected here, before a byte leaves. -#}
+  var maxBytes = {{ photo_max_bytes }};
+  var maxMb = {{ photo_max_mb }};
+  var notice = document.getElementById("photo-notice");
+
   input.addEventListener("change", function () {
     var picked = Array.prototype.slice.call(input.files);
+    var oversized = [];
     picked.forEach(function (file) {
       if (live().length >= max) return;
+      if (file.size > maxBytes) { oversized.push(file.name); return; }
       var key = "f" + Date.now() + Math.random().toString(36).slice(2, 7);
       var url = URL.createObjectURL(file);
       urls[key] = url;
@@ -399,7 +415,20 @@
       strip.insertBefore(tile, addSlot);
       controls(tile);
     });
+    {#- sync() rewrites the file input from the tiles on screen, and an
+        oversized file never got a tile -- so it is dropped from the upload
+        here by the same mechanism that handles a removal, rather than
+        needing a second path of its own. -#}
     sync();
+    if (oversized.length) {
+      notice.textContent = oversized.length === 1
+        ? oversized[0] + " is larger than " + maxMb + " MB, so it wasn't added."
+        : oversized.length + " photos are larger than " + maxMb +
+          " MB, so they weren't added.";
+      notice.hidden = false;
+    } else {
+      notice.hidden = true;
+    }
   });
 
   // A removed tile's preview is the one thing that can be thrown away for
