@@ -1,0 +1,66 @@
+name: Seed the demo profiles
+
+# Loads the 20 demo members from seed_demo.py into the Cloud SQL database,
+# over the Cloud SQL Auth Proxy. Uses --reset, so it is safe to re-run: the
+# demo members are wiped and re-added, and nothing else in the database is
+# touched.
+#
+# Triggered by pushing a change to this file, or to seed_demo.py.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/seed-demo.yml
+      - seed_demo.py
+  workflow_dispatch: {}
+
+env:
+  PROJECT: velvet-app-505108
+  INSTANCE_CONN: velvet-app-505108:europe-west4:velvet-db-eu
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/733528989325/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: '733528989325-compute@developer.gserviceaccount.com'
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Seed over the Cloud SQL Auth Proxy
+        run: |
+          set -euo pipefail
+
+          curl -sSL -o cloud-sql-proxy \
+            https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy "$INSTANCE_CONN" &
+
+          # Wait for the proxy to accept connections rather than racing it.
+          for _ in $(seq 1 30); do
+            if (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          DB_PASS="$(gcloud secrets versions access latest \
+            --secret=velvet-db-pass --project="$PROJECT")"
+          echo "::add-mask::$DB_PASS"
+
+          python -m pip install -q -r requirements.txt
+
+          # token_urlsafe by construction, so it is safe in a URL.
+          DATABASE_URL="postgresql://velvet_app:${DB_PASS}@127.0.0.1:5432/velvet" \
+            python seed_demo.py --reset

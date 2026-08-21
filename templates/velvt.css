@@ -1,0 +1,3996 @@
+    /* ==================================================================
+       VELVET — design tokens
+       Palette lifted from the violet and teal crushed-velvet swatches:
+       crest highlights, mid pile, and the near-black inside a fold.
+       Single committed dark world; every colour is painted explicitly.
+       ================================================================== */
+    :root {
+      /* grounds — violet-biased neutrals, never plain grey */
+      --ink:          #0B0713;
+      --ink-raised:   #150C22;
+      --ink-hairline: rgba(168, 133, 247, 0.16);
+
+      /* violet velvet */
+      --violet:       #8A2BE2;
+      --violet-crest: #A855F7;
+      --violet-deep:  #3B0B66;
+
+      /* teal velvet */
+      --teal:         #12807F;
+      --teal-crest:   #1DA6A2;
+      --teal-deep:    #06383B;
+
+      /* the light on the pile */
+      --champagne:    #E8D3A9;
+
+      /* type */
+      --text:         #F7F1FB;
+      --text-muted:   #B7A6CB;
+      --text-faint:   #7C6B92;
+
+      /* semantics */
+      --danger:       #FF7A8A;
+      --danger-deep:  #4A0F1E;
+
+      --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      /* numbers that must not reflow as they tick: timers, counts, readouts */
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+      /* ---------- height-fluid sizing ------------------------------
+         The flow's promise is that a step never scrolls, which used to be
+         kept with stepped @media (max-height) blocks: full size above
+         740px tall, a trim below it, a harder trim below 700. Those are
+         cliffs -- two phones 1px apart in height got visibly different
+         type -- and every trimmed value had to be restated by hand, so the
+         two sets drifted.
+
+         --fit is a rem that shrinks with the viewport's height instead: it
+         is exactly 1rem on a 740px-tall screen and above, and eases down to
+         0.70rem at 540px, continuously. Anything sized in calc(N *
+         var(--fit)) therefore keeps its old full-height value and finds its
+         own trim on the way down, with no breakpoint to land on.
+
+         --fit-tight is the same curve, steeper (0.52 at 540px), for the
+         screens that carry more than a step does -- the reveal's two
+         portraits, chips and countdown -- and for decoration that should
+         yield before content does.
+
+         The floors are set by the shortest screen the flow has to hold
+         without scrolling, not by taste: below them a step spills, which is
+         the one thing this whole scale exists to prevent.
+
+         The vh coefficient is the whole trick: 1vh is height/100, so a
+         coefficient of N vh moves the value by exactly N px across a 100px
+         change in viewport height. */
+      --fit: clamp(0.7rem, 2.4vh - 0.11rem, 1rem);
+      --fit-tight: clamp(0.52rem, 4.267vh - 1.038rem, 1rem);
+
+      /* The bar is fixed, so main has to reserve its height by hand -- and
+         every part of the bar is now sized in --fit, which makes that height
+         one expression rather than a number someone has to remember to keep
+         in step. 4.875 is measured, not guessed: it is what the padding,
+         the 21px icon, the gap, the label and the border come to at --fit
+         = 1rem. Reserve it plus a small gap and the step's last row sits
+         just above the bar at every height, with no fixed pull-up. */
+      --tabbar-h: calc(4.875 * var(--fit) + env(safe-area-inset-bottom, 0px));
+
+      --measure: 62rem;
+      --radius: 18px;
+      --radius-sm: 11px;
+      /* named so full-bleed children can cancel it with a negative margin
+         instead of hard-coding the same clamp in two places */
+      --card-pad: clamp(1.25rem, 3vw, 1.9rem);
+
+      /* fiber grain — inline so no external request is needed */
+      --nap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html { -webkit-text-size-adjust: 100%; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--sans);
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--text);
+      background-color: var(--ink);
+      /* the pile: light pooling on two crests, shadow gathering below */
+      /* the pile: light pooling where folds crest, violet on one side of the
+         bolt, teal on the other, shadow gathering in the deep creases */
+      background-image:
+        radial-gradient(58% 42% at 12% -4%,  rgba(168, 85, 247, 0.42), transparent 70%),
+        radial-gradient(46% 38% at 34% 26%,  rgba(138, 43, 226, 0.30), transparent 72%),
+        radial-gradient(52% 40% at 96% 12%,  rgba(29, 166, 162, 0.30), transparent 72%),
+        radial-gradient(44% 34% at 78% 52%,  rgba(18, 128, 127, 0.20), transparent 74%),
+        radial-gradient(70% 46% at 50% 96%,  rgba(59, 11, 102, 0.60), transparent 76%),
+        radial-gradient(40% 30% at 8% 74%,   rgba(75, 20, 124, 0.34), transparent 76%);
+      background-attachment: fixed;
+    }
+
+    /* the folds — soft pleats radiating from two centres, drawn with wide
+       feathered stops so the crease edges stay blurred like real cloth */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -20%;
+      pointer-events: none;
+      z-index: 0;
+      background-image:
+        conic-gradient(from 195deg at 30% 18%,
+          rgba(255, 255, 255, 0.075) 0deg,
+          rgba(255, 255, 255, 0.02) 26deg,
+          rgba(0, 0, 0, 0.20) 74deg,
+          rgba(0, 0, 0, 0.34) 122deg,
+          rgba(0, 0, 0, 0.10) 186deg,
+          rgba(255, 255, 255, 0.05) 254deg,
+          rgba(0, 0, 0, 0.26) 318deg,
+          rgba(255, 255, 255, 0.075) 360deg),
+        conic-gradient(from 40deg at 84% 72%,
+          rgba(255, 255, 255, 0.05) 0deg,
+          rgba(0, 0, 0, 0.24) 68deg,
+          rgba(255, 255, 255, 0.035) 148deg,
+          rgba(0, 0, 0, 0.28) 226deg,
+          rgba(255, 255, 255, 0.045) 300deg,
+          rgba(255, 255, 255, 0.05) 360deg);
+      filter: blur(28px);
+      opacity: 0.9;
+    }
+    /* the nap — fibre grain plus the fine vertical pile of cut velvet */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background-image:
+        var(--nap),
+        repeating-linear-gradient(94deg,
+          rgba(255, 255, 255, 0.035) 0 1px,
+          rgba(0, 0, 0, 0.05) 1px 2px,
+          transparent 2px 4px);
+      background-size: 180px 180px, auto;
+      opacity: 0.42;
+      mix-blend-mode: overlay;
+    }
+
+    /* ---------- typography ------------------------------------------- */
+    h1, h2, h3 {
+      font-family: var(--serif);
+      font-weight: 500;
+      letter-spacing: -0.015em;
+      line-height: 1.12;
+      text-wrap: balance;
+      margin: 0;
+    }
+    h1 { font-size: clamp(1.9rem, 4.2vw, 2.9rem); }
+    h2 { font-size: 1.3rem; }
+
+    /* A form header two screens into a flow is a label, not a statement —
+       the display h1 shouts over the controls it introduces. Still an h1, so
+       the document outline is unchanged; only the type scale drops. */
+    .page-title--sm {
+      font-size: clamp(1.25rem, 2.4vw, 1.45rem);
+      letter-spacing: 0;
+    }
+    h1.page-title--sm + .subtitle { margin-top: 0.35rem; }
+
+    /* Tightens the gap without eating into the text. The pull-up can only
+       take back the half-leading the line box is actually carrying -- at
+       these sizes that is 2-3px, so -0.7rem overlapped the subtitle by
+       about nine of them at every width. */
+    h1 + .subtitle { margin-top: 0; }
+    h2 + .subtitle { margin-top: 0.35rem; }
+    .subtitle {
+      margin: 0.5rem 0 0;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      max-width: 46ch;
+    }
+
+    .eyebrow {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--text-faint);
+    }
+
+    a { color: var(--violet-crest); text-decoration: none; }
+    a:hover { color: var(--champagne); }
+    .muted { color: var(--text-muted); }
+
+    /* ---------- shell ------------------------------------------------ */
+    nav {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+      flex-wrap: wrap;
+      /* flex-shrink defaults to 1: inside a fixed-height .app-shell (a
+         .wiz-fit screen sets one so its log can be the part that scrolls)
+         a nav with no flex-basis would rather shrink its own padding than
+         let main give up the space, squashing the bar down to a sliver. */
+      flex: none;
+      /* the chrome above the step gives height back too, or the step alone
+         carries the whole trim on a short screen */
+      padding: calc(0.85 * var(--fit)) clamp(1rem, 4vw, 2.5rem);
+      background: linear-gradient(180deg, rgba(21, 12, 34, 0.92), rgba(11, 7, 19, 0.72));
+      border-bottom: 1px solid var(--ink-hairline);
+      backdrop-filter: blur(14px);
+    }
+    .brand {
+      font-family: var(--serif);
+      font-size: 1.45rem;
+      letter-spacing: 0.02em;
+      color: var(--text);
+      margin-right: auto;
+      display: flex;
+      /* centre, not baseline: the wordmark is a masked box and has no text
+         baseline of its own. */
+      align-items: center;
+      gap: 0.45rem;
+    }
+    .brand:hover { color: var(--text); }
+    /* The wordmark is painted, not placed: the source art is dark aubergine on
+       transparent, which would all but vanish against this bar. Masking with it
+       and filling with the palette keeps the letterforms exactly as drawn while
+       the colour stays ours. aspect-ratio comes from the file's own 753x391, so
+       setting the height alone can never stretch it.
+
+       .brand-word is the accessible name -- clipped rather than display:none so
+       screen readers, and a browser that somehow drops the mask, still say Velvt. */
+    .brand-logo {
+      display: block;
+      height: 1.6rem;
+      aspect-ratio: 753 / 391;
+      background: linear-gradient(115deg, var(--violet-crest), var(--champagne) 95%);
+      -webkit-mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") left center / contain no-repeat;
+      mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") left center / contain no-repeat;
+    }
+    .brand-word {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    nav a:not(.brand) {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      padding: 0.4rem 0.7rem;
+      border-radius: 999px;
+      transition: color 0.18s ease, background 0.18s ease;
+    }
+    nav a:not(.brand):hover {
+      color: var(--text);
+      background: rgba(138, 43, 226, 0.16);
+    }
+    nav form { margin: 0; }
+
+    /* A column the full height of the screen, so a page that wants to fill
+       it (the search wizard) can, instead of floating in the top third.
+       Pages that don't ask to grow are unaffected -- main's children only
+       stretch if they set flex-grow themselves. */
+    .app-shell {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      /* containing block for the sheet, so the overlay covers the app frame
+         rather than the whole browser window on a wide screen */
+      position: relative;
+    }
+    main {
+      position: relative;
+      flex: 1 0 auto;
+      z-index: 1;
+      /* explicit, because .app-shell is a flex column: there `margin: 0 auto`
+         is a flex auto-margin, which absorbs the free space and suppresses
+         the stretch that used to size this box, leaving it shrink-to-fit. */
+      width: 100%;
+      max-width: var(--measure);
+      margin: 0 auto;
+      padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 4vw, 2rem) 4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    /* ---------- panels: light on the fold crest, shadow beneath ------- */
+    .card {
+      position: relative;
+      padding: var(--card-pad);
+      border-radius: var(--radius);
+      border: 1px solid var(--ink-hairline);
+      background-color: var(--ink-raised);
+      background-image:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 34%),
+        linear-gradient(155deg, rgba(75, 20, 124, 0.50), rgba(11, 7, 19, 0.88) 72%);
+      box-shadow:
+        0 26px 70px -28px rgba(0, 0, 0, 0.9),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+      overflow: hidden;
+    }
+    /* sheen running off the panel's top-left crest */
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        conic-gradient(from 200deg at 18% 0%,
+          rgba(255, 255, 255, 0.09) 0deg,
+          rgba(255, 255, 255, 0.01) 40deg,
+          rgba(0, 0, 0, 0.16) 110deg,
+          transparent 190deg);
+      filter: blur(18px);
+    }
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        var(--nap),
+        repeating-linear-gradient(94deg,
+          rgba(255, 255, 255, 0.03) 0 1px,
+          transparent 1px 3px);
+      background-size: 180px 180px, auto;
+      opacity: 0.3;
+      mix-blend-mode: overlay;
+    }
+    .card > * { position: relative; z-index: 1; }
+    .narrow { max-width: 27rem; margin-inline: auto; }
+
+    /* ---------- forms ------------------------------------------------ */
+    label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-faint);
+      margin-bottom: 0.45rem;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 0.7rem 0.85rem;
+      margin-bottom: 1.15rem;
+      font-family: inherit;
+      font-size: 1rem;
+      color: var(--text);
+      background: rgba(8, 5, 14, 0.7);
+      border: 1px solid var(--ink-hairline);
+      border-radius: var(--radius-sm);
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    textarea { resize: vertical; min-height: 5.5rem; line-height: 1.55; }
+    select {
+      appearance: none;
+      background-image:
+        linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+        linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+      background-position: right 1.05rem center, right 0.8rem center;
+      background-size: 0.32rem 0.32rem, 0.32rem 0.32rem;
+      background-repeat: no-repeat;
+      padding-right: 2.2rem;
+    }
+    input::placeholder, textarea::placeholder { color: var(--text-faint); }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--violet-crest);
+      box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.24);
+    }
+
+    .hint {
+      color: var(--text-faint);
+      font-size: 0.8rem;
+      margin: -0.75rem 0 1.15rem;
+    }
+
+    /* The same correction .switch-row + .hint makes further down, for the
+       other place there is no input margin to reclaim. Headings carry
+       margin: 0, so a .hint used as a page lede -- which is what it is on
+       /faq, /admin/reports, /admin/announce and /notifications -- was pulled
+       twelve pixels up into the descenders of the title above it.
+
+       .subtitle is the same case one step down: it is a paragraph with its
+       own bottom margin, not an input, so there is nothing there to reclaim
+       and a hint after it lands on top of its last line. */
+    h1 + .hint, h2 + .hint, h3 + .hint,
+    .subtitle + .hint { margin-top: 0; }
+
+    /* A .hint that is refusing something rather than explaining it. Same
+       size and position, so nothing moves when it changes register -- only
+       the colour and the rule down its edge, which is what makes it read as
+       an answer to what you just did instead of more advice. */
+    .hint.is-error {
+      color: var(--danger);
+      border-left: 2px solid var(--danger);
+      padding-left: 0.6rem;
+    }
+
+    /* A form section break: violet hairline, because it divides your own
+       attributes from what you're asking of someone else. */
+    .field-group {
+      margin: 1.9rem 0 1.15rem;
+      padding-top: 1.4rem;
+      border-top: 1px solid var(--ink-hairline);
+    }
+    .field-group h2 { font-size: 1.05rem; }
+    .field-group .subtitle { font-size: 0.85rem; margin-top: 0.3rem; }
+
+    /* ---------- "Add more" disclosure ---------------------------------
+       Everything past the four fields a profile actually needs. Collapsed
+       by default so registering doesn't open onto 26 inputs. */
+    .more-fields {
+      margin-top: 1.6rem;
+      border-top: 1px solid var(--ink-hairline);
+      padding-top: 1.2rem;
+    }
+    .more-fields > summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-family: var(--sans);
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--violet-crest);
+    }
+    .more-fields > summary::-webkit-details-marker { display: none; }
+    .more-fields > summary::before {
+      content: "+";
+      display: grid;
+      place-items: center;
+      width: 1.25rem;
+      height: 1.25rem;
+      flex: none;
+      border-radius: 50%;
+      border: 1px solid var(--ink-hairline);
+      font-size: 0.9rem;
+      line-height: 1;
+    }
+    .more-fields[open] > summary::before { content: "–"; }
+    .more-fields > summary:hover { color: var(--champagne); }
+    /* the first field-group inside would otherwise draw a second rule
+       immediately under the summary */
+    .more-fields-body > .field-group:first-child {
+      margin-top: 1.1rem;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    /* Side-by-side numeric fields (a min/max pair reads as one control). */
+    .field-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 0.9rem;
+    }
+
+    /* Checkbox group: the uppercase block label styling is wrong for
+       individual options, so opt them out and lay them out as chips. */
+    .checkgroup {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.9rem;
+      margin-bottom: 1.15rem;
+    }
+    .checkgroup label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin: 0;
+      font-size: 0.9rem;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: normal;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .checkgroup input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      accent-color: var(--violet-crest);
+      cursor: pointer;
+    }
+
+    /* A single tickable row: "keep me signed in", the two consent boxes on
+       registration, the report screen's reason list. Same opt-out as
+       .checkgroup above and for the same reason -- the global `label` rule
+       would render the sentence as an uppercase eyebrow, and the global
+       `input` rule stretches the box itself to width: 100% with padding.
+       Both were happening: the control was unreadable on every screen that
+       used it, and the .hint below it (negative top margin, tuned to tuck
+       under an input's bottom margin) landed 5px inside the row. */
+    .switch-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      margin: 0 0 0.7rem;
+      font-size: 0.9rem;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: normal;
+      line-height: 1.45;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .switch-row input[type="checkbox"],
+    .switch-row input[type="radio"] {
+      flex: none;
+      width: 1.05rem;
+      height: 1.05rem;
+      /* the shared input rule's 1.15rem bottom margin would push the box
+         off its own line; the small top margin sits it on the first line
+         of a label that wraps to two */
+      margin: 0.16rem 0 0;
+      padding: 0;
+      accent-color: var(--violet-crest);
+      cursor: pointer;
+    }
+    .switch-row span { min-width: 0; }
+    .switch-row a { text-decoration: underline; }
+    /* .hint is pulled up by -0.75rem to sit under an input; after a switch
+       row there is no bottom margin to reclaim, so it has to start clear. */
+    .switch-row + .hint { margin-top: 0; }
+
+    /* ---------- buttons: sheen sweeps as the pile is brushed ---------- */
+    .btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      padding: 0.72rem 1.35rem;
+      font-family: var(--sans);
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: #fff;
+      background-color: var(--violet);
+      background-image: linear-gradient(160deg, var(--violet-crest), var(--violet) 45%, var(--violet-deep));
+      border: none;
+      border-radius: 999px;
+      cursor: pointer;
+      overflow: hidden;
+      box-shadow: 0 12px 30px -12px rgba(138, 43, 226, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+    .btn::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, 0.38) 50%, transparent 68%);
+      transform: translateX(-120%);
+      transition: transform 0.55s ease;
+    }
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 38px -12px rgba(168, 85, 247, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+    .btn:hover::before { transform: translateX(120%); }
+    .btn:focus-visible { outline: 2px solid var(--champagne); outline-offset: 3px; }
+    .btn-block { width: 100%; }
+    .btn-secondary {
+      color: var(--text);
+      background-color: transparent;
+      background-image: linear-gradient(160deg, rgba(29, 166, 162, 0.32), rgba(6, 56, 59, 0.55));
+      border: 1px solid rgba(29, 166, 162, 0.4);
+      box-shadow: none;
+    }
+    .btn-secondary:hover {
+      background-image: linear-gradient(160deg, rgba(29, 166, 162, 0.5), rgba(6, 56, 59, 0.7));
+      box-shadow: 0 12px 28px -14px rgba(18, 128, 127, 0.9);
+    }
+    .btn-small { padding: 0.4rem 0.9rem; font-size: 0.82rem; }
+
+    /* ---------- notices ---------------------------------------------- */
+    .flash {
+      padding: 0.8rem 1rem;
+      font-size: 0.9rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(29, 166, 162, 0.34);
+      background: linear-gradient(150deg, rgba(18, 128, 127, 0.24), rgba(6, 56, 59, 0.4));
+      color: #D8F5F2;
+    }
+    .flash a { color: var(--champagne); text-decoration: underline; }
+
+    /* ---------- tags ------------------------------------------------- */
+    .tag {
+      display: inline-block;
+      padding: 0.26rem 0.72rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #F0E2FF;
+      border-radius: 999px;
+      border: 1px solid rgba(168, 85, 247, 0.42);
+      background: linear-gradient(150deg, rgba(138, 43, 226, 0.4), rgba(59, 11, 102, 0.55));
+    }
+    .tag-teal {
+      color: #D8F5F2;
+      border-color: rgba(29, 166, 162, 0.45);
+      background: linear-gradient(150deg, rgba(18, 128, 127, 0.4), rgba(6, 56, 59, 0.6));
+    }
+    .tag-outline {
+      color: var(--text-muted);
+      border-color: rgba(168, 85, 247, 0.28);
+      background: transparent;
+    }
+
+    /* ---------- grids & profile cards -------------------------------- */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+      gap: 1rem;
+    }
+    .profile-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      padding: 1.3rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--ink-hairline);
+      background-color: var(--ink-raised);
+      background-image:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 30%),
+        linear-gradient(155deg, rgba(75, 20, 124, 0.42), rgba(11, 7, 19, 0.9) 70%);
+      box-shadow: 0 22px 60px -30px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      overflow: hidden;
+    }
+    .profile-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(168, 85, 247, 0.42);
+      box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(168, 85, 247, 0.16);
+    }
+    .profile-card h2 { font-size: 1.2rem; }
+    .profile-card .meta {
+      color: var(--text-muted);
+      font-size: 0.82rem;
+    }
+    .profile-card .bio {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .best-option { border-color: rgba(168, 85, 247, 0.55); }
+
+    /* ---------- definition lists ------------------------------------- */
+    dl { margin: 0; }
+    dt {
+      margin-top: 1.1rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--text-faint);
+    }
+    dd { margin: 0.3rem 0 0; white-space: pre-line; }
+
+    /* ---------- wizard (live search) ---------------------------------
+       One question per screen, in the shape of the reference design: a
+       progress bar, a big question, a stack of tappable option rows, and a
+       back/next pair pinned under them. Selection uses the same hidden-input
+       + sibling-selector pattern .switch and the old tiles used, so the whole
+       row is the hit target and there is no separate radio to style. */
+    .wiz {
+      /* 90% of the screen, not of main's content box. The negative inline
+         margin cancels main's own horizontal padding so the form spans the
+         full width, then a 5% pad on each side leaves exactly 90% for the
+         content -- and because the block still fills the line, it stays
+         centred without fighting `margin: auto`. */
+      box-sizing: border-box;
+      margin-inline: calc(-1 * clamp(1rem, 4vw, 2rem));
+      padding-inline: 5%;
+      display: flex;
+      flex-direction: column;
+      flex: 1 0 auto;
+    }
+    /* The steps live in here and it takes all the slack, so the nav below it
+       lands at the same y on every step no matter how tall the step is --
+       and the step itself sits centred in the space rather than hugging the
+       question. */
+    .wiz-body {
+      flex: 1 0 auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 0;
+    }
+    /* A stepped wizard opts out of that centring. Centring is right for a
+       screen that is one fixed thing -- the match, the landing, sign-in --
+       but the search wizard swaps six steps of different heights through the
+       same box, and centring each of them lands the question somewhere
+       different every time: measured up to 102px apart between steps, which
+       reads as the page jumping under your thumb rather than the answers
+       changing. Anchoring the top makes the question the fixed point and
+       lets only what is below it move. */
+    .wiz-steady .wiz-body { justify-content: flex-start; }
+    /* main's bottom reserve used to be a flat 7rem -- more than the bar
+       occupies -- and .wiz pulled a flat 1.25rem back so its nav row did not
+       float short of the bottom. Two constants that had to stay in a
+       relationship neither of them stated, and on a short screen the pull-up
+       won and slid the row under the bar. The reserve is now the bar's own
+       height, so there is nothing to claw back. */
+    /* past phone widths the bleed stops earning its keep: cap it and centre.
+       Guarded on the preview too: the media query matches the real window, so
+       inside the 375px frame on a desktop this would otherwise cap the column
+       at 27rem (432px -- wider than the frame) and drop the 5% side padding,
+       making the preview wider-looking than the phone it stands for. */
+    @media (min-width: 600px) {
+      html:not([data-viewport="mobile"]) .wiz {
+        margin-inline: auto;
+        padding-inline: 0;
+        /* explicit, for the same reason main needs it: inside a flex column
+           `margin-inline: auto` is a flex auto-margin, so it eats the free
+           space and suppresses the stretch that would otherwise size this
+           box -- leaving the column shrink-to-fit and a different width on
+           every step. max-width still caps it; the auto margins still
+           centre it. */
+        width: 100%;
+        max-width: 27rem;
+      }
+    }
+    /* A screen where one part scrolls inside itself (the room's transcript,
+       the decision screens') has to be bounded by the viewport first: main
+       is `flex: 1 0 auto`, so without a ceiling the column simply grows and
+       the whole page scrolls instead of the log. The forced-mobile preview
+       sets its own frame height, and its selector outranks this one. */
+    .app-shell:has(.wiz-fit) { height: 100dvh; }
+    main:has(.wiz-fit) { min-height: 0; flex: 1 1 auto; overflow: hidden; }
+    .wiz-fit { flex: 1 1 auto; min-height: 0; }
+    /* .wiz-body is flex: 1 0 auto by default -- it may grow but never
+       shrink, which is right for a step and wrong here: the part that
+       scrolls can only give way if its parent can. */
+    .wiz-fit .wiz-body { flex: 1 1 auto; min-height: 0; }
+    /* The body as a scroll box rather than a centred block, for the screens
+       whose middle is a document: the chat list, the two profile forms. The
+       padding keeps the scrollbar off the content and the negative margin
+       gives the width back, so the column stays the same width as a step's. */
+    .wiz-scroll {
+      justify-content: flex-start;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 0.4rem;
+      margin-right: -0.4rem;
+      /* Fades at both ends for the reason the transcript fades at one: the
+         row scrolled half out is otherwise cut mid-line. The block padding
+         is what makes the fade behave -- it is inside the scroll box, so at
+         either end the band sits over empty space and only content that has
+         really scrolled away is dimmed. The margins give the gaps back. */
+      padding-block: 1rem;
+      margin-block: -1rem;
+      -webkit-mask-image: linear-gradient(to bottom,
+        transparent 0, #000 1rem, #000 calc(100% - 1rem), transparent 100%);
+      mask-image: linear-gradient(to bottom,
+        transparent 0, #000 1rem, #000 calc(100% - 1rem), transparent 100%);
+    }
+    /* .wiz-body is a flex column, so its children default to flex-shrink: 1
+       -- they would squeeze themselves to fit the box rather than overflow
+       it, and a scroll box with nothing overflowing never scrolls. */
+    .wiz-scroll > * { flex: none; }
+
+    .wiz-progress {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--ink-hairline);
+      overflow: hidden;
+    }
+    .wiz-progress > span {
+      display: block;
+      height: 100%;
+      width: 16.6%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--violet), var(--violet-crest));
+      transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .wiz-count {
+      margin: calc(1.1 * var(--fit)) 0 0;
+      text-align: center;
+      font-size: calc(0.72 * var(--fit));
+      font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .wiz-q {
+      margin: calc(0.4 * var(--fit)) 0 calc(1.2 * var(--fit));
+      text-align: center;
+      /* the width clamp still sets it; the height token only caps it, so a
+         narrow-and-tall screen is unaffected and a short one gives type back */
+      font-size: min(clamp(1.6rem, 6vw, 2.1rem), calc(2.1 * var(--fit)));
+      line-height: 1.18;
+    }
+    .wiz-hint {
+      margin: calc(-0.8 * var(--fit)) 0 calc(1.1 * var(--fit));
+      text-align: center;
+      font-size: calc(0.85 * var(--fit));
+      color: var(--text-muted);
+    }
+    .wiz-field { margin-bottom: 0.5rem; }
+    .wiz-readout {
+      margin: 0 0 calc(1.4 * var(--fit));
+      text-align: center;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 1.05rem;
+      color: var(--champagne);
+    }
+    .wiz-field > label:first-child { margin-top: 0; }
+
+    /* Without JS every step stays visible and the form still posts; the
+       stepper adds .wiz-js only once it is actually driving. */
+    .wiz-js .wiz-step { display: none; }
+    .wiz-js .wiz-step.is-on { display: block; }
+    /* the question settles first, then the options arrive under it in a
+       quick stagger -- enough to feel deliberate without making the user
+       wait to tap */
+    .wiz-in .wiz-q,
+    .wiz-in .wiz-hint,
+    .wiz-in .wiz-field {
+      animation: wiz-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .wiz-in .wiz-hint { animation-delay: 0.03s; }
+    .wiz-in .wiz-field { animation-delay: 0.05s; }
+    .wiz-in .opt { animation: wiz-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .wiz-in .opt:nth-child(1) { animation-delay: 0.04s; }
+    .wiz-in .opt:nth-child(2) { animation-delay: 0.08s; }
+    .wiz-in .opt:nth-child(3) { animation-delay: 0.12s; }
+    .wiz-in .opt:nth-child(4) { animation-delay: 0.16s; }
+    .wiz-in .opt:nth-child(5) { animation-delay: 0.20s; }
+    .wiz-in .opt:nth-child(6) { animation-delay: 0.24s; }
+    @keyframes wiz-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: none; }
+    }
+    /* asking for an answer the step requires, without a modal or a flash */
+    .wiz-nudge .opt-list { animation: wiz-nudge 0.4s ease; }
+    @keyframes wiz-nudge {
+      25% { transform: translateX(-5px); }
+      60% { transform: translateX(5px); }
+    }
+
+    .opt-list { display: flex; flex-direction: column; gap: calc(0.6 * var(--fit)); }
+    /* six short labels stack too tall for a phone screen in one column, so
+       the multi-select step pairs them up instead of scrolling */
+    .opt-list-2col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.55rem;
+    }
+    .opt-list-2col .opt { padding: calc(0.7 * var(--fit)) 0.75rem; gap: 0.55rem; }
+    .opt-list-2col .opt-icon { width: calc(2 * var(--fit)); height: calc(2 * var(--fit)); }
+    .opt-list-2col .opt-icon svg { width: calc(1.05 * var(--fit)); height: calc(1.05 * var(--fit)); }
+    .opt-list-2col .opt-label { font-size: calc(0.88 * var(--fit)); }
+    .opt-list-2col .opt-mark { width: 1rem; height: 1rem; }
+    /* .opt is a <label>, so the global field-caption rule above would
+       otherwise render every option uppercase, tracked out and faint. */
+    .opt {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      margin-bottom: 0;
+      text-transform: none;
+      letter-spacing: normal;
+      font-weight: 400;
+      padding: calc(0.8 * var(--fit)) 1.05rem;
+      border-radius: 1.15rem;
+      border: 1.5px solid transparent;
+      background: var(--ink-raised);
+      cursor: pointer;
+      transition: border-color 0.16s ease, background 0.16s ease,
+                  transform 0.16s ease;
+    }
+    .opt:hover { transform: translateY(-1px); background: rgba(59, 11, 102, 0.5); }
+    .opt input:focus-visible ~ .opt-mark {
+      outline: 2px solid var(--champagne);
+      outline-offset: 3px;
+    }
+    .opt-icon {
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: calc(2.4 * var(--fit));
+      height: calc(2.4 * var(--fit));
+      border-radius: 50%;
+      color: #FFF;
+      background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
+    }
+    /* each row gets its own hue so a list reads as distinct choices rather
+       than one repeated swatch, the way the reference design does it */
+    .opt-2 .opt-icon { background-image: linear-gradient(150deg, var(--teal-crest), var(--teal)); }
+    .opt-3 .opt-icon { background-image: linear-gradient(150deg, #F0C97B, #C98A2B); }
+    .opt-4 .opt-icon { background-image: linear-gradient(150deg, #FF9DAA, var(--danger)); }
+    .opt-5 .opt-icon { background-image: linear-gradient(150deg, #8FA6FF, #4356C4); }
+    .opt-6 .opt-icon { background-image: linear-gradient(150deg, #6FE3C4, #169B7C); }
+    .opt-icon svg { width: calc(1.25 * var(--fit)); height: calc(1.25 * var(--fit)); }
+    .opt-label {
+      flex: 1;
+      font-size: calc(0.98 * var(--fit));
+      color: var(--text);
+      transition: color 0.16s ease;
+    }
+    .opt-mark {
+      flex: none;
+      width: 1.15rem;
+      height: 1.15rem;
+      border-radius: 50%;
+      border: 2px solid var(--text-faint);
+      transition: border-color 0.16s ease, background 0.16s ease;
+    }
+    .opt-mark-box { border-radius: 0.4rem; }
+    .opt input:checked ~ .opt-mark {
+      border-color: var(--violet-crest);
+      background: var(--violet-crest)
+        radial-gradient(circle, var(--ink) 0, var(--ink) 2.6px, transparent 2.7px);
+    }
+    .opt-mark-box { background-position: center; }
+    .opt input:checked ~ .opt-mark-box {
+      background: var(--violet-crest)
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.3 4.9 8.7 9.4 3.5' fill='none' stroke='%230B0713' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+        center / 0.72rem no-repeat;
+    }
+    .opt input:checked ~ .opt-label { color: var(--violet-crest); font-weight: 600; }
+    .opt:has(input:checked) {
+      border-color: var(--violet-crest);
+      background: rgba(138, 43, 226, 0.14);
+    }
+
+    /* Pinned to the foot of the column, so it never moves between steps.
+       Back sits alone on the left; Skip is grouped hard against Next on the
+       right so the two read as one control. Both hide with visibility
+       rather than display, which keeps Next in exactly the same spot
+       whether or not the step is skippable. */
+    .wiz-nav {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      margin-top: calc(1.5 * var(--fit));
+      padding-top: 0.25rem;
+    }
+    .wiz-nav-end {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-left: auto;
+    }
+    .is-hidden { visibility: hidden; }
+    /* Back/Next is a row; a screen whose action is one full-width button --
+       with a link or a second choice under it -- wants the same slot as a
+       stack instead. It has to come after .wiz-nav, not before: same
+       specificity, and .wiz-nav's `align-items: center` would otherwise win
+       and collapse .btn-block back to its text width. */
+    .wiz-nav-block {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.7rem;
+    }
+    .wiz-nav-block .btn { width: 100%; }
+    .wiz-back, .wiz-next {
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.16s ease, background 0.16s ease, opacity 0.16s ease;
+    }
+    .wiz-back {
+      width: 2.6rem;
+      height: 2.6rem;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+    }
+    .wiz-back:hover { color: var(--text); transform: translateX(-2px); }
+    .wiz-skip {
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      cursor: pointer;
+      padding: 0.55rem 0.85rem;
+      border-radius: 999px;
+      transition: color 0.16s ease, background 0.16s ease;
+    }
+    .wiz-skip:hover { color: var(--text); background: rgba(168, 133, 247, 0.12); }
+    .wiz-next {
+      width: calc(3.4 * var(--fit));
+      height: calc(3.4 * var(--fit));
+      border: none;
+      color: #FFF;
+      background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
+      box-shadow: 0 10px 26px -12px rgba(138, 43, 226, 0.9);
+    }
+    .wiz-next:hover { transform: translateX(2px); }
+    .wiz-back svg, .wiz-next svg { width: 1.35rem; height: 1.35rem; }
+    /* the last step commits, so it stops being a chevron and says so */
+    .wiz-next.is-final {
+      width: auto;
+      border-radius: 999px;
+      padding: 0 1.5rem;
+      /* same height as the chevron it replaces, so the row does not shift
+         by a few pixels on the last step -- so it tracks the same token */
+      height: calc(3.4 * var(--fit));
+      background-image: linear-gradient(150deg, var(--teal-crest), var(--teal));
+      box-shadow: 0 10px 26px -12px rgba(29, 166, 162, 0.9);
+    }
+    .wiz-next.is-final svg { display: none; }
+    .wiz-next.is-final::after {
+      content: "Start searching";
+      font-size: 0.92rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+    /* The same committing action, for screens whose label is real content
+       rather than a fixed string: the match reveal's "Yes, start chatting",
+       the decision's "Continue". Same height as .wiz-next so a column that
+       mixes them keeps one baseline for its action row. */
+    .wiz-go {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 3.4rem;
+      padding: 0 1.5rem;
+      border: none;
+      border-radius: 999px;
+      font-family: var(--sans);
+      font-size: 0.92rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: #FFF;
+      cursor: pointer;
+      background-image: linear-gradient(150deg, var(--teal-crest), var(--teal));
+      box-shadow: 0 10px 26px -12px rgba(29, 166, 162, 0.9);
+      transition: transform 0.16s ease;
+    }
+    .wiz-go:hover { transform: translateX(2px); color: #FFF; }
+    .wiz-go:focus-visible { outline: 2px solid var(--champagne); outline-offset: 3px; }
+    .wiz-go-violet {
+      background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
+      box-shadow: 0 10px 26px -12px rgba(138, 43, 226, 0.9);
+    }
+    /* leaving is a text button, never a filled one -- the loud control on
+       these screens is always the one that keeps the match alive */
+    .wiz-skip-danger { color: var(--danger); }
+    .wiz-skip-danger:hover { color: var(--danger); background: rgba(255, 122, 138, 0.12); }
+    /* ---------- waiting screen ---------------------------------------
+       Borrows the wizard's column so the two screens read as one flow: the
+       step chrome (.wiz-count/.wiz-q/.wiz-hint) is reused verbatim and only
+       the parts unique to waiting are defined here. Everything is stated
+       rather than editable -- the filters were set on the previous screen. */
+    .waiting .wiz-body { justify-content: flex-start; padding-top: calc(0.5 * var(--fit)); }
+    .waiting .wiz-q { margin-bottom: calc(0.7 * var(--fit-tight)); }
+    /* Four phrases of different lengths cycle through here every 2.6s and
+       the longest wraps to two lines. Reserving both means the swap is a
+       word change rather than the rest of the screen moving up and down. */
+    /* two lines above 700px tall; on a short screen the reserve itself
+       eases down, since a half-line of jump costs less than a spill */
+    .waiting #status-line { min-height: clamp(1.7em, 0.6vh + 0.2em, 2.9em); }
+    .waiting .search-anim { margin-bottom: calc(0.2 * var(--fit)); }
+    /* smaller than the wizard's, so the summary below it clears the fold */
+    /* the animation is the first thing that can afford to give: min() keeps
+       the width response and the token adds the height one */
+    .waiting .search-anim {
+      width: min(58%, clamp(96px, 33.53vh - 91.8px, 210px));
+      aspect-ratio: 1;
+    }
+    .waiting .pulse-heart {
+      width: clamp(2.6rem, 4.923vh + 0.6308rem, 3.4rem);
+      height: clamp(2.6rem, 4.923vh + 0.6308rem, 3.4rem);
+    }
+
+    .waiting-meta {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin: 0 0 calc(1.1 * var(--fit-tight));
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: calc(0.82 * var(--fit));
+      color: var(--text-muted);
+    }
+    .waiting-fits { color: var(--teal-crest); }
+    /* `hidden` would take the row's height with it when the count drops to
+       zero; this keeps the line the same height whether or not anyone fits.
+       The `· N fit` segment is genuinely absent from the reading order when
+       off -- visibility: hidden is not announced -- so nothing is implied
+       that isn't true. */
+    #waiting-fits-wrap[hidden] {
+      display: inline;
+      visibility: hidden;
+    }
+
+    /* the label over a stated block -- the waiting recap, the reveal's
+       shared interests, a profile section. Same eyebrow the steps use for
+       "STEP 3 OF 6", so every screen names its parts the same way. */
+    .waiting-recap-label,
+    .section-label {
+      margin: 0 0 calc(0.55 * var(--fit));
+      text-align: center;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .waiting-recap .pillset,
+    .filters-fold .pillset { justify-content: center; margin-bottom: 0; }
+    /* the recap and the reveal both stack several rows of these, so their
+       pills ramp harder than a lone pill elsewhere does */
+    .waiting .pillset,
+    .match .pillset { gap: calc(0.5 * var(--fit-tight)); }
+    .waiting .pill,
+    .match .pill {
+      padding: calc(0.5 * var(--fit-tight)) calc(0.875 * var(--fit-tight));
+      font-size: calc(0.845 * var(--fit-tight));
+    }
+
+    /* ---------- the filter fold -------------------------------------
+       Sixteen pills is five rows on a phone. Folded, the same information
+       costs one line, and what it buys is the whole point: "Stop
+       searching" stays above the tab bar on a 375x667 screen instead of
+       117px under it. Styled like the FAQ's disclosure rows so the two
+       read as the same control. */
+    .filters-fold { margin-bottom: 0.9rem; }
+    .filters-fold > summary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.2rem;
+      list-style: none;
+      cursor: pointer;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      transition: color 0.18s ease;
+    }
+    .filters-fold > summary::-webkit-details-marker { display: none; }
+    .filters-fold > summary:hover { color: var(--text-muted); }
+    .filters-fold > summary:focus-visible {
+      outline: 2px solid var(--champagne);
+      outline-offset: 3px;
+      border-radius: 0.6rem;
+    }
+    .filters-fold-count {
+      display: inline-grid;
+      place-items: center;
+      min-width: 1.35rem;
+      height: 1.35rem;
+      padding: 0 0.35rem;
+      border-radius: 999px;
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      background: rgba(138, 43, 226, 0.14);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0;
+    }
+    /* the chevron, rotating on open -- the only thing that says this opens */
+    .filters-fold > summary::after {
+      content: "";
+      width: 0.5rem;
+      height: 0.5rem;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg) translate(-0.1rem, -0.1rem);
+      transition: transform 0.2s ease;
+    }
+    .filters-fold[open] > summary::after {
+      transform: rotate(-135deg) translate(-0.15rem, -0.15rem);
+    }
+    .filters-fold[open] > .pillset { padding-top: 0.35rem; }
+    @media (prefers-reduced-motion: reduce) {
+      .filters-fold > summary::after { transition: none; }
+    }
+    /* the chips here report, they do not toggle -- no hover, no pointer.
+       Used elsewhere too (the match reveal, profile_view's stated
+       preferences) so it stays the inert default; the waiting screen's own
+       chips opt into .pill-chip below instead of this. */
+    .pill.is-static {
+      cursor: default;
+      color: var(--text);
+      border-color: rgba(168, 85, 247, 0.4);
+      background: rgba(138, 43, 226, 0.14);
+    }
+    /* a stated chip that is context rather than the point of the list --
+       the reveal's non-shared interests next to the shared ones */
+    .pill.is-static.is-faint {
+      color: var(--text-muted);
+      border-color: var(--ink-hairline);
+      background: none;
+    }
+
+    /* the waiting screen's own chips: .is-static's look, but tappable --
+       each one opens the sheet below with what it could change to.
+       Qualified with .pill, like .pill.is-static above, and for the same
+       reason: base .pill is defined further down this sheet, so a bare
+       .pill-chip ties on specificity and loses on source order. It was
+       losing -- every filter rendered with .pill's transparent background,
+       which made a live filter and a switched-off one identical. */
+    .pill.pill-chip {
+      /* "Amsterdam, North Holland, Netherlands" is one chip. Let it take a
+         line at most and end in an ellipsis; the full string stays in the
+         title attribute rather than being lost. */
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text);
+      border-color: rgba(168, 85, 247, 0.4);
+      background: rgba(138, 43, 226, 0.14);
+    }
+    .pill.pill-chip:hover {
+      border-color: rgba(168, 85, 247, 0.7);
+      background: rgba(138, 43, 226, 0.22);
+    }
+    /* a filter the searcher has switched off -- the same faint reading
+       "Any age" already had, still tappable so it can be switched back on */
+    .pill.pill-chip.is-off {
+      color: var(--text-muted);
+      border-color: var(--ink-hairline);
+      background: none;
+    }
+    .pill.pill-chip.is-off:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
+
+    /* Both children only ever appear together (nothing fits), and both used
+       to arrive out of nowhere and shove the nav row down -- the wider
+       button after 45s especially. One reserved slot for the pair, sized to
+       the taller state, so they fade in against a space already held for
+       them. */
+    /* the reserve tracks the pair it holds room for, or it stops being a
+       reserve and starts being padding on a short screen */
+    .waiting-fix { min-height: calc(7.2 * var(--fit-tight)); }
+    .waiting-none {
+      margin: calc(1.1 * var(--fit)) 0 0;
+      text-align: center;
+      font-size: calc(0.84 * var(--fit));
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    /* The "loosen one thing" offers. Plain .pill against the recap's
+       .pill.is-static above: the recap reports, these act, and the hover
+       and focus states .pill already carries are the whole affordance --
+       no new component, and nothing that reads as a second filter form. */
+    .waiting-options {
+      justify-content: center;
+      margin: calc(0.85 * var(--fit)) 0 0;
+    }
+    .waiting-options form { display: contents; }
+    .waiting-options .pill {
+      font: inherit;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .waiting-options .pill-count {
+      color: var(--text-faint);
+      font-variant-numeric: tabular-nums;
+    }
+    .waiting-options .pill:hover .pill-count { color: var(--text-muted); }
+    .wiz-stop { width: auto; padding-inline: 1.4rem; }
+
+    /* "Search wider" -- withheld until SEARCH_WIDER_SECONDS, so it arrives
+       mid-screen rather than being present from first paint. Reuses the
+       wizard's own entrance rather than a bespoke one. */
+    .waiting-wider { margin-top: 1.1rem; }
+    .waiting-wider.wiz-in { animation: wiz-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    @media (prefers-reduced-motion: reduce) {
+      .waiting-wider.wiz-in { animation: none; }
+    }
+
+    /* ---------- filter sheet: one row per alternative, priced -----------
+       The panel is a piece of the same cloth as .card -- velvet ground,
+       sheen off the top-left crest, nap over it -- rather than the flat
+       grey box a default sheet would be. It scrolls as ONE piece: the
+       title travels with the rows, so it reads as a card pulled up from
+       the foot of the screen and not as a window with fixed chrome. */
+    .sheet-outer .sheet-panel {
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      /* The nap rides in the panel's own background stack rather than in an
+         ::after overlay the way .card does it: an absolutely-positioned
+         overlay is sized to the panel's box, so once the panel is the thing
+         that scrolls it would stop short of the content below the fold.
+         A background layer tiles the whole scrollable length instead, and
+         background-blend-mode buys the same texture without the extra box. */
+      background-image:
+        var(--nap),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0) 22%),
+        linear-gradient(158deg, rgba(75, 20, 124, 0.52), rgba(11, 7, 19, 0.97) 60%);
+      background-size: 180px 180px, auto, auto;
+      background-blend-mode: overlay, normal, normal;
+      border-top-color: rgba(168, 85, 247, 0.3);
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
+    .sheet-outer .sheet-body { overflow: visible; }
+    /* the question, in the same serif voice the wizard asks in */
+    .sheet-outer .sheet-head { padding-bottom: 0.2rem; }
+    .sheet-outer .sheet-head h2 {
+      font-family: var(--serif);
+      font-size: 1.32rem;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    .sheet-eyebrow {
+      margin: 0 0 0.15rem;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .sheet-opt-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      padding-bottom: 0.5rem;
+    }
+    /* the .opt row's ground and radius, at list scale: this can run to a
+       dozen rows where .opt's tile shape would be too tall to scan. */
+    .sheet-opt {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      width: 100%;
+      padding: 0.78rem 1rem;
+      border: 1.5px solid transparent;
+      border-radius: 1.05rem;
+      background: var(--ink-raised);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 0.94rem;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.16s ease, background 0.16s ease,
+                  transform 0.16s ease;
+    }
+    .sheet-opt:hover {
+      transform: translateY(-1px);
+      background: rgba(59, 11, 102, 0.5);
+    }
+    .sheet-opt:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
+    /* the one in effect: lit like a checked .opt, with the crest rail down
+       its left edge so the eye finds it without reading a word */
+    .sheet-opt.is-current {
+      border-color: rgba(168, 85, 247, 0.55);
+      background-image: linear-gradient(150deg, rgba(138, 43, 226, 0.38), rgba(59, 11, 102, 0.5));
+    }
+    .sheet-opt.is-current::before {
+      content: "";
+      position: absolute;
+      left: 0.5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 1.4rem;
+      border-radius: 999px;
+      background: linear-gradient(180deg, var(--violet-crest), var(--violet));
+    }
+    .sheet-opt-label { flex: 1; min-width: 0; }
+    .sheet-opt.is-current .sheet-opt-label { color: #F0E2FF; font-weight: 600; }
+    /* the count reads as a tag, not as loose text -- it is a quantity the
+       row is promising, so it gets the same pill .tag uses elsewhere */
+    .sheet-opt-count {
+      flex: none;
+      padding: 0.24rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid rgba(29, 166, 162, 0.45);
+      background: linear-gradient(150deg, rgba(18, 128, 127, 0.42), rgba(6, 56, 59, 0.6));
+      color: #D8F5F2;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.72rem;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    /* a row that would admit nobody is still worth showing -- it is what
+       "no" looks like for that alternative -- but it should not glow like
+       one that would */
+    .sheet-opt-count.is-zero {
+      border-color: var(--ink-hairline);
+      background: none;
+      color: var(--text-faint);
+    }
+    .sheet-opt.is-current .sheet-opt-count {
+      border-color: rgba(232, 211, 169, 0.42);
+      background: linear-gradient(150deg, rgba(232, 211, 169, 0.22), rgba(59, 11, 102, 0.4));
+      color: var(--champagne);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .sheet-opt:hover { transform: none; }
+    }
+
+
+    /* ---------- bottom sheet (the wizard's "More" overlay) ------------
+       Anchored to the bottom of the screen and scrollable inside, so the
+       long list lives here instead of making the step behind it scroll. */
+    /* Fixed, not absolute. Absolute resolved against .app-shell, which on a
+       page without .wiz-fit is as tall as the document -- so `bottom: 0` put
+       the panel at the foot of the *page* rather than the screen, and on a
+       waiting screen that scrolled at all it opened partly below the fold
+       (measured 24px, and up to ~123px with a full filter set). The frame
+       preview overrides this back to absolute; see the phone-frame block. */
+    .sheet { position: fixed; inset: 0; z-index: 40; }
+    .sheet-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(4, 2, 8, 0.66);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .sheet.is-open .sheet-backdrop { opacity: 1; }
+    .sheet-panel {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 82vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--ink-raised);
+      border-top: 1px solid var(--ink-hairline);
+      border-radius: 1.6rem 1.6rem 0 0;
+      box-shadow: 0 -24px 60px -20px rgba(0, 0, 0, 0.85);
+      transform: translateY(100%);
+      transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .sheet.is-open .sheet-panel { transform: none; }
+    /* the grabber, so it reads as a sheet you can dismiss */
+    .sheet-panel::before {
+      content: "";
+      width: 2.4rem;
+      height: 0.25rem;
+      border-radius: 999px;
+      background: var(--text-faint);
+      margin: 0.7rem auto 0;
+      opacity: 0.5;
+    }
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.9rem 1.25rem 0.6rem;
+    }
+    .sheet-head h2 { margin: 0; font-size: 1.05rem; }
+    .sheet-x {
+      margin-left: auto;
+      display: grid;
+      place-items: center;
+      width: 2rem;
+      height: 2rem;
+      border: none;
+      border-radius: 50%;
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .sheet-x:hover { color: var(--text); background: rgba(168, 133, 247, 0.12); }
+    .sheet-x svg { width: 1.05rem; height: 1.05rem; }
+    .sheet-body {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 1.25rem;
+    }
+    .sheet-body .pillset { margin-bottom: 0.5rem; }
+    .sheet-foot {
+      padding: 0.85rem 1.25rem calc(1.1rem + env(safe-area-inset-bottom, 0px));
+      border-top: 1px solid var(--ink-hairline);
+    }
+    /* The waiting screen's sheet keeps a Done button for the filters you
+       pick several of, and hides it for the ones a single tap answers --
+       those close themselves, so a Done there would be a button that never
+       does anything. */
+    #filter-sheet:not(.is-multi) .sheet-foot { display: none; }
+    .sheet-count {
+      font-size: 0.78rem;
+      color: var(--text-faint);
+      margin: 0 0 0.6rem;
+    }
+    .sheet-count.is-full { color: var(--champagne); }
+    /* add-your-own, for anything the list does not name */
+    .sheet-add {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.2rem 1.25rem 0.9rem;
+    }
+    .sheet-add input {
+      flex: 1;
+      margin: 0;
+      min-width: 0;
+    }
+    .sheet-add .btn { flex: none; width: auto; padding-inline: 1.1rem; }
+    /* same add-your-own row, inline in an ordinary form rather than a sheet
+       -- no horizontal padding to cancel, and the fields around it already
+       carry a 1.15rem bottom margin */
+    .field-add {
+      display: flex;
+      gap: 0.5rem;
+      margin: -0.55rem 0 1.15rem;
+    }
+    .field-add input { flex: 1; margin: 0; min-width: 0; }
+    .field-add .btn { flex: none; width: auto; padding-inline: 1.1rem; margin: 0; }
+    /* at the cap, the ones you have not picked stop inviting a tap */
+    .pillset.is-full .pill[data-value]:not(.is-on) {
+      opacity: 0.38;
+      cursor: not-allowed;
+    }
+    /* the chip that opens it -- dashed so it reads as "there is more", not
+       as another selectable interest */
+    .pill-more {
+      border-style: dashed;
+      color: var(--violet-crest);
+      border-color: rgba(168, 85, 247, 0.55);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .sheet-backdrop, .sheet-panel { transition: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .wiz-in .wiz-q, .wiz-in .wiz-hint, .wiz-in .wiz-field, .wiz-in .opt {
+        animation: none;
+      }
+      .wiz-nudge .opt-list { animation: none; }
+      .wiz-progress > span { transition: none; }
+      .opt:hover, .wiz-back:hover, .wiz-next:hover { transform: none; }
+    }
+
+    /* ---------- recap line: "here's what's running" -------------------
+       Shared by the criteria screen (screen 2's own choices) and the
+       waiting screen (what actually got saved, including the escape
+       hatch's silent defaults). */
+    .recap {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.45rem;
+      margin: 0.9rem 0 1.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .recap > span:first-child { color: var(--champagne); }
+
+    /* ---------- toggle rows: "which parts are important?" -------------
+       One grid template for every row, so switches line up down one edge
+       and help buttons down the other however long a label runs. */
+    .toggle-row {
+      border-top: 1px solid var(--ink-hairline);
+      padding: 0.95rem 0;
+    }
+    .toggle-row:first-of-type { border-top: 0; padding-top: 0.2rem; }
+    .toggle-head {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 0.8rem;
+    }
+    .toggle-head > .toggle-label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      min-width: 0;
+    }
+    .toggle-label strong {
+      font-family: var(--serif);
+      font-size: 1.02rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: color 0.18s ease;
+    }
+    .toggle-row:has(.switch input:checked) .toggle-label strong { color: var(--text); }
+    .toggle-label .toggle-summary {
+      font-size: 0.8rem;
+      color: var(--text-faint);
+    }
+    /* The panel is revealed by the switch alone — no JS decides visibility,
+       so it survives a page render with the box already checked. It indents
+       to the label rather than the switch, which is what makes the panel
+       read as belonging to the row above it. */
+    .toggle-panel {
+      display: grid;
+      grid-template-rows: 0fr;
+      opacity: 0;
+      margin-left: 3.4rem;
+      transition: grid-template-rows 0.18s ease, opacity 0.18s ease;
+    }
+    .toggle-panel > div {
+      overflow: hidden;
+      min-height: 0;
+    }
+    .toggle-row:has(.switch input:checked) .toggle-panel {
+      grid-template-rows: 1fr;
+      opacity: 1;
+      margin-top: 0.85rem;
+    }
+    .toggle-panel label { margin-top: 0.9rem; }
+    .toggle-panel > div > *:first-child { margin-top: 0; }
+    /* a 3.4rem indent costs too much of the column on a phone; the row's own
+       hairline still carries the grouping once the indent goes */
+    @media (max-width: 480px) {
+      .toggle-panel, .help-pop { margin-left: 0; }
+    }
+    html[data-viewport="mobile"] .toggle-panel,
+    html[data-viewport="mobile"] .help-pop { margin-left: 0; }
+
+    /* ---------- inline help ------------------------------------------- */
+    .help-dot {
+      display: grid;
+      place-items: center;
+      width: 1.4rem;
+      height: 1.4rem;
+      flex-shrink: 0;
+      padding: 0;
+      border-radius: 50%;
+      border: 1px solid var(--ink-hairline);
+      background: none;
+      color: var(--text-faint);
+      font-family: var(--sans);
+      font-size: 0.74rem;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      transition: color 0.18s ease, border-color 0.18s ease;
+    }
+    .help-dot:hover { color: var(--text-muted); border-color: var(--text-faint); }
+    .help-dot[aria-expanded="true"] {
+      color: var(--champagne);
+      border-color: var(--champagne);
+    }
+    .help-dot:focus-visible {
+      outline: 2px solid var(--champagne);
+      outline-offset: 2px;
+    }
+    .help-pop {
+      display: none;
+      margin: 0.7rem 0 0 3.4rem;
+      padding: 0.7rem 0.85rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--ink-hairline);
+      background: rgba(8, 5, 14, 0.6);
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      line-height: 1.5;
+      max-width: 46ch;
+    }
+    .help-pop.open { display: block; }
+
+    /* ---------- sliders --------------------------------------------- */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 1.6rem;
+      margin: 0 0 0.4rem;
+      padding: 0;
+      background: transparent;
+      border: none;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 0.35rem;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--violet-deep), rgba(168, 85, 247, 0.45));
+    }
+    input[type="range"]::-moz-range-track {
+      height: 0.35rem;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--violet-deep), rgba(168, 85, 247, 0.45));
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 1.15rem;
+      height: 1.15rem;
+      margin-top: -0.4rem;
+      border-radius: 50%;
+      background: radial-gradient(circle at 32% 28%, var(--violet-crest), var(--violet) 60%, var(--violet-deep));
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      box-shadow: 0 0 14px rgba(168, 85, 247, 0.8);
+      cursor: pointer;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 1.15rem;
+      height: 1.15rem;
+      border-radius: 50%;
+      background: radial-gradient(circle at 32% 28%, var(--violet-crest), var(--violet) 60%, var(--violet-deep));
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      box-shadow: 0 0 14px rgba(168, 85, 247, 0.8);
+      cursor: pointer;
+    }
+    input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--champagne); outline-offset: 2px; }
+    input[type="range"]:focus-visible::-moz-range-thumb { outline: 2px solid var(--champagne); outline-offset: 2px; }
+    .slider-pair { margin-bottom: 0.9rem; }
+    .slider-value {
+      float: right;
+      /* tabular monospace so the readout keeps its width as the digits
+         change — a proportional face makes it twitch while dragging */
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--champagne);
+    }
+
+    /* ---------- dual-thumb range (age slider) ------------------------- */
+    .range-dual {
+      position: relative;
+      height: 1.6rem;
+      margin-bottom: 0.9rem;
+    }
+    .range-dual-track {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 0.35rem;
+      transform: translateY(-50%);
+      border-radius: 999px;
+      background: rgba(168, 85, 247, 0.2);
+    }
+    .range-dual-fill {
+      position: absolute;
+      top: 50%;
+      height: 0.35rem;
+      transform: translateY(-50%);
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--violet-deep), var(--violet-crest));
+    }
+    .range-dual input[type="range"] {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      margin: 0;
+      background: transparent;
+      pointer-events: none;
+    }
+    .range-dual input[type="range"]::-webkit-slider-runnable-track { background: transparent; }
+    .range-dual input[type="range"]::-moz-range-track { background: transparent; }
+    .range-dual input[type="range"]::-webkit-slider-thumb { pointer-events: auto; }
+    .range-dual input[type="range"]::-moz-range-thumb { pointer-events: auto; }
+
+    /* ---------- location combobox ------------------------------------- */
+    .ac-wrap { position: relative; }
+    .ac-list {
+      position: absolute;
+      z-index: 5;
+      left: 0;
+      right: 0;
+      margin: -0.9rem 0 0;
+      padding: 0.3rem;
+      list-style: none;
+      max-height: 14rem;
+      overflow-y: auto;
+      border: 1px solid var(--ink-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--ink-raised);
+      box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.9);
+    }
+    .ac-list:empty { display: none; }
+    .ac-option {
+      padding: 0.55rem 0.7rem;
+      font-size: 0.9rem;
+      border-radius: 0.5rem;
+      cursor: pointer;
+    }
+    .ac-option:hover, .ac-option.active {
+      background: rgba(138, 43, 226, 0.28);
+      color: var(--text);
+    }
+
+    /* ---------- match lifecycle: countdown & decision ------------------ */
+    .countdown {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.8rem;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--champagne);
+      border: 1px solid var(--ink-hairline);
+      border-radius: 999px;
+    }
+    .countdown.countdown-low { color: var(--danger); border-color: rgba(255, 122, 138, 0.4); }
+    .btn-danger {
+      color: #fff;
+      background-color: var(--danger);
+      background-image: linear-gradient(160deg, #FF97A3, var(--danger) 55%, var(--danger-deep));
+      box-shadow: 0 12px 30px -12px rgba(255, 122, 138, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    }
+
+    /* ---------- veils: the two moments worth interrupting for ----------
+       A centred dialog rather than the bottom sheet: this is not a list to
+       browse, it is one thing to answer. Scoped to the app frame the same
+       way .sheet is, so on a wide screen it covers the phone-width column
+       and not the whole browser window. */
+    .veil { position: absolute; inset: 0; z-index: 60; }
+    .veil-scrim {
+      position: absolute;
+      inset: 0;
+      background: rgba(6, 3, 12, 0.76);
+      backdrop-filter: blur(6px);
+      opacity: 0;
+      transition: opacity 0.22s ease;
+    }
+    .veil.is-open .veil-scrim { opacity: 1; }
+    .veil-card {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(21rem, calc(100% - 2.5rem));
+      box-sizing: border-box;
+      padding: 1.5rem 1.35rem 1.35rem;
+      border-radius: 1.6rem;
+      border: 1px solid rgba(168, 85, 247, 0.28);
+      background-color: var(--ink-raised);
+      background-image:
+        var(--nap),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 26%),
+        linear-gradient(158deg, rgba(75, 20, 124, 0.55), rgba(11, 7, 19, 0.97) 62%);
+      background-size: 180px 180px, auto, auto;
+      background-blend-mode: overlay, normal, normal;
+      box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.95);
+      text-align: center;
+      transform: translate(-50%, -46%) scale(0.94);
+      opacity: 0;
+      transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+    }
+    .veil.is-open .veil-card { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    .veil-q {
+      margin: 0.3rem 0 0.8rem;
+      font-size: clamp(1.5rem, 6vw, 1.9rem);
+      line-height: 1.16;
+    }
+    .veil-sub {
+      margin: 0 0 1.2rem;
+      font-size: 0.87rem;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    .veil-nav { display: flex; flex-direction: column; gap: 0.6rem; }
+    /* Nevermind sits first: the way out should be the easier thing to hit,
+       and the confirm stays dead until the box is ticked. */
+    .veil-nav .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .veil-nav .btn:disabled:hover { transform: none; }
+    /* the tick, on the same raised ground an .opt row uses. This is a
+       <label>, so it arrives wearing the form-label styling -- uppercase,
+       tracked out, 0.72rem -- which is right for a field caption and wrong
+       for a sentence you are meant to read before agreeing to it. */
+    .veil-check {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      margin: 0 0 1.1rem;
+      padding: 0.75rem 0.9rem;
+      border-radius: 1.05rem;
+      border: 1.5px solid transparent;
+      background: var(--ink-raised);
+      text-align: left;
+      text-transform: none;
+      letter-spacing: normal;
+      font-size: 0.87rem;
+      font-weight: 400;
+      line-height: 1.4;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: border-color 0.16s ease, color 0.16s ease;
+    }
+    .veil-check:has(input:checked) {
+      border-color: rgba(255, 122, 138, 0.5);
+      color: var(--text);
+    }
+    .veil-check .opt-mark { flex: none; }
+    /* the checked box's tick is defined under `.opt input:checked`, which
+       this row has no .opt ancestor to satisfy -- restate it here in the
+       danger colour rather than leaving a filled box with no mark in it */
+    .veil-check input:checked ~ .opt-mark-box {
+      border-color: var(--danger);
+      background: var(--danger)
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.3 4.9 8.7 9.4 3.5' fill='none' stroke='%234A0F1E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+        center / 0.72rem no-repeat;
+    }
+    .veil-check input:focus-visible ~ .opt-mark {
+      outline: 2px solid var(--champagne);
+      outline-offset: 3px;
+    }
+
+    /* the landing: two orbs closing on each other, rings going out */
+    .matchpop-art {
+      position: relative;
+      height: 5.5rem;
+      margin-bottom: 0.4rem;
+    }
+    .matchpop-art > * { position: absolute; top: 50%; left: 50%; }
+    .matchpop-orb {
+      width: 2.6rem;
+      height: 2.6rem;
+      margin: -1.3rem 0 0 -1.3rem;
+      border-radius: 50%;
+      box-shadow: 0 0 26px rgba(168, 85, 247, 0.55);
+    }
+    .matchpop-orb-a {
+      background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
+      animation: orb-in-left 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .matchpop-orb-b {
+      background-image: linear-gradient(150deg, var(--teal-crest), var(--teal));
+      animation: orb-in-right 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .matchpop-ring {
+      width: 3rem;
+      height: 3rem;
+      margin: -1.5rem 0 0 -1.5rem;
+      border-radius: 50%;
+      border: 2px solid var(--violet-crest);
+      animation: ring-out 1.6s ease-out 0.55s infinite;
+    }
+    .matchpop-ring-2 { border-color: var(--champagne); animation-delay: 1.05s; }
+    .matchpop-spark {
+      width: 1.1rem;
+      height: 1.1rem;
+      margin: -0.55rem 0 0 -0.55rem;
+      border-radius: 50%;
+      background: var(--champagne);
+      box-shadow: 0 0 34px 10px rgba(232, 211, 169, 0.7);
+      animation: spark 0.9s ease-out 0.55s both;
+    }
+    @keyframes orb-in-left {
+      0% { transform: translateX(-5.5rem) scale(0.7); opacity: 0; }
+      100% { transform: translateX(-0.85rem) scale(1); opacity: 1; }
+    }
+    @keyframes orb-in-right {
+      0% { transform: translateX(5.5rem) scale(0.7); opacity: 0; }
+      100% { transform: translateX(0.85rem) scale(1); opacity: 1; }
+    }
+    @keyframes ring-out {
+      0% { transform: scale(0.7); opacity: 0.85; }
+      100% { transform: scale(2.5); opacity: 0; }
+    }
+    @keyframes spark {
+      0% { transform: scale(0); opacity: 0; }
+      45% { transform: scale(1.5); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.85; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .veil-card { transition: opacity 0.2s ease; transform: translate(-50%, -50%); }
+      .veil.is-open .veil-card { transform: translate(-50%, -50%); }
+      .matchpop-orb-a { animation: none; transform: translateX(-0.85rem); }
+      .matchpop-orb-b { animation: none; transform: translateX(0.85rem); }
+      .matchpop-ring, .matchpop-spark { animation: none; }
+      .matchpop-ring { opacity: 0.5; }
+    }
+
+    /* The active room's way out, at the end of the header row. flex: none
+       on both the form and the button: a shrinkable control here gets
+       squeezed under the name column on a narrow phone and ends up sitting
+       on top of it, which is exactly what the "Matched" pill used to do. */
+    .room-leave { margin: 0; flex: none; min-width: 0; }
+    .room-leave-btn {
+      flex: none;
+      white-space: nowrap;
+      padding: 0.26rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid var(--ink-hairline);
+      background: none;
+      color: var(--text-faint);
+      font-family: var(--sans);
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+    }
+    .room-leave-btn:hover {
+      color: var(--danger);
+      border-color: rgba(255, 122, 138, 0.45);
+      background: rgba(255, 122, 138, 0.1);
+    }
+
+    /* ---------- match screens (reveal / decide / ended) ----------------
+       Same column as the search steps and the waiting screen: the state is
+       stated in the middle (eyebrow, question, chips) and the two answers
+       sit in the nav row at the foot, always at the same y. */
+    .match .wiz-body { gap: 0; }
+    .match .pair { margin: 0 0 calc(1.2 * var(--fit-tight)); }
+    .match .pair > * {
+      width: calc(5.65 * var(--fit-tight));
+      height: calc(5.65 * var(--fit-tight));
+    }
+    /* Everything on the reveal rides --fit-tight, and the reveal redefines
+       it: the ordinary curve tops out at 740px tall, which leaves an 812px
+       phone at full size -- and at full size this screen, with a full row of
+       shared-interest chips, does not fit one. The knee moves to 900px so a
+       tall phone still gets some give, and the ceiling drops to 0.92 so what
+       it renders at 900 is what the old tall layout was. */
+    .match { --fit-tight: clamp(0.52rem, 1.778vh - 0.08rem, 0.92rem); }
+
+    /* The reveal stacks more than a step does -- two portraits, a kicker, a
+       countdown, the shared-interest chips -- so its share of the step
+       chrome rides the steeper curve rather than the ordinary one. */
+    .match .wiz-count { margin-top: calc(1.1 * var(--fit-tight)); }
+    .match .wiz-q {
+      font-size: min(clamp(1.6rem, 6vw, 2.1rem), calc(2.1 * var(--fit-tight)));
+      margin-bottom: calc(1.2 * var(--fit-tight));
+    }
+    .match .wiz-hint {
+      margin-bottom: calc(1.1 * var(--fit-tight));
+      font-size: calc(0.85 * var(--fit-tight));
+    }
+    .match .wiz-nav { margin-top: calc(1.5 * var(--fit-tight)); }
+    .match .pair { margin-top: calc(1.4 * var(--fit-tight)); }
+    .match .ring {
+      margin: calc(0.2 * var(--fit)) auto 0;
+      width: calc(6.52 * var(--fit-tight));
+      height: calc(6.52 * var(--fit-tight));
+    }
+    .match .ring .ring-num { font-size: calc(1.76 * var(--fit-tight)); }
+    /* the unit sits inside the disc, so it has to shrink with it or it
+       runs out over the stroke on a short screen */
+    .match .ring-unit { font-size: calc(0.54 * var(--fit-tight)); }
+    /* the inner disc tracks the ring, or the stroke thickens as it shrinks */
+    .match .ring::after { inset: calc(0.48 * var(--fit-tight)); }
+    .match .pillset { justify-content: center; margin-bottom: 0; }
+    .match-line {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      margin: 0 0 calc(1 * var(--fit));
+      font-weight: 700;
+      font-size: 0.59rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    /* the line under a stated block: the reveal's opener, a section's
+       caption. .section-note is the same voice sitting directly under a
+       .section-label, so it does not carry the leading gap. */
+    .match-note,
+    .section-note {
+      margin: calc(1 * var(--fit-tight)) 0 0;
+      text-align: center;
+      font-size: calc(0.84 * var(--fit-tight));
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    .section-note { margin: -0.15rem 0 0; }
+    .match-note strong,
+    .section-note strong { color: var(--champagne); font-weight: 600; }
+    /* the decision screens carry the transcript, which is the one part of
+       these screens allowed to scroll -- it takes the slack and the rest
+       of the column stays put */
+    .match .chat-log {
+      flex: 1 1 auto;
+      min-height: 4rem;
+      max-height: none;
+      margin: 1rem 0 0;
+    }
+    /* The one height rule left. An aside is a line of text or it is nothing:
+       there is no fractional version to ramp to, so below the height where
+       everything else has finished shrinking, the optional line goes. */
+    @media (max-height: 700px) {
+      .match-note.is-aside { display: none; }
+    }
+    .tag-ended {
+      color: var(--text-faint);
+      border-color: var(--ink-hairline);
+      background: rgba(8, 5, 14, 0.6);
+    }
+    .tag-timed { color: var(--champagne); border-color: rgba(232, 211, 169, 0.4);
+      background: linear-gradient(150deg, rgba(232, 211, 169, 0.22), rgba(59, 11, 102, 0.4)); }
+
+    /* ---------- photos --------------------------------------------------
+       The thumbnail grid that used to sit under the profile hero is gone:
+       photos are a carousel now (.pro-gallery), and a grid of the same
+       pictures underneath it was the second way to see the same thing. */
+    .photo-locked {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1;
+      max-width: 14rem;
+      border-radius: var(--radius-sm);
+      border: 1px dashed var(--ink-hairline);
+      color: var(--text-faint);
+      font-size: 0.8rem;
+      text-align: center;
+      padding: 1rem;
+    }
+    .field-fill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      float: right;
+      margin-top: -0.1rem;
+    }
+    .field-fill .btn-small { padding: 0.2rem 0.65rem; font-size: 0.72rem; }
+
+    /* A value the form states rather than asks for -- currently just the
+       Maastricht-only location. Sits where an input would, and borrows the
+       input's metrics so the column doesn't jump, but is flat and unbordered
+       so it never invites a click the way a disabled input does. */
+    .field-fixed {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.25rem 0.6rem;
+      margin: 0 0 1rem;
+      padding: 0.7rem 0.05rem;
+      font-size: 1rem;
+      color: var(--text);
+    }
+    .field-fixed-note {
+      font-size: 0.78rem;
+      color: var(--text-faint);
+    }
+
+    /* ---------- admin: members ---------------------------------------
+       Admin screens are English-only and desktop-first (see CLAUDE.md), so
+       this borrows the card and hint styles rather than introducing a look
+       of its own. */
+    .admin-tally {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin: 0 0 1rem;
+    }
+    .admin-tally-item {
+      flex: 1 1 7rem;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--ink-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--ink-raised);
+    }
+    /* the real number, given the weight the fabricated one would have had */
+    .admin-tally-item.is-headline { border-color: rgba(168, 85, 247, 0.42); }
+    .admin-tally-item.is-muted { opacity: 0.62; }
+    .admin-tally-n {
+      display: block;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 1.6rem;
+      line-height: 1.1;
+      color: var(--champagne);
+    }
+    .admin-tally-label {
+      display: block;
+      margin-top: 0.2rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .admin-filter {
+      display: flex;
+      gap: 0.5rem;
+      margin: 0 0 0.9rem;
+    }
+    .admin-filter input[type="search"] { flex: 1; margin: 0; }
+    .admin-member {
+      border-top: 1px solid var(--ink-hairline);
+      padding: 0.85rem 0;
+    }
+    .admin-member-head {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .admin-member-head h2 { font-size: 1.02rem; margin: 0; }
+    .admin-member-meta { margin: 0.2rem 0 0; word-break: break-word; }
+    .admin-badges { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .tag.is-live { color: var(--teal-crest); border-color: rgba(29, 166, 162, 0.5); }
+
+    /* ---------- searching state -------------------------------------- */
+    /* Hand-rolled rather than a Lottie. The dotLottie player was loaded from
+       unpkg.com, which this app's own CSP forbids, so the animation never
+       actually ran in production -- every visitor saw the fallback. Playing
+       the file instead would have meant vendoring ~250KB of third-party
+       renderer onto the one screen whose whole job is to feel light.
+
+       So: three rings going out from a core, on one grid cell. It reads as
+       listening rather than loading -- nothing here is a progress bar,
+       because there is no progress to report; someone either turns up or
+       they don't. */
+    .search-anim {
+      display: grid;
+      justify-items: center;
+      align-items: center;
+      margin: 0 auto 0.5rem;
+    }
+    .search-anim > * { grid-area: 1 / 1; }
+
+    /* The rings are one element each so they can be staggered; a single
+       element with three box-shadows could not travel independently. */
+    .search-ping {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 1.5px solid var(--violet-crest);
+      opacity: 0;
+      /* transform and opacity only, so each ring is a compositor job and
+         the phone is not repainting a 200px circle sixty times a second. */
+      animation: ping 3s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    }
+    .search-ping:nth-of-type(2) { animation-delay: 1s; border-color: var(--teal-crest); }
+    .search-ping:nth-of-type(3) { animation-delay: 2s; }
+    @keyframes ping {
+      0%   { transform: scale(0.42); opacity: 0; }
+      12%  { opacity: 0.55; }
+      100% { transform: scale(1); opacity: 0; }
+    }
+
+    .pulse-heart {
+      width: 4.5rem;
+      height: 4.5rem;
+      margin: 0 auto 0.5rem;
+      border-radius: 50%;
+      background: radial-gradient(circle at 34% 30%, var(--violet-crest), var(--violet) 45%, var(--violet-deep) 78%);
+      box-shadow: 0 0 60px rgba(168, 85, 247, 0.6);
+      animation: breathe 2.4s ease-in-out infinite;
+    }
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(168, 85, 247, 0.45); }
+      50% { transform: scale(1.07); box-shadow: 0 0 78px rgba(168, 85, 247, 0.75); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .pulse-heart { animation: none; }
+      /* the core alone still reads as live; only the travel is dropped */
+      .search-ping { animation: none; opacity: 0; }
+      .btn::before { transition: none; }
+      .btn:hover, .profile-card:hover, .tile:hover .tile-face { transform: none; }
+      /* colour still marks the selected tile; only the nudge is dropped */
+      .tile input:checked ~ .tile-face .tile-icon { transform: none; }
+      /* panels still open and close, they just arrive rather than slide */
+      .toggle-panel { transition: none; }
+      .step-dot::before { transition: none; }
+    }
+
+    /* ---------- chat -------------------------------------------------- */
+    .chat-log {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      margin-bottom: 1.15rem;
+      max-height: 55vh;
+      overflow-y: auto;
+      padding: 0.25rem;
+    }
+    /* Sized to the words, not to the padding. A chat is mostly short lines
+       -- "ok", "haha yes" -- and generous box padding on those reads as a
+       column of half-empty cards rather than a conversation. Wider cap too:
+       the tighter horizontal padding only buys room if the bubble is
+       allowed to use it before wrapping. */
+    .bubble {
+      max-width: 82%;
+      padding: 0.42rem 0.68rem;
+      font-size: 0.95rem;
+      line-height: 1.38;
+      border-radius: 1rem;
+      white-space: pre-line;
+    }
+    .bubble .sender {
+      display: block;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      opacity: 0.7;
+      margin-bottom: 0.2rem;
+    }
+    .bubble.left {
+      align-self: flex-start;
+      color: #D8F5F2;
+      background-image: linear-gradient(150deg, rgba(18, 128, 127, 0.5), rgba(6, 56, 59, 0.72));
+      border: 1px solid rgba(29, 166, 162, 0.3);
+      border-bottom-left-radius: 0.3rem;
+    }
+    .bubble.right {
+      align-self: flex-end;
+      color: #F6ECFF;
+      background-image: linear-gradient(150deg, rgba(138, 43, 226, 0.6), rgba(59, 11, 102, 0.78));
+      border: 1px solid rgba(168, 85, 247, 0.36);
+      border-bottom-right-radius: 0.3rem;
+    }
+    /* time (+ delivered/read ticks on a bubble I sent), right-aligned under
+       the text the way a messaging app states it -- quiet enough not to
+       compete with the words above it */
+    /* Inline, not a block under the text: "ok" and its timestamp belong on
+       one line the way every messenger sets them. As inline-flex it rides
+       along at the end of the last line when there is room and wraps on its
+       own when there isn't, so a long message is unaffected. */
+    .bubble-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      margin-left: 0.45rem;
+      vertical-align: baseline;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.62rem;
+      opacity: 0.62;
+    }
+    .bubble-ticks {
+      letter-spacing: -0.12em;
+      /* unread by default: a lone glyph rather than two collapsed on top
+         of each other, so "sent" and "read" are two distinct widths */
+      color: inherit;
+    }
+    /* JS paints the real state; until it does (or if it can't), a sent
+       message still exists, so "delivered" is the one honest fallback. */
+    .bubble-ticks:empty::after { content: "✓"; }
+    .bubble-ticks.is-read { color: var(--teal-crest); opacity: 1; }
+    .chat-form { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+    .chat-form input[type="text"] { flex: 1; min-width: 11rem; margin-bottom: 0; }
+    /* ---------- chats list --------------------------------------------
+       Each row is a link, not a card with a button inside it -- the whole
+       row opens the chat. */
+    .chat-rows { display: flex; flex-direction: column; gap: 0.7rem; }
+    .chat-row {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      color: var(--text);
+      transition: border-color 0.18s ease, transform 0.18s ease;
+    }
+    .chat-row:hover { border-color: rgba(168, 85, 247, 0.42); transform: translateY(-1px); }
+    .chat-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+    .chat-row-top { display: flex; align-items: baseline; gap: 0.5rem; }
+    .chat-row-top strong {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 1.02rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chat-row-bottom {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.6rem;
+    }
+    .chat-row-preview {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .chat-row-time { flex: none; font-size: 0.78rem; color: var(--text-faint); }
+    /* stays openable (the ending and its reason live behind the tap), just
+       stops competing visually with the live rows above it */
+    .chat-row-ended { opacity: 0.55; }
+    .chat-row-ended:hover { opacity: 0.8; }
+    @media (prefers-reduced-motion: reduce) {
+      .chat-row:hover { transform: none; }
+    }
+    .live-dot {
+      display: inline-block;
+      width: 0.42rem;
+      height: 0.42rem;
+      border-radius: 50%;
+      background: var(--teal-crest);
+      box-shadow: 0 0 10px var(--teal-crest);
+      vertical-align: middle;
+      margin-right: 0.3rem;
+    }
+
+    /* photo stand-in: the diagonal hatch the mockups draw wherever an
+       image will land but hasn't — no photo uploaded, or still locked
+       behind the match gate. */
+    .ph {
+      background-image: repeating-linear-gradient(45deg,
+        rgba(168, 133, 247, 0.16) 0 6px, transparent 6px 12px);
+    }
+
+    /* the bio, set as a pull-quote rather than another labelled field */
+    .profile-quote {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 1.12rem;
+      line-height: 1.45;
+      text-wrap: pretty;
+    }
+
+    /* key/value rows: label left, value right, hairline between */
+    .facts { display: flex; flex-direction: column; margin-top: 1rem; }
+    .facts > div {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid var(--ink-hairline);
+    }
+    .facts dt { margin-top: 0; padding-top: 0.12rem; }
+    .facts dd {
+      margin: 0;
+      max-width: 60%;
+      text-align: right;
+      font-size: 0.875rem;
+      color: var(--text);
+    }
+
+    /* ---------- profile screen ----------------------------------------
+       A profile is a document, so unlike a step it starts at the top and
+       scrolls -- but it scrolls *inside itself*. The screen is .wiz-fit,
+       which bounds the column to the viewport, so the name can stay
+       pinned at the top the whole way down and the photos never scroll
+       out of reach of the arrows. Everything below the photos is one
+       repeated part, .pro-card, so a profile with two things to say and
+       one with nine read as the same page. */
+    .profile-screen .wiz-body { justify-content: flex-start; gap: 0.75rem; }
+
+    /* the pinned name. Sits above .wiz-body rather than inside it, so it
+       is outside the scroll box by construction rather than by z-index. */
+    .pro-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding-bottom: 0.7rem;
+      border-bottom: 1px solid var(--ink-hairline);
+    }
+    .pro-head h1 {
+      /* min-width: 0 or the flex item refuses to shrink below its text and
+         pushes the button off the edge -- the same fix .chat-head needed. */
+      flex: 1 1 auto;
+      min-width: 0;
+      margin: 0;
+      font-size: clamp(1.35rem, 5vw, 1.6rem);
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pro-head h1 .pro-age { color: var(--text-muted); font-weight: 400; }
+    /* The viewport-preview chip is fixed to this exact corner on phones
+       (top: 5.5rem), and unlike the room's header this one puts its longest
+       text right up against the edge. Reserve the chip's width so a long
+       name ellipsises short of it instead of running underneath. Margin, not
+       padding: the box itself has to end before the chip, or the text just
+       ellipsises into a gap the chip still covers. */
+    html[data-viewport="mobile"] .pro-head h1 { margin-right: 6.5rem; }
+    .pro-close {
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: 2.25rem;
+      height: 2.25rem;
+      padding: 0;
+      border-radius: 50%;
+      border: 1px solid var(--ink-hairline);
+      background: var(--ink-raised);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 0.15s ease, border-color 0.15s ease;
+    }
+    .pro-close:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
+    .pro-close svg { width: 1.05rem; height: 1.05rem; }
+
+    /* ---------- the carousel ------------------------------------------
+       One photo at a time with a bar per photo above it. Six is the cap
+       (PHOTO_MAX_PER_USER), so the bars can each take an equal share of
+       the width without ever getting too thin to see. */
+    .pro-gallery { position: relative; }
+    .pro-bars {
+      display: flex;
+      gap: 0.25rem;
+      margin-bottom: 0.45rem;
+    }
+    .pro-bars > span {
+      flex: 1;
+      height: 3px;
+      border-radius: 2px;
+      background: var(--ink-hairline);
+      transition: background 0.2s ease;
+    }
+    .pro-bars > span.is-seen {
+      background-image: linear-gradient(90deg, var(--violet-crest), var(--violet));
+    }
+    .pro-frame {
+      position: relative;
+      aspect-ratio: 3 / 4;
+      border-radius: 1.15rem;
+      overflow: hidden;
+      border: 1px solid var(--ink-hairline);
+      background-color: #12081F;
+      background-image:
+        radial-gradient(56% 46% at 18% 6%, rgba(168, 85, 247, 0.62), transparent 70%),
+        radial-gradient(52% 44% at 92% 16%, rgba(29, 166, 162, 0.5), transparent 72%);
+    }
+    .pro-frame > .ph { position: absolute; inset: 0; }
+    .pro-slide {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.28s ease;
+    }
+    .pro-slide.is-on { opacity: 1; }
+    /* the whole half of the frame is the target, not just the chevron --
+       that is what makes it feel like the phone app rather than a slider */
+    .pro-tap {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 42%;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .pro-tap.is-prev { left: 0; }
+    .pro-tap.is-next { right: 0; }
+    .pro-arrow {
+      position: absolute;
+      top: 50%;
+      z-index: 2;
+      display: grid;
+      place-items: center;
+      width: 2.1rem;
+      height: 2.1rem;
+      margin-top: -1.05rem;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: #FFF;
+      background: rgba(11, 7, 19, 0.55);
+      backdrop-filter: blur(6px);
+      cursor: pointer;
+      transition: opacity 0.18s ease, background 0.18s ease;
+    }
+    .pro-arrow:hover { background: rgba(11, 7, 19, 0.78); }
+    .pro-arrow.is-prev { left: 0.6rem; }
+    .pro-arrow.is-next { right: 0.6rem; }
+    .pro-arrow svg { width: 1.15rem; height: 1.15rem; }
+    /* at either end the control has nothing to do: hide it, and take its
+       tap zone out of the flow with it so the dead half stops swallowing
+       taps meant for the live one. */
+    .pro-arrow.is-spent, .pro-tap.is-spent { opacity: 0; pointer-events: none; }
+    .pro-count {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+
+    /* ---------- the cards ---------------------------------------------
+       One part, repeated: the same raised ground, radius and hairline an
+       .opt row uses, opened by a faint eyebrow so a section says what it
+       is before it says anything else. */
+    /* --- the "how a match works" intro ------------------------------- */
+    .intro-steps {
+      list-style: none;
+      margin: 1.4rem 0 0.4rem;
+      padding: 0;
+      display: grid;
+      gap: 0.9rem;
+    }
+    .faq-item + h2 { margin-top: 1.7rem; }
+    .faq-item {
+      border-top: 1px solid var(--ink-hairline);
+      padding: 0.85rem 0;
+    }
+    .faq-item summary {
+      cursor: pointer;
+      font-weight: 600;
+      line-height: 1.35;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      gap: 0.8rem;
+      align-items: baseline;
+    }
+    .faq-item summary::-webkit-details-marker { display: none; }
+    .faq-item summary::after {
+      content: "+";
+      flex: none;
+      font-family: var(--mono);
+      color: var(--text-dim);
+      transition: transform 180ms ease;
+    }
+    .faq-item[open] summary::after { content: "−"; }
+    .faq-item summary:hover { color: var(--velvet-bright, var(--velvet)); }
+    .faq-item p {
+      margin: 0.6rem 0 0;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      color: var(--text-dim);
+    }
+    .intro-steps + .wiz-hint { margin-top: 1.15rem; }
+    .intro-steps li {
+      display: flex;
+      gap: 0.85rem;
+      align-items: flex-start;
+      padding: 0.95rem 1.05rem;
+      border-radius: 1.15rem;
+      border: 1px solid var(--ink-hairline);
+      background: var(--ink-raised);
+    }
+    .intro-step-n {
+      flex: none;
+      width: 1.7rem;
+      height: 1.7rem;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--velvet-glow, rgba(180, 130, 255, 0.18));
+      color: var(--text);
+      font-size: 0.8rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .intro-steps h2 {
+      margin: 0 0 0.25rem;
+      font-size: 0.98rem;
+      line-height: 1.25;
+    }
+    .intro-steps p {
+      margin: 0;
+      font-size: 0.86rem;
+      line-height: 1.45;
+      color: var(--text-dim);
+    }
+
+    .pro-card {
+      padding: 1rem 1.1rem;
+      border-radius: 1.15rem;
+      border: 1px solid var(--ink-hairline);
+      background: var(--ink-raised);
+    }
+    .pro-eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin: 0 0 0.7rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      color: var(--text-faint);
+    }
+    .pro-eyebrow svg { flex: none; width: 0.95rem; height: 0.95rem; }
+
+    /* the answer a card exists for -- the connection type, an interest
+       cloud's heading row -- set large next to its gradient disc */
+    .pro-lead {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+    .pro-lead .opt-icon { width: 2.6rem; height: 2.6rem; }
+    .pro-lead .opt-icon svg { width: 1.3rem; height: 1.3rem; }
+    .pro-lead > span:last-child {
+      font-family: var(--serif);
+      font-size: 1.22rem;
+      line-height: 1.25;
+    }
+    .pro-card .pillset { margin: 0; }
+    .pro-rule {
+      height: 1px;
+      margin: 0.85rem 0;
+      background: var(--ink-hairline);
+    }
+
+    /* facts as sentences, not label/value pairs: an icon and the thing
+       itself, which reads at a glance where "Height  180 cm" does not */
+    .pro-facts { display: flex; flex-direction: column; }
+    .pro-facts > div {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      padding: 0.55rem 0;
+      font-size: 0.95rem;
+      border-bottom: 1px solid var(--ink-hairline);
+    }
+    .pro-facts > div:last-child { border-bottom: 0; }
+    .pro-facts > div:first-child { padding-top: 0; }
+    .pro-facts svg {
+      flex: none;
+      width: 1.15rem;
+      height: 1.15rem;
+      color: var(--text-faint);
+    }
+
+    /* a prompt and its answer: the question stays small enough to read as
+       a caption, so the answer is the only thing with any voice */
+    .pro-prompt {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 1.3rem;
+      line-height: 1.32;
+      text-wrap: pretty;
+    }
+    .pro-note {
+      margin: 0.7rem 0 0;
+      font-size: 0.78rem;
+      color: var(--text-faint);
+    }
+    /* the owner-only preference rows keep the label/value shape: they are
+       settings you typed, not things you would say about yourself */
+    .pro-card .facts { margin-top: 0; }
+    .pro-card .facts > div:last-child { border-bottom: 0; }
+    .pro-card .facts > div:first-child { padding-top: 0; }
+
+    .profile-screen .photo-locked {
+      max-width: none;
+      aspect-ratio: 3 / 4;
+      padding: 1.1rem;
+      border-radius: 1.15rem;
+    }
+    .profile-screen .wiz-nav { justify-content: center; }
+    .profile-screen .wiz-nav .btn { width: 100%; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pro-slide { transition: none; }
+    }
+
+    /* ---------- the rest of the app, in the wizard's shape -------------
+       Landing, the two auth screens, the chat list and the two profile
+       forms were the last pages still built as a scrolling .card on a page
+       of their own. They use the wizard's column and the wizard's parts --
+       eyebrow, question, hint, action pinned at the foot -- and they are
+       .wiz-fit, so the frame is the viewport and the only thing that ever
+       scrolls is the part that is genuinely a document. */
+
+    /* auth: the question is the pitch, the fields sit under it, and the
+       submit plus its "or the other one" link take the nav's slot */
+    .auth-screen .wiz-field { margin-bottom: 0; }
+    .auth-alt {
+      margin: 0;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* the chat list: head pinned, rows scrolling under it */
+    .chats-screen .wiz-q { margin-bottom: 1rem; }
+    .chats-screen .chat-rows { padding-bottom: 0.25rem; }
+    /* the empty state, on the same raised ground an .opt row uses rather
+       than as a panel of its own */
+    .chats-empty {
+      margin: 0;
+      padding: 1.1rem;
+      border-radius: 1.15rem;
+      background: var(--ink-raised);
+      text-align: center;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    /* the profile forms: long enough that the body is always the scroller,
+       so Save is pinned where Next sits on a step and never scrolls away */
+    .edit-screen .wiz-body > form { margin: 0; }
+    /* the compact bar is the pinned head, so it must not be squeezed by a
+       body that wants the slack -- and its own bottom rule is the gap */
+    .edit-screen .edit-head { flex: none; margin-bottom: 0.9rem; }
+
+    /* offscreen but still focusable — the file inputs are driven by their
+       labels (the + tile), not by showing the browser's own control */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .inline-link { display: inline; color: var(--violet-crest); cursor: pointer; }
+    .inline-link:hover { color: var(--champagne); }
+
+    /* ---------- edit profile: compact header --------------------------- */
+    .edit-head {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding-bottom: 0.9rem;
+      margin-bottom: 1.1rem;
+      border-bottom: 1px solid var(--ink-hairline);
+    }
+    .edit-head-title {
+      flex: 1;
+      text-align: center;
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 1.25rem;
+    }
+
+    /* character counter under a textarea */
+    .char-count {
+      margin: -0.5rem 0 1rem;
+      text-align: right;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.6875rem;
+      color: var(--text-faint);
+    }
+
+    /* ---------- toggleable chips (interests) --------------------------- */
+    .pillset {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(0.5 * var(--fit));
+      margin-bottom: calc(1 * var(--fit));
+    }
+    .pill {
+      padding: calc(0.5 * var(--fit)) 0.875rem;
+      font-family: var(--sans);
+      font-size: calc(0.845 * var(--fit));
+      color: var(--text-muted);
+      background: none;
+      border: 1px solid var(--ink-hairline);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    }
+    /* A pill only becomes a flex box when it actually carries an icon, so a
+       plain one keeps the inline layout it has always had and nothing shifts
+       by a pixel when the pill.* slots are empty. 0.25rem is the design
+       system's icon-to-label gap -- the job --space-1 exists for. */
+    .pill:has(svg) {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .pill > svg {
+      flex: none;
+      width: 0.95em;
+      height: 0.95em;
+      opacity: 0.75;
+    }
+    .pill:hover { color: var(--text); border-color: rgba(168, 85, 247, 0.42); }
+    .pill.is-on {
+      color: #F0E2FF;
+      border-color: rgba(168, 85, 247, 0.42);
+      background-image: linear-gradient(150deg, rgba(138, 43, 226, 0.4), rgba(59, 11, 102, 0.55));
+    }
+    .pill:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
+
+    /* ---------- edit profile: photo tiles and strength ----------------- */
+    .photo-tiles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-bottom: 0.9rem;
+    }
+    .photo-tile {
+      position: relative;
+      flex: none;
+      width: 5.125rem;
+      height: 6.5rem;
+      border-radius: 0.75rem;
+      border: 1px solid var(--ink-hairline);
+      overflow: hidden;
+      cursor: grab;
+      touch-action: none;   /* or the drag scrolls the form instead */
+      transition: transform 0.16s ease, border-color 0.16s ease,
+                  box-shadow 0.16s ease;
+    }
+    .photo-tile > img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    /* Nothing in this strip saves on its own -- a tile is a staged
+       intention until the form goes -- so every one of them has to say what
+       it is doing while you do it. That is the whole reason for the states
+       below: without them the screen looked identical before and after you
+       picked a photo. */
+    .photo-tile:hover,
+    .photo-tile:focus-within {
+      border-color: rgba(168, 85, 247, 0.55);
+      transform: translateY(-2px);
+    }
+    .photo-tile.is-dragging {
+      z-index: 2;
+      cursor: grabbing;
+      transform: scale(1.06);
+      border-color: var(--violet-crest);
+      box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.9);
+    }
+    .photo-tile.is-main {
+      border-color: rgba(232, 211, 169, 0.75);
+      box-shadow: 0 0 0 1px rgba(232, 211, 169, 0.35);
+    }
+    .photo-tile.is-removed { border-style: dashed; }
+    .photo-tile.is-removed > img { opacity: 0.22; filter: grayscale(1); }
+
+    /* the tap target for "make this the main": the picture itself, which is
+       what you would reach for anyway */
+    .photo-main {
+      position: absolute;
+      inset: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    .photo-x {
+      position: absolute;
+      top: 0.25rem;
+      right: 0.25rem;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      width: 1.35rem;
+      height: 1.35rem;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: #FFF;
+      background: rgba(11, 7, 19, 0.72);
+      backdrop-filter: blur(4px);
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.16s ease, background 0.16s ease;
+    }
+    .photo-x svg { width: 0.7rem; height: 0.7rem; }
+    .photo-x:hover { background: var(--danger); }
+    /* on a phone there is no hover to reveal it, so it is always there */
+    .photo-tile:hover .photo-x,
+    .photo-tile:focus-within .photo-x { opacity: 1; }
+    @media (hover: none) {
+      .photo-x { opacity: 1; }
+    }
+    .photo-tile.is-removed .photo-x,
+    .photo-tile.is-removed .photo-main,
+    .photo-tile.is-removed .photo-tile-label { display: none; }
+
+    .photo-undo {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: none;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--violet-crest);
+      font-family: var(--mono);
+      font-size: 0.66rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .photo-tile.is-removed .photo-undo { display: block; }
+
+    .photo-tile-label {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      z-index: 1;
+      display: none;
+      padding: 0.4rem;
+      font-family: var(--mono);
+      font-size: 0.5625rem;
+      letter-spacing: 0.06em;
+      color: var(--champagne);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    }
+    .photo-tile.is-main .photo-tile-label { display: block; }
+
+    /* the add slot: dashed, so it reads as an empty place rather than a
+       tile that failed to load */
+    .photo-tile-add {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-style: dashed;
+      border-color: rgba(168, 133, 247, 0.3);
+      color: var(--text-faint);
+      font-size: 1.4rem;
+      cursor: pointer;
+    }
+    .photo-tile-add:hover,
+    .photo-tile-add:focus-within {
+      color: var(--violet-crest);
+      border-color: rgba(168, 85, 247, 0.6);
+      background: rgba(168, 133, 247, 0.07);
+    }
+    .photo-tile-add:active { transform: scale(0.96); }
+    /* the strip answers a file dragged anywhere over the window, so the
+       target is visible before you let go rather than after */
+    .photo-tiles.is-dropping .photo-tile-add {
+      color: var(--violet-crest);
+      border-color: var(--violet-crest);
+      background: rgba(168, 133, 247, 0.12);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .photo-tile { transition: none; }
+      .photo-tile:hover, .photo-tile:focus-within { transform: none; }
+      .photo-tile.is-dragging { transform: none; }
+    }
+
+    .strength-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.55rem;
+    }
+    .strength-blocking {
+      margin: 0.6rem 0 0;
+      font-size: 0.84rem;
+      line-height: 1.4;
+      color: var(--text);
+    }
+    .strength-blocking::first-letter { text-transform: none; }
+    .strength-value {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      font-size: 0.82rem;
+      color: var(--champagne);
+    }
+    .strength-bar {
+      height: 0.375rem;
+      border-radius: 999px;
+      background: rgba(59, 11, 102, 0.9);
+      overflow: hidden;
+    }
+    .strength-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--violet-deep), var(--violet-crest));
+    }
+
+    /* ---------- countdown ring ----------------------------------------
+       A conic sweep driven by --deg with a disc punched out of the middle,
+       so the number reads against the panel rather than against the ring.
+       Used for both the reveal countdown and the room timer; only --deg
+       and --ring-color differ. */
+    .ring {
+      position: relative;
+      flex: none;
+      width: 6rem;
+      height: 6rem;
+      border-radius: 50%;
+      background: conic-gradient(
+        var(--ring-color, var(--champagne)) 0deg var(--deg, 0deg),
+        rgba(59, 11, 102, 0.6) var(--deg, 0deg) 360deg);
+    }
+    .ring::after {
+      content: "";
+      position: absolute;
+      inset: 0.44rem;
+      border-radius: 50%;
+      background: var(--ink-raised);
+    }
+    /* above ::after, which is painted as the ring's last child */
+    .ring-inner {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+    }
+    .ring-num {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      font-size: 1.62rem;
+      line-height: 1;
+      color: var(--champagne);
+    }
+    .ring-unit {
+      font-weight: 700;
+      font-size: 0.5rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .ring-sm {
+      width: clamp(3.6rem, 5.538vh + 1.385rem, 4.5rem);
+      height: clamp(3.6rem, 5.538vh + 1.385rem, 4.5rem);
+    }
+    .ring-sm::after { inset: 0.33rem; }
+    .ring-sm .ring-num { font-size: clamp(1rem, 1.169vh + 0.5323rem, 1.19rem); }
+
+    /* the two of you, overlapping: violet on one side, teal on the other */
+    .pair {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1.4rem;
+    }
+    .pair > * {
+      width: 6.5rem;
+      height: 6.5rem;
+      flex: none;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1px solid rgba(168, 85, 247, 0.5);
+      box-shadow: 0 0 40px -8px rgba(168, 85, 247, 0.7);
+    }
+    .pair > * + * {
+      margin-left: -1.5rem;
+      border-color: rgba(29, 166, 162, 0.5);
+      box-shadow: 0 0 40px -8px rgba(29, 166, 162, 0.6);
+    }
+
+    /* the room strip: timer beside the explanation of what it means.
+       Laid out with the rest of the room, further down. */
+    .room-timer-label {
+      font-weight: 700;
+      font-size: 0.625rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .room-timer p {
+      margin: 0.35rem 0 0;
+      font-size: calc(0.845 * var(--fit));
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    /* the room's decision strip: who has answered on the left, the two
+       answers on the right, in the same quiet/loud pairing the step nav
+       uses -- one size down, since the composer sits under it */
+    .room-decide {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.8rem;
+    }
+    .room-decide .match-line {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      justify-content: flex-start;
+      text-align: left;
+    }
+    .wiz-go-sm { height: 2.6rem; padding: 0 1.1rem; font-size: 0.85rem; }
+
+    /* ---------- chat header ------------------------------------------ */
+    /* A raised row in the same shape as an .opt: the room's own screens
+       are built from the wizard's parts, so its header is a card of the
+       same radius and ground rather than a hairline rule. */
+    .chat-head {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      padding: 0.65rem 0.9rem;
+      margin-bottom: 0.75rem;
+      border-radius: 1.15rem;
+      border: 1.5px solid transparent;
+      background: var(--ink-raised);
+    }
+    .chat-back {
+      display: grid;
+      place-items: center;
+      flex: none;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      color: var(--text-muted);
+      font-size: 1.2rem;
+      line-height: 1;
+      transition: color 0.16s ease, background 0.16s ease;
+    }
+    .chat-back:hover { color: var(--text); background: rgba(168, 133, 247, 0.12); }
+    /* generic, not scoped to .chat-head: the chats list reuses the same
+       circular avatar (with .ph for the locked-photo hatch) per row. */
+    .avatar {
+      width: 2.6rem;
+      height: 2.6rem;
+      flex: none;
+      border-radius: 50%;
+      border: 1px solid var(--ink-hairline);
+      object-fit: cover;
+    }
+    /* min-width:0 so a long name ellipsises instead of shoving the pill
+       off the end of the row */
+    .chat-head-main { flex: 1; min-width: 0; }
+    /* Quiet until wanted: present on every live conversation, but never
+       competing with the person's name for attention. */
+    .chat-head-report {
+      flex: 0 0 auto;
+      color: var(--text-faint);
+      font-size: 0.78rem;
+      text-decoration: none;
+      padding: 0.2rem 0.45rem;
+    }
+    .chat-head-report:hover { color: var(--violet-crest); text-decoration: underline; }
+    .chat-head-name {
+      display: block;
+      color: var(--text);
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 1.19rem;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .chat-head-live {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.15rem;
+      font-weight: 700;
+      font-size: 0.59rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      /* "Reconnecting…" is four times the width of "live" and would
+         otherwise run out from under the name column and across whatever
+         sits at the end of the row */
+      min-width: 0;
+    }
+    .chat-head-live > span:last-child {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* round send button, sized to sit flush with the pill composer -- and
+       to the same 3.4rem as the wizard's Next, since the composer occupies
+       the same foot-of-the-column slot the step nav does */
+    .chat-form input[type="text"] {
+      height: 3.4rem;
+      border-radius: 999px;
+      padding-inline: 1.1rem;
+    }
+    .btn-send {
+      width: 3.4rem;
+      height: 3.4rem;
+      flex: none;
+      padding: 0;
+      border-radius: 50%;
+      font-size: 1.1rem;
+      background-image: linear-gradient(150deg, var(--violet-crest), var(--violet));
+      box-shadow: 0 10px 26px -12px rgba(138, 43, 226, 0.9);
+    }
+    .btn-send:hover { transform: translateX(2px); }
+
+    /* ---------- the room (timed / active chat) -------------------------
+       The wizard's column again: header pinned at the top, transcript
+       taking the slack and scrolling inside itself, composer at the foot
+       where Back/Next sit on a step. Nothing but the log ever scrolls. */
+    .room .wiz-body {
+      justify-content: flex-start;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .room .chat-log {
+      flex: 1 1 auto;
+      min-height: 4rem;
+      max-height: none;
+      margin-bottom: 0;
+    }
+    /* a half-empty room reads better with its messages down by the
+       composer than stranded at the top. An auto margin rather than
+       justify-content: flex-end, which makes the top of an overflowing
+       scroll box unreachable. */
+    .room .chat-log > :first-child { margin-top: auto; }
+    /* the transcript now runs to the edge of its box, so the scrolled-past
+       message is cut mid-word at the top. Fade it out instead. */
+    .room .chat-log,
+    .match .chat-log {
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 1.4rem);
+      mask-image: linear-gradient(to bottom, transparent 0, #000 1.4rem);
+    }
+    .room .wiz-nav { margin-top: 0.85rem; }
+    .room .chat-form { flex: 1; flex-wrap: nowrap; }
+    /* the room's clock, restated as a raised strip rather than a ruled one */
+    .room-timer {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      padding: calc(0.7 * var(--fit)) 0.9rem;
+      margin-bottom: calc(0.75 * var(--fit));
+      border-radius: 1.15rem;
+      background: rgba(59, 11, 102, 0.42);
+    }
+
+    /* live telemetry: counts that tick while you watch. Monospace and
+       tabular so a changing digit never reflows the line. */
+    /* tabular-nums so the ticking seconds don't shift the line's width */
+
+    /* ---------- landing: the film behind the hero ---------------------
+       The pair crossing the gap, in the gap the hero deliberately leaves
+       between the headline and the buttons.
+
+       z-index 0 puts it in the same layer as body::before and body::after,
+       and tree order does the rest: the conic-gradient folds paint under it,
+       the nap weave over it. That over-weave is the point -- it is what makes
+       two rendered characters read as part of the same bolt of cloth as the
+       rest of the page rather than a video pasted behind it. */
+    .hero-film {
+      position: fixed;
+      /* A band at the foot of the screen, not the whole viewport: they are
+         standing figures, so they need floor, and the headline needs the air
+         above them. Full-bleed put their faces behind the h1. */
+      /* Phone: the whole screen. The film is the page's ground here, not an
+         ornament in a corner of it. */
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+      /* The still is the floor of this layer, not a fallback bolted on: the
+         markup ships no <source>, so on a reduced-motion visit this is the
+         whole treatment and nothing is downloaded to cover it up. */
+      background:
+        url("{{ url_for('static', filename='velvt-hero.webp') }}")
+        50% 16% / cover no-repeat;
+    }
+    /* Once the reel is up, the still has to go. Both are bottom-anchored but
+       they scale differently, and the video is transparent above the figures'
+       heads -- so leaving the still underneath showed a second, larger pair
+       through that gap. */
+    .hero-film:has(.hero-film-reel.is-running) { background-image: none; }
+    /* Full-bleed, a scrim is the right tool and a mask is not: the layer covers
+       every pixel, so darkening it darkens the page uniformly with no band edge
+       to give away a seam -- and unlike a flat opacity it can be strong exactly
+       where the type sits and get out of the way in the middle. The headline
+       and the "people searching" line are both low-contrast by design, and they
+       are what this is protecting. */
+    .hero-film::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg,
+          rgba(11, 7, 19, 0.90) 0%,
+          rgba(11, 7, 19, 0.74) 30%,
+          rgba(11, 7, 19, 0.34) 54%,
+          rgba(11, 7, 19, 0.52) 80%,
+          rgba(11, 7, 19, 0.82) 100%),
+        /* The type is left-aligned, so the left third carries more of it. */
+        linear-gradient(92deg,
+          rgba(11, 7, 19, 0.52) 0%,
+          rgba(11, 7, 19, 0.16) 46%,
+          rgba(11, 7, 19, 0.00) 80%);
+    }
+    .hero-film-reel {
+      width: 100%;
+      height: 100%;
+      /* cover to fill the screen. Anchored near the top rather than the bottom,
+         because the shot pushes in as they come together: the frame it rests on
+         is a head-and-shoulders embrace, and bottom-anchoring cropped both
+         their faces off the top of the screen. Biased a little down from 0 so
+         the earlier, full-body part of the run still keeps its feet. */
+      object-fit: cover;
+      object-position: 50% 16%;
+      display: block;
+      /* Held back until the first painted frame, so the swap from still to
+         video is a fade rather than a flash of an empty black box. */
+      opacity: 0;
+      transition: opacity 700ms ease;
+    }
+    .hero-film-reel.is-running { opacity: 1; }
+    @media (prefers-reduced-motion: reduce) {
+      /* Nothing was fetched, so there is nothing to fade in -- but a browser
+         that ignores the script must not leave an empty box over the still. */
+      .hero-film-reel { display: none; }
+    }
+    /* Side by side the treatment inverts. Filling a 1440px screen with two
+       portrait figures means cropping them to a chest, and the layout already
+       has a genuinely empty quarter at the bottom right -- copy left, wordmark
+       upper right. So on desktop they get that corner, whole, at their own
+       size. Not a scaled-up phone: a different composition for a different
+       shape of screen. */
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .hero-film {
+        /* Held off the right edge, because the pair stands near the edge of
+           their own frame -- flush to the viewport the purple one loses his
+           shoulder to the window. */
+        inset: auto clamp(0px, 2vw, 34px) 0 auto;
+        width: min(42vw, 480px);
+        height: min(62svh, 600px);
+        background-position: 100% 100%;
+        background-size: contain;
+        opacity: 0.7;
+      }
+      html:not([data-viewport="mobile"]) .hero-film-reel {
+        /* contain here: a corner box has no business cropping them, and there
+           is no screen to fill any more. */
+        object-fit: contain;
+        object-position: 100% 100%;
+      }
+      /* The scrim goes with the full-bleed layout that needed it. A box this
+         size would darken its own rectangle and nothing else, which is the
+         visible-seam bug in a smaller frame -- so out here the edges are
+         feathered with a mask instead, on two sides, or the box's left edge
+         cuts a straight line down the gold character. */
+      html:not([data-viewport="mobile"]) .hero-film::after { content: none; }
+      html:not([data-viewport="mobile"]) .hero-film {
+        -webkit-mask-image:
+          linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.55) 12%,
+            #000 32%, #000 84%, transparent 100%),
+          linear-gradient(90deg, transparent 0%, #000 22%);
+        mask-image:
+          linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.55) 12%,
+            #000 32%, #000 84%, transparent 100%),
+          linear-gradient(90deg, transparent 0%, #000 22%);
+        -webkit-mask-composite: source-in;
+        mask-composite: intersect;
+      }
+    }
+
+    /* ---------- landing: the logged-out hero -------------------------
+       The hero sits high and the actions sink to the bottom of the fold,
+       so the fabric shows through the gap between them at any height.
+       The column, the height and the sinking are .wiz/.wiz-fit's now -- a
+       min-height of its own would only fight the frame. */
+    .landing .wiz-body {
+      justify-content: flex-start;
+      /* If the hero still cannot fit -- a longer translation, a larger font
+         size, a phone shorter than any tested -- it scrolls. The clipped
+         alternative draws the lede over the buttons, which is what it did. */
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .landing h1 {
+      margin: clamp(2.5rem, 13vh, 7.5rem) 0 0;
+      /* The width clamp still sets it; --fit only caps it, so a tall screen is
+         unaffected and a short one gets its height back. Without this the
+         headline stayed 3.6rem on a 690px-tall phone and pushed the lede out
+         of the hero and on top of the buttons. */
+      font-size: min(clamp(2.6rem, 11vw, 3.6rem), calc(3.6 * var(--fit)), 5.6vh);
+      line-height: 1.04;
+      letter-spacing: -0.02em;
+      text-shadow: 0 2px 30px rgba(0, 0, 0, 0.5);
+    }
+    .landing-lede {
+      margin: calc(1.1 * var(--fit)) 0 0;
+      font-size: calc(1.0625 * var(--fit));
+      line-height: 1.55;
+      color: var(--text-muted);
+      max-width: 34ch;
+    }
+    /* Phone first: the wordmark leads, the copy follows. `order` (not DOM
+       order) does the flip so the desktop rule below can put it back to the
+       right of the text without re-parenting anything. */
+    .landing-head {
+      display: flex;
+      flex-direction: column;
+    }
+    /* Stacked, the wordmark is doing the work the tall opening gap used to do,
+       so the headline no longer needs to start a seventh of the way down. */
+    .landing-head h1 { margin-top: clamp(0.5rem, 2.5vh, 1.5rem); }
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .landing-head h1 {
+        margin-top: clamp(2.5rem, 13vh, 7.5rem);
+      }
+    }
+    .landing-logo {
+      order: -1;
+      /* Shrinkable, not just capped: inside a flex column a replaced-looking
+         box with an aspect-ratio holds its height unless it is told it may
+         give some back, and the wordmark is the thing that should give first. */
+      flex: 0 1 auto;
+      min-height: 0;
+      width: min(80%, 22rem);
+      aspect-ratio: 753 / 391;
+      /* At 80% width the height cap is what actually binds on most phones
+         (753:391 is wide), so this needs enough room for 80% to be real
+         rather than an unreachable ceiling. `contain` keeps the mask centred
+         and undistorted inside whatever box survives both limits. */
+      /* Decoration yields before content does, and on a short screen it yields
+         a lot: this is 140px at 844 tall and 70px by 690, which is what buys
+         the lede its place. Anchored on measured values rather than a round
+         vh figure, because what has to fit is the rest of the column. */
+      max-height: clamp(3.4rem, 45.45vh - 15.2rem, 8.75rem);
+      /* Breathing room under the nav. This used to be 3.6rem purely to pass
+         under the fixed preview-toggle pill; with the pill gone the logo can
+         sit where the layout actually wants it, and the top gap flexes with
+         the viewport like the bottom one already did. */
+      margin: clamp(0.4rem, 4vh - 0.9rem, 2.2rem) auto clamp(0.3rem, 2.5vh - 0.4rem, 1.25rem);
+      /* Three stops, not two, and a background wider than the box: sliding it
+         sideways sweeps a sheen across the letters. Masking means the gradient
+         is the ink, so the sheen needs no extra element on top. */
+      background: linear-gradient(115deg, var(--violet-crest), var(--champagne) 45%, var(--violet-crest) 90%);
+      background-size: 260% 100%;
+      -webkit-mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") center / contain no-repeat;
+      mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") center / contain no-repeat;
+      filter: drop-shadow(0 8px 34px rgba(138, 43, 226, 0.42));
+      animation: landing-logo-in 900ms cubic-bezier(0.22, 1, 0.36, 1) both,
+                 landing-logo-sheen 7s ease-in-out 900ms infinite;
+    }
+    @keyframes landing-logo-in {
+      from { opacity: 0; transform: translateY(1.1rem) scale(0.94); }
+      to   { opacity: 1; transform: none; }
+    }
+    @keyframes landing-logo-sheen {
+      0%, 100% { background-position: 0% 50%; }
+      50%      { background-position: 100% 50%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      /* Still arrives, just without the travel or the endless sweep. */
+      .landing-logo {
+        animation: landing-logo-in 1ms both;
+        background-position: 25% 50%;
+      }
+    }
+    .landing-actions {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+      /* Stacked, the wordmark sits directly above these, so the gap that used
+         to separate buttons from empty space is now separating two things. */
+      padding-top: 1.25rem;
+    }
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .landing-actions { padding-top: 2.5rem; }
+    }
+    .landing-live {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.35rem;
+      font-weight: 700;
+      font-size: 0.625rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    /* Wide screens have room beside the headline, so the wordmark moves there
+       and grows. Gated on :not([data-viewport="mobile"]) like the rest of the
+       shell, or the phone preview would go two-column inside its own frame.
+
+       .wiz itself caps at 27rem past 600px (base.html:~618) -- right for a
+       question-and-a-button step, but a two-column row folded into that
+       width has nowhere to put the second column: .landing-copy collapses
+       to 0 and the wordmark lands on top of the headline instead of beside
+       it. The landing screen is the one wiz screen that spreads, so it gets
+       main's own measure back rather than the step width. */
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .wiz.landing {
+        max-width: var(--measure);
+      }
+      html:not([data-viewport="mobile"]) .landing-head {
+        flex-direction: row;
+        align-items: center;
+        /* .landing-copy is fixed to its own content width, so centering the
+           row centers the leftover space rather than dragging the text off
+           the left edge. */
+        justify-content: center;
+        gap: clamp(1.5rem, 5vw, 4rem);
+      }
+      html:not([data-viewport="mobile"]) .landing-copy {
+        /* The logo comes first in the markup so a stacked phone gets it
+           above the headline; `order` puts the copy back on the left here
+           without touching the source order that mobile relies on. */
+        order: 1;
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+      html:not([data-viewport="mobile"]) .landing-logo {
+        /* Row layout: back to its natural place after the copy, undoing the
+           mobile-only `order: -1` that puts it above the text when stacked. */
+        order: 0;
+        /* Fixed size, not stretched: without this the box fills the whole
+           flex slot and the mark (anchored `center` inside it, but the box
+           itself flush against .landing-copy) reads as pinned to the left. */
+        order: 2;
+        flex: 0 0 auto;
+        width: min(30vw, 26rem);
+        min-width: 0;
+        max-width: 26rem;
+        max-height: none;
+        margin: 0 auto;
+      }
+      /* The head widened to fit two columns; the footer did not ask to --
+         a button stretched to that same 62rem reads as a banner, not a
+         button. Give it back the step's own width and centre it under the
+         (centred) row above. */
+      html:not([data-viewport="mobile"]) .landing-actions {
+        max-width: 27rem;
+        margin-inline: auto;
+      }
+    }
+    .landing-fine {
+      margin: 0.6rem 0 0;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-faint);
+    }
+    /* Homepage-only footer: How matching works / Questions / Safety / etc.
+       Everywhere else the same destination is one tab-bar icon instead --
+       see the 4th .tabbar item -- so this never repeats itself sitewide. */
+    .site-footer {
+      margin-top: 2rem;
+      padding-top: 1.1rem;
+      border-top: 1px solid var(--ink-hairline);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      column-gap: 1.1rem;
+      row-gap: 0.5rem;
+    }
+    .site-footer a {
+      font-size: 0.78rem;
+      color: var(--text-faint);
+      white-space: nowrap;
+    }
+    .site-footer a:hover { color: var(--text-muted); }
+
+    .help-page section {
+      margin-top: 1.6rem;
+      padding-top: 1.4rem;
+      border-top: 1px solid var(--ink-hairline);
+      scroll-margin-top: 5.5rem;
+    }
+    .help-page section:first-of-type {
+      margin-top: 1.2rem;
+      padding-top: 0;
+      border-top: none;
+    }
+    .help-page h2 {
+      font-family: var(--serif);
+      font-size: 1.15rem;
+      margin: 0 0 0.5rem;
+    }
+    .help-page p {
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin: 0;
+    }
+    .help-page a { color: var(--violet-crest); }
+
+    /* ---------- bottom tab bar: the phone-width primary navigation ----
+       Search / Chats / You / Help. Above the phone breakpoint it disappears
+       entirely and the top nav carries every link again. */
+    .tabbar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 3;
+      display: none;
+      align-items: center;
+      padding: calc(0.7 * var(--fit)) 0.9rem
+               calc(1 * var(--fit) + env(safe-area-inset-bottom, 0px));
+      border-top: 1px solid var(--ink-hairline);
+      background: rgba(8, 5, 14, 0.86);
+      backdrop-filter: blur(14px);
+    }
+    nav.tabbar a {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: calc(0.32 * var(--fit));
+      padding: calc(0.15 * var(--fit)) 0;
+      color: var(--text-faint);
+      transition: color 0.18s ease;
+    }
+    nav.tabbar a:hover { color: var(--text-muted); }
+    /* The trigger is a <button>, not an <a> -- everything else about it
+       matches a tab exactly, including sharing its hover. */
+    .tabbar-more {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: calc(0.32 * var(--fit));
+      padding: calc(0.15 * var(--fit)) 0;
+      border: none;
+      background: none;
+      font: inherit;
+      color: var(--text-faint);
+      cursor: pointer;
+      transition: color 0.18s ease;
+    }
+    .tabbar-more:hover { color: var(--text-muted); }
+    /* On a phone the footer is gone and the sheet is behind a tap, so this
+       badge is the only thing that can say "there is something waiting"
+       without being opened first. Pinned to the icon rather than added to
+       the row: the bar's height is a function of --fit, and a fourth child
+       here would make the More item taller than the three tabs beside it.
+       The ring is the bar's own background colour, so the badge reads as
+       sitting on top of the glyph instead of merging with it. */
+    .tabbar-more { position: relative; }
+    .tabbar .tab-badge {
+      position: absolute;
+      top: calc(-0.1 * var(--fit));
+      left: 50%;
+      margin-left: calc(0.25 * var(--fit));
+      min-width: calc(0.95 * var(--fit));
+      height: calc(0.95 * var(--fit));
+      padding: 0 calc(0.22 * var(--fit));
+      font-size: calc(0.52 * var(--fit));
+      box-shadow: 0 0 0 2px rgba(8, 5, 14, 0.86);
+      pointer-events: none;
+    }
+    .more-sheet-links {
+      display: flex;
+      flex-direction: column;
+      /* Explicit: the header's `nav` rule sets align-items: center, and this
+         is a <nav> too, so without this every row centred itself and shrank
+         to its own text width -- a ragged column instead of a list. Its
+         padding-inline leaks the same way, which inset the links 20px past
+         the logout row below them. */
+      align-items: stretch;
+      text-align: left;
+      padding-bottom: calc(0.6rem + env(safe-area-inset-bottom, 0px));
+    }
+    /* Overrides the site header's bare `nav a` pill styling, which this
+       is also a <nav> for -- without this every row here inherited a
+       rounded pill background and centred padding meant for a row of
+       top-bar links, not a tappable list. */
+    /* nav.more-sheet-links, not .more-sheet-links: the header's
+       `nav a:not(.brand)` rule carries (0,1,2) specificity, and a bare
+       class selector here loses to it regardless of source order. Matching
+       the type selector ties specificity and lets source order (this comes
+       after) decide instead. */
+    nav.more-sheet-links a {
+      display: block;
+      width: auto;
+      margin: 0;
+      padding: 0.85rem 0.1rem;
+      border-radius: 0;
+      border-bottom: 1px solid var(--ink-hairline);
+      background: none;
+      color: var(--text-dim);
+      font-size: 0.95rem;
+      text-decoration: none;
+    }
+    nav.more-sheet-links a:last-child { border-bottom: none; }
+    /* The badge sits at the end of the row rather than beside the word: in a
+       list of nine links, a count tucked against its label is one more thing
+       to scan for, and hard against the right edge it is the only thing on
+       that column. */
+    nav.more-sheet-links a:has(.count-badge) {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+    }
+    /* The phone-layout rule `... nav { padding-inline: 1.25rem }` is (0,1,2)
+       and applies to this <nav> too, insetting the links 20px past the logout
+       row below them. Scoped through .sheet to outrank it rather than fought
+       with !important. */
+    .sheet nav.more-sheet-links { padding-inline: 0; }
+    /* The links list keeps its own bottom padding for the safe-area inset;
+       with a logout row after it, that padding belongs to the row instead so
+       the two are not separated by a gap the size of a home indicator. */
+    .more-sheet-links:has(+ .more-sheet-logout) { padding-bottom: 0; }
+    .more-sheet-logout {
+      margin: 0;
+      padding-bottom: calc(0.6rem + env(safe-area-inset-bottom, 0px));
+      /* the one state-changing item here, so it sits below a real divider
+         rather than reading as another page to open */
+      border-top: 1px solid var(--ink-hairline);
+    }
+    .more-sheet-logout button {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      width: 100%;
+      /* matches nav.more-sheet-links a exactly, so the row lines up with the
+         links above it rather than sitting in its own slightly different box */
+      padding: 0.85rem 0.1rem;
+      border: none;
+      border-radius: 0;
+      background: none;
+      font: inherit;
+      font-size: 0.95rem;
+      /* --text-dim is not defined on this branch (the links above use it and
+         quietly fall back to inherit); naming a variable that exists keeps the
+         resting state predictable instead of whatever it inherits. */
+      color: var(--text-muted);
+      text-align: left;
+      cursor: pointer;
+      transition: color 0.18s ease;
+    }
+    .more-sheet-logout button svg { width: 1.15rem; height: 1.15rem; flex: none; }
+    .more-sheet-logout button:hover,
+    .more-sheet-logout button:focus-visible { color: var(--danger); }
+    nav.more-sheet-links a:hover,
+    nav.more-sheet-links a:active {
+      color: var(--velvet-crest, var(--text));
+      background: none;
+    }
+    /* the icons are drawn with stroke="currentColor" so one rule tints both
+       the glyph and its label as the tab lights up */
+    /* the attributes on these SVGs are 21x21; the rule overrides both so the
+       bar's height is a single function of --fit and can be stated as one */
+    .tabbar svg { display: block; width: calc(1.3125 * var(--fit)); height: calc(1.3125 * var(--fit)); }
+    .tabbar .tab-label {
+      font-weight: 700;
+      font-size: calc(0.5625 * var(--fit));
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+    /* An unread count, wherever "Notifications" is written down.
+       Never drawn as a zero: a badge saying nothing is happening is a worse
+       answer than no badge, so it carries `hidden` at rest and the poll in
+       base.html takes it off when the count crosses one. Above 99 it stops
+       counting and says so -- past that the number is not the information,
+       "a lot" is, and four digits would not fit a tab bar anyway. */
+    .count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.2rem;
+      height: 1.2rem;
+      padding: 0 0.36rem;
+      border-radius: 999px;
+      background: var(--violet-crest);
+      color: #12081F;
+      font-family: var(--sans);
+      font-size: 0.68rem;
+      font-weight: 800;
+      line-height: 1;
+      vertical-align: 0.05em;
+      /* It follows a word everywhere it is written inline. The tab bar's
+         copy is absolutely positioned and restates this to place itself, so
+         the two do not fight. */
+      margin-left: 0.4rem;
+    }
+    .count-badge[hidden] { display: none; }
+
+    /* the active pip: always laid out, only painted when current, so the
+       three tabs keep identical heights whichever one is selected */
+    .tabbar .tab-dot { width: 0.25rem; height: 0.25rem; border-radius: 50%; }
+    .tabbar a.is-active { color: var(--violet-crest); }
+    .tabbar a.is-active .tab-dot {
+      background: var(--violet-crest);
+      box-shadow: 0 0 8px rgba(168, 85, 247, 0.9);
+    }
+
+    /* The phone layout normally comes from a media query, but a manual
+       preview override needs to force it on regardless of the real
+       viewport (or suppress it on an actually-narrow one) — a media query
+       alone can't be overridden by a class, so :not([data-viewport="desktop"])
+       lets it opt out and the second, query-free block below lets a forced
+       "mobile" preference opt in on a wide screen. Same rules, twice. */
+    @media (max-width: 720px) {
+      html:not([data-viewport="desktop"]) .tabbar { display: flex; }
+      html:not([data-viewport="desktop"]) nav .tab-dup { display: none; }
+      html:not([data-viewport="desktop"]) nav {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        gap: 0.15rem;
+        padding-inline: 1.25rem;
+      }
+      html:not([data-viewport="desktop"]) nav::-webkit-scrollbar { display: none; }
+      html:not([data-viewport="desktop"]) .brand { margin-right: 0.6rem; }
+      html:not([data-viewport="desktop"]) nav a:not(.brand) { white-space: nowrap; }
+      html:not([data-viewport="desktop"]) main {
+        /* the bottom figure is the reserve for the fixed tab bar, which is
+           itself sized in --fit -- they shrink together, so the slack
+           between them never closes and the bar never covers a step's
+           last row */
+        padding: calc(1.5 * var(--fit)) 1.5rem calc(var(--tabbar-h) + 0.6 * var(--fit));
+        gap: 1rem;
+      }
+    }
+    html[data-viewport="mobile"] .tabbar { display: flex; }
+    html[data-viewport="mobile"] nav .tab-dup { display: none; }
+    html[data-viewport="mobile"] nav {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      gap: 0.15rem;
+      padding-inline: 1.25rem;
+    }
+    html[data-viewport="mobile"] nav::-webkit-scrollbar { display: none; }
+    html[data-viewport="mobile"] .brand { margin-right: 0.6rem; }
+    html[data-viewport="mobile"] nav a:not(.brand) { white-space: nowrap; }
+    html[data-viewport="mobile"] main {
+      padding: calc(1.5 * var(--fit)) 1.5rem calc(var(--tabbar-h) + 0.6 * var(--fit));
+      gap: 1rem;
+    }
+
+    /* --- footer ------------------------------------------------------ */
+    .site-footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 1.1rem;
+      justify-content: center;
+      margin: 3rem auto 1.5rem;
+      padding-top: 1.4rem;
+      border-top: 1px solid var(--ink-hairline);
+      max-width: 44rem;
+    }
+    .site-footer a {
+      color: var(--text-faint);
+      font-size: 0.82rem;
+      text-decoration: none;
+    }
+    .site-footer a:hover { color: var(--violet-crest); text-decoration: underline; }
+    /* One pill holding one segment per language, so a third or fourth just
+       makes the pill longer instead of needing new rules. */
+    .lang-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.1rem;
+      padding: 0.15rem;
+      border: 1px solid var(--ink-hairline);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .lang-opt {
+      display: inline-block;
+      padding: 0.28rem 0.55rem;
+      border-radius: 999px;
+      font-family: var(--sans);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      line-height: 1;
+      color: var(--text-faint);
+      text-decoration: none;
+    }
+    .lang-opt:hover { color: var(--text); }
+    .lang-opt.is-on {
+      color: var(--text);
+      background: rgba(168, 85, 247, 0.22);
+    }
+    /* The sheet's copy sits above the link list and is centred on it, since
+       it is the only control in there that is not a full-width row. */
+    .sheet-lang {
+      display: flex;
+      justify-content: center;
+      padding-bottom: 0.9rem;
+      margin-bottom: 0.3rem;
+      border-bottom: 1px solid var(--ink-hairline);
+    }
+    /* .site-footer sets `a { color: ... }` for its link row; the segments are
+       links too and would otherwise be styled as one of them. */
+    .site-footer .lang-opt { font-size: 0.7rem; }
+    .site-footer .lang-opt:hover { text-decoration: none; }
+
+    /* a <button> so it can POST, a link so it reads as one of the row */
+    .footer-logout { display: contents; }
+    .footer-logout button {
+      padding: 0;
+      font: inherit;
+      font-size: 0.82rem;
+      color: var(--text-faint);
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .footer-logout button:hover { color: var(--danger); text-decoration: underline; }
+    /* The mobile tab bar is fixed over the bottom of the page. */
+    /* Superseded by the tab bar's "More" sheet on a phone -- competing with
+       .wiz for main's height was the actual bug: main is a flex column and
+       .wiz flex-grows into whatever the footer below it doesn't take, so a
+       taller footer (this list has grown twice since launch) meant a
+       shorter .wiz, and eventually one short enough that a tall step like
+       the landing page spilled onto the tab bar. Removing it from flow
+       here removes the coupling entirely, not just today's overflow. */
+    html:not([data-viewport="desktop"]) .site-footer { display: none; }

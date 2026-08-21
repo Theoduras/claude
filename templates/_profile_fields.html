@@ -1,128 +1,749 @@
-<label for="name">Name</label>
-<input id="name" name="name" type="text" value="{{ profile['name'] or '' }}" required>
+{% from "_icons.html" import icon %}
+{% if sample_profile is defined %}
+  <p style="margin-bottom: 1rem;">
+    <button type="button" class="btn btn-secondary btn-small" id="fill-all-btn">{{ t("form.fill_all") }}</button>
+  </p>
+  <script nonce="{{ csp_nonce() }}" id="sample-profile-data" type="application/json">{{ sample_profile | tojson }}</script>
+{% endif %}
 
-<label for="age">Age</label>
-<input id="age" name="age" type="number" min="18" max="120"
-       value="{{ profile['age'] or '' }}" required>
-
-<label for="gender">Gender</label>
-<select id="gender" name="gender">
-  <option value="">— Select —</option>
-  {% for g in genders %}
-    <option value="{{ g }}" {% if profile['gender'] == g %}selected{% endif %}>{{ g }}</option>
-  {% endfor %}
-</select>
-
-<label for="seeking">Looking for</label>
-<select id="seeking" name="seeking">
-  <option value="">— Select —</option>
-  {% for s in seeking_options %}
-    <option value="{{ s }}" {% if profile['seeking'] == s %}selected{% endif %}>{{ s }}</option>
-  {% endfor %}
-</select>
-
-<label for="location">Location</label>
-<input id="location" name="location" type="text" value="{{ profile['location'] or '' }}"
-       placeholder="e.g. Berlin, Germany">
-
-<label for="bio">Bio</label>
-<textarea id="bio" name="bio" placeholder="A few sentences about yourself...">{{ profile['bio'] or '' }}</textarea>
-
-<label for="interests">Interests</label>
-<textarea id="interests" name="interests" placeholder="e.g. music, travel, cooking">{{ profile['interests'] or '' }}</textarea>
-
-<label for="hobbies">Hobbies</label>
-<textarea id="hobbies" name="hobbies" placeholder="e.g. hiking, gaming, painting">{{ profile['hobbies'] or '' }}</textarea>
-
-<label for="wants">What I want</label>
-<textarea id="wants" name="wants" placeholder="What you're hoping to find...">{{ profile['wants'] or '' }}</textarea>
-
-<label for="needs">What I need</label>
-<textarea id="needs" name="needs" placeholder="What matters most to you in a partner...">{{ profile['needs'] or '' }}</textarea>
-
-<label for="relationship_type">Relationship type</label>
-<select id="relationship_type" name="relationship_type">
-  <option value="">— Select —</option>
-  {% for rt in relationship_types %}
-    <option value="{{ rt }}" {% if profile['relationship_type'] == rt %}selected{% endif %}>{{ rt }}</option>
-  {% endfor %}
-</select>
-
+{# ---- who you are ----------------------------------------------------- #}
 <div class="field-group">
-  <h2>Physical attributes</h2>
-  <p class="subtitle">All optional — anything you leave blank is simply skipped when matching.</p>
+  <h2>{{ t("form.about_you") }}</h2>
 </div>
 
-<label for="height_cm">Height (cm)</label>
-<input id="height_cm" name="height_cm" type="number"
-       min="{{ height_min }}" max="{{ height_max }}"
-       value="{{ profile['height_cm'] or '' }}" placeholder="e.g. 175">
+<div class="field-pair">
+  <div>
+    <label for="name">{{ t("form.name") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="name">{{ t("form.fill") }}</button></span>{% endif %}
+    </label>
+    <input id="name" name="name" type="text" value="{{ profile['name'] or '' }}" required>
+  </div>
+  <div>
+    <label for="age">{{ t("form.age") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="age">{{ t("form.fill") }}</button></span>{% endif %}
+    </label>
+    <input id="age" name="age" type="number" min="18" max="39"
+           value="{{ profile['age'] or '' }}" required>
+  </div>
+</div>
+
+<div class="field-pair">
+  <div>
+    <label for="gender">{{ t("form.gender") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="gender">{{ t("form.fill") }}</button></span>{% endif %}
+    </label>
+    <select id="gender" name="gender">
+      <option value="">{{ t("form.select") }}</option>
+      {% for g in genders %}
+        <option value="{{ g }}" {% if profile['gender'] == g %}selected{% endif %}>{{ opt_label(g) }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="seeking">{{ t("form.seeking") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="seeking">{{ t("form.fill") }}</button></span>{% endif %}
+    </label>
+    <select id="seeking" name="seeking">
+      <option value="">{{ t("form.select") }}</option>
+      {% for s in seeking_options %}
+        <option value="{{ s }}" {% if profile['seeking'] == s %}selected{% endif %}>{{ opt_label(s) }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+{# ---- photos ----------------------------------------------------------
+   Its own section rather than a row inside "Add more": it is the thing a
+   profile leads with, and it was the one part of this form nobody could
+   find. Nothing here saves on its own -- a tile marked for removal, a new
+   file, a drag, a tap on the main -- it is all staged in the three hidden
+   fields below and lands when the form does. #}
+{% if allow_photos is defined and allow_photos %}
+  <div class="field-group">
+    <h2>{{ t("form.photos") }}</h2>
+  </div>
+  <div class="photo-tiles" id="photo-tiles" data-max="{{ photo_max_per_user }}">
+    {% for photo in (photos if photos is defined else []) %}
+      <div class="photo-tile{% if photo['is_primary'] %} is-main{% endif %}"
+           data-key="{{ photo['id'] }}">
+        <img src="{{ url_for('photo', photo_id=photo['id']) }}" alt="{{ t('profile.your_photo') }}" loading="lazy">
+        {# two sibling buttons, not one inside the other: nesting them is
+           invalid, and the corner x has to stay clickable on its own #}
+        <button type="button" class="photo-main" data-main
+                aria-label="{{ t('form.make_main') }}"></button>
+        <button type="button" class="photo-x" data-remove aria-label="{{ t('form.remove_photo') }}">
+          {{ icon("photo.remove") }}
+        </button>
+        <span class="photo-tile-label">{{ t("form.main") }}</span>
+        <button type="button" class="photo-undo" data-undo>{{ t("form.undo") }}</button>
+      </div>
+    {% endfor %}
+    {# the file input itself is offscreen; this label is the control #}
+    <label class="photo-tile photo-tile-add" id="photo-add" for="photos"
+           title="{{ t('form.add_photos') }}">+</label>
+  </div>
+  <p class="hint" style="margin-top: 0;">
+    Tap a photo to make it the main one, drag to reorder. Only visible to
+    someone else once you've both chosen to continue a match. JPEG, PNG or
+    WebP, up to {{ photo_max_mb }} MB each, {{ photo_max_per_user }} total.
+    Large photos are resized on your phone before they're uploaded, so a
+    full-size camera shot is fine.
+  </p>
+
+  {#- Filled by the change handler when a picked file is over the limit.
+      A <p> in the flow rather than an alert(): the tiles that *were* added
+      are on screen and worth seeing next to the reason the others were
+      not. -#}
+  <p class="hint" id="photo-notice" role="status" style="margin-top: 0;" hidden></p>
+
+  <input class="visually-hidden" id="photos" name="photos" type="file"
+         accept="image/jpeg,image/png,image/webp" multiple>
+  <input type="hidden" id="remove_photo_ids" name="remove_photo_ids" value="">
+  <input type="hidden" id="photo_order" name="photo_order" value="">
+  <input type="hidden" id="primary_photo_id" name="primary_photo_id" value="">
+{% endif %}
+
+{# Everything past the fields above is optional: a profile only
+   needs a name to search (require_profile()), and /search asks for
+   location and connection type anyway. #}
+<details class="more-fields">
+  <summary>{{ t("form.add_more") }}</summary>
+  <div class="more-fields-body">
+
+{# ---- bio ------------------------------------------------------------- #}
+<label for="bio">{{ t("form.bio") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="bio">{{ t("form.fill") }}</button></span>{% endif %}
+</label>
+<textarea id="bio" name="bio" maxlength="{{ bio_max }}"
+          placeholder="{{ t('form.bio_ph') }}">{{ profile['bio'] or '' }}</textarea>
+<div class="char-count"><span id="bio-count">0</span> / {{ bio_max }}</div>
+
+{# ---- interests: chips over the free-text value ----------------------- #}
+<label for="interests">{{ t("form.interests") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="interests">{{ t("form.fill") }}</button></span>{% endif %}
+</label>
+{# the real field stays a plain CSV string; the chips just edit it #}
+<input type="hidden" id="interests" name="interests" value="{{ profile['interests'] or '' }}">
+<div class="pillset" id="interest-pills">
+  {% for opt in interest_chips %}
+    <button type="button" class="pill{% if opt in interest_chosen %} is-on{% endif %}"
+            data-value="{{ opt }}" aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ opt }}</button>
+  {% endfor %}
+</div>
+<div class="field-add">
+  <input type="text" id="interest-custom" maxlength="30"
+         placeholder="{{ t('wiz.custom_ph') }}" aria-label="{{ t('wiz.custom_aria') }}">
+  <button type="button" class="btn btn-secondary" id="interest-add">{{ t("wiz.add") }}</button>
+</div>
+
+
+{% if single_city %}
+  {# One city for now, so this is stated rather than asked. No input at all --
+     a disabled field would still read as "something I might change later" --
+     and the server ignores a posted location regardless (pinned_place()). #}
+  <label>{{ t("form.location") }}</label>
+  <p class="field-fixed">
+    {{ single_city }}
+    <span class="field-fixed-note">{{ t("form.city_only", city=single_city) }}</span>
+  </p>
+{% else %}
+  {% with loc_label = 'Location', loc_value = profile['location'] or '',
+          loc_placeholder = 'e.g. Berlin, Germany' %}
+    {% include "_location_field.html" with context %}
+  {% endwith %}
+{% endif %}
+
+<label for="relationship_type">{{ t("form.looking_for") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="relationship_type">{{ t("form.fill") }}</button></span>{% endif %}
+</label>
+<select id="relationship_type" name="relationship_type">
+  <option value="">{{ t("form.select") }}</option>
+  {% for rt in relationship_types %}
+    <option value="{{ rt }}" {% if profile['relationship_type'] == rt %}selected{% endif %}>{{ opt_label(rt) }}</option>
+  {% endfor %}
+</select>
+
+<label for="relationship_preference">{{ t("form.relationship_preference") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="relationship_preference">{{ t("form.fill") }}</button></span>{% endif %}
+</label>
+<select id="relationship_preference" name="relationship_preference">
+  <option value="">{{ t("form.select") }}</option>
+  {% for rp in relationship_preferences %}
+    <option value="{{ rp }}" {% if profile['relationship_preference'] == rp %}selected{% endif %}>{{ opt_label(rp) }}</option>
+  {% endfor %}
+</select>
+
+<label for="hobbies">{{ t("form.hobbies") }}
+  {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="hobbies">{{ t("form.fill") }}</button></span>{% endif %}
+</label>
+<textarea id="hobbies" name="hobbies" placeholder="{{ t('form.hobbies_ph') }}">{{ profile['hobbies'] or '' }}</textarea>
+
+{# ---- physical -------------------------------------------------------- #}
+<div class="field-group">
+  <h2>{{ t("form.physical") }}</h2>
+  <p class="subtitle">{{ t("form.optional_note") }}</p>
+</div>
+
+<div class="field-pair">
+  <div>
+    <label for="height_cm">{{ t("form.height_cm") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="height_cm">{{ t("form.fill") }}</button></span>{% endif %}
+    </label>
+    <input id="height_cm" name="height_cm" type="number"
+           min="{{ height_min }}" max="{{ height_max }}"
+           value="{{ profile['height_cm'] or '' }}" placeholder="{{ t('form.height_ph') }}">
+  </div>
+  <div>
+    <label for="eye_color">{{ t("form.eyes") }}
+      {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="eye_color">{{ t("form.fill") }}</button></span>{% endif %}
+    </label>
+    <select id="eye_color" name="eye_color">
+      <option value="">{{ t("form.select") }}</option>
+      {% for opt in eye_colors %}
+        <option value="{{ opt }}" {% if profile['eye_color'] == opt %}selected{% endif %}>{{ opt_label(opt) }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
 
 {% for field, label, options in [
      ('body_type', 'Body type', body_types),
      ('fitness_level', 'Fitness level', fitness_levels),
      ('hair_color', 'Hair colour', hair_colors),
-     ('eye_color', 'Eye colour', eye_colors),
      ('tattoos', 'Tattoos', tattoo_levels),
    ] %}
-  <label for="{{ field }}">{{ label }}</label>
+  <label for="{{ field }}">{{ label }}
+    {% if sample_profile is defined %}<span class="field-fill"><button type="button" class="btn btn-secondary btn-small" data-fill="{{ field }}">{{ t("form.fill") }}</button></span>{% endif %}
+  </label>
   <select id="{{ field }}" name="{{ field }}">
-    <option value="">— Select —</option>
+    <option value="">{{ t("form.select") }}</option>
     {% for opt in options %}
-      <option value="{{ opt }}" {% if profile[field] == opt %}selected{% endif %}>{{ opt }}</option>
+      <option value="{{ opt }}" {% if profile[field] == opt %}selected{% endif %}>{{ opt_label(opt) }}</option>
     {% endfor %}
   </select>
 {% endfor %}
 
-<div class="field-group">
-  <h2>What I'm looking for (physical)</h2>
-  <p class="subtitle">
-    These weigh heavily in your match ranking, and they count both ways — a
-    match scores well only when each of you fits what the other asked for.
-  </p>
-</div>
-
-<div class="field-pair">
-  <div>
-    <label for="pref_height_min">Height from (cm)</label>
-    <input id="pref_height_min" name="pref_height_min" type="number"
-           min="{{ height_min }}" max="{{ height_max }}"
-           value="{{ profile['pref_height_min'] or '' }}" placeholder="{{ height_min }}">
   </div>
-  <div>
-    <label for="pref_height_max">Height to (cm)</label>
-    <input id="pref_height_max" name="pref_height_max" type="number"
-           min="{{ height_min }}" max="{{ height_max }}"
-           value="{{ profile['pref_height_max'] or '' }}" placeholder="{{ height_max }}">
-  </div>
-</div>
-<p class="hint">Set both or neither. Leave empty for no height preference.</p>
+</details>
 
-{% set chosen_body_types = (profile['pref_body_types'] or '').split(',') %}
-<label>Body types I'm drawn to</label>
-<div class="checkgroup">
-  {% for bt in body_types %}
-    <label for="pref_body_types_{{ loop.index }}">
-      <input type="checkbox" id="pref_body_types_{{ loop.index }}"
-             name="pref_body_types" value="{{ bt }}"
-             {% if bt in chosen_body_types %}checked{% endif %}>
-      {{ bt }}
-    </label>
-  {% endfor %}
-</div>
-<p class="hint">Tick any that apply. None ticked means no preference.</p>
+<script nonce="{{ csp_nonce() }}">
+(function () {
+  // ---- photos -------------------------------------------------------
+  // Everything here is staged. The strip is the truth on screen; the three
+  // hidden fields are its transcript, rewritten after every change, and the
+  // file input is rewritten with it -- a FileList is read-only, so the only
+  // way to drop or reorder a picked file is to build a new one through a
+  // DataTransfer. Do that on every mutation and the "new:<n>" keys line up
+  // with what the server receives by construction.
+  var strip = document.getElementById("photo-tiles");
+  var input = document.getElementById("photos");
+  if (!strip || !input) return;
 
-{% for field, label, options in [
-     ('pref_fitness_level', 'Preferred fitness level', fitness_levels),
-     ('pref_hair_color', 'Preferred hair colour', hair_colors),
-     ('pref_eye_color', 'Preferred eye colour', eye_colors),
-     ('pref_tattoos', 'Preferred tattoos', tattoo_levels),
-   ] %}
-  <label for="{{ field }}">{{ label }}</label>
-  <select id="{{ field }}" name="{{ field }}">
-    <option value="">No preference</option>
-    {% for opt in options %}
-      <option value="{{ opt }}" {% if profile[field] == opt %}selected{% endif %}>{{ opt }}</option>
-    {% endfor %}
-  </select>
-{% endfor %}
+  var addSlot = document.getElementById("photo-add");
+  var removedField = document.getElementById("remove_photo_ids");
+  var orderField = document.getElementById("photo_order");
+  var primaryField = document.getElementById("primary_photo_id");
+  var max = Number(strip.dataset.max) || 6;
+  var files = [];            // the File objects still on screen, in order
+  var urls = {};             // key -> object URL, so it can be revoked
+
+  function tiles() {
+    return Array.prototype.filter.call(
+      strip.querySelectorAll(".photo-tile"),
+      function (t) { return t !== addSlot; });
+  }
+
+  function live() {
+    return tiles().filter(function (t) { return !t.classList.contains("is-removed"); });
+  }
+
+  function sync() {
+    // New tiles are keyed by their File, not by an index, so the index can
+    // be recomputed here after a removal instead of going stale.
+    var kept = live();
+    files = [];
+    kept.forEach(function (t) {
+      if (t._file) { t._file._n = files.length; files.push(t._file); }
+    });
+
+    var dt = new DataTransfer();
+    files.forEach(function (f) { dt.items.add(f); });
+    input.files = dt.files;
+
+    function keyOf(t) {
+      return t._file ? "new:" + t._file._n : t.dataset.key;
+    }
+    orderField.value = kept.map(keyOf).join(",");
+    removedField.value = tiles()
+      .filter(function (t) { return t.classList.contains("is-removed") && !t._file; })
+      .map(function (t) { return t.dataset.key; })
+      .join(",");
+
+    var main = kept.filter(function (t) { return t.classList.contains("is-main"); })[0];
+    // The main photo can be the one you just removed; hand the lead to
+    // whatever is now first rather than submitting a dead id.
+    if (!main && kept.length) { main = kept[0]; main.classList.add("is-main"); }
+    primaryField.value = main ? keyOf(main) : "";
+
+    addSlot.hidden = kept.length >= max;
+
+    // A refusal describes the strip as it was. Removing a photo is the fix
+    // it asked for, so the message goes with the thing it was about -- the
+    // change handler says its piece again afterwards if it still applies.
+    if (notice && notice.classList.contains("is-error")) { say("", false); }
+  }
+
+  function controls(tile) {
+    tile.querySelector("[data-main]").addEventListener("click", function () {
+      // A drag that ends back over its own tile still fires a click; that
+      // was a reorder, not a request to change the main photo.
+      if (Date.now() - dragEndedAt < 250) return;
+      if (tile.classList.contains("is-removed")) return;
+      live().forEach(function (t) { t.classList.remove("is-main"); });
+      tile.classList.add("is-main");
+      sync();
+    });
+    tile.querySelector("[data-remove]").addEventListener("click", function () {
+      tile.classList.add("is-removed");
+      sync();
+    });
+    tile.querySelector("[data-undo]").addEventListener("click", function () {
+      // Room has to exist to come back to, or Undo would push the set over
+      // the cap and the save would be refused for a photo you never added.
+      if (live().length >= max) return;
+      tile.classList.remove("is-removed");
+      sync();
+    });
+    drag(tile);
+  }
+
+  tiles().forEach(controls);
+
+  {#- The server checks this too, and its answer is the one that counts.
+      This one exists because the server's cannot be given until the whole
+      file has been uploaded: on a phone on mobile data that is a minute of
+      waiting to be told no. Rejected here, before a byte leaves. -#}
+  var maxBytes = {{ photo_max_bytes }};
+  var maxMb = {{ photo_max_mb }};
+  var maxEdge = {{ photo_upload_max_edge }};
+  var budget = {{ upload_budget_bytes }};
+  var budgetMb = {{ upload_budget_mb }};
+  var notice = document.getElementById("photo-notice");
+
+  {#- The form this strip belongs to, taken from the input rather than by id:
+      the same include is used by the admin's create-profile form, and a
+      submit button sitting outside the <form> is still in form.elements when
+      it carries a form= attribute. -#}
+  var form = input.form;
+  var preparing = 0;
+
+  function say(text, isError) {
+    notice.textContent = text;
+    notice.classList.toggle("is-error", !!isError);
+    notice.hidden = !text;
+  }
+
+  {#- Saving is held while a photo is still being re-encoded. Without this,
+      a quick Save uploads the *originals*: the input still holds what was
+      picked until sync() replaces it, which cannot happen until the
+      re-encode resolves. Ten megabytes instead of one, and three of them
+      would be refused outright. -#}
+  function busy(delta) {
+    preparing += delta;
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (el.type === "submit") { el.disabled = preparing > 0; }
+    });
+  }
+
+  function megabytes(bytes) {
+    return (bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0);
+  }
+
+  {#- Re-encode before upload. A phone camera makes a 4-25MB file several
+      thousand pixels across; the biggest one is ever *shown* is a profile
+      card a few hundred CSS pixels wide. Sending the original costs the
+      person a minute on mobile data, costs the database those bytes for
+      good, and costs every viewer the full size again coming back out --
+      and Cloud Run refuses a request over 32 MiB outright, so a save
+      carrying three originals cannot be fixed by raising a limit.
+
+      A courtesy, not a boundary: the server enforces its own cap on
+      whatever actually arrives, and a client that skips this is refused
+      there. Anything undecodable is handed on untouched for the server to
+      judge, rather than being blocked by a step meant to help. -#}
+  var COMFORTABLE_BYTES = 1024 * 1024;
+
+  function shrink(file) {
+    if (!window.createImageBitmap || !/^image\//.test(file.type)) {
+      return Promise.resolve(file);
+    }
+    {#- imageOrientation is the difference between a portrait photo and
+        everyone appearing sideways: a phone stores the rotation in EXIF and
+        a canvas that does not ask for it draws the raw sensor frame. -#}
+    return createImageBitmap(file, { imageOrientation: "from-image" })
+      .then(function (bitmap) {
+        var longest = Math.max(bitmap.width, bitmap.height);
+        var scale = Math.min(1, maxEdge / longest);
+        // Already small in both senses: recompressing it would only lose
+        // quality to save nothing.
+        if (scale === 1 && file.size <= COMFORTABLE_BYTES) {
+          bitmap.close();
+          return file;
+        }
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.round(bitmap.width * scale);
+        canvas.height = Math.round(bitmap.height * scale);
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close();
+        return new Promise(function (done) {
+          canvas.toBlob(function (blob) {
+            // A PNG screenshot can come out of this larger than it went in.
+            if (!blob || blob.size >= file.size) return done(file);
+            done(new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg",
+                          { type: "image/jpeg", lastModified: file.lastModified }));
+          }, "image/jpeg", 0.85);
+        });
+      })
+      .catch(function () { return file; });
+  }
+
+  input.addEventListener("change", function () {
+    // Read synchronously: sync() rewrites input.files, and a second drop
+    // can land while this batch is still being re-encoded.
+    var picked = Array.prototype.slice.call(input.files);
+    if (!picked.length) return;
+
+    say(picked.length === 1 ? "Preparing your photo\u2026"
+                            : "Preparing your photos\u2026", false);
+    busy(1);
+
+    Promise.all(picked.map(shrink)).then(function (ready) {
+    busy(-1);
+    var oversized = [];
+    ready.forEach(function (file) {
+      if (live().length >= max) return;
+      if (file.size > maxBytes) { oversized.push(file.name); return; }
+      var key = "f" + Date.now() + Math.random().toString(36).slice(2, 7);
+      var url = URL.createObjectURL(file);
+      urls[key] = url;
+      var tile = document.createElement("div");
+      tile.className = "photo-tile";
+      tile.dataset.key = key;
+      tile._file = file;
+      {# The labels come through tojson rather than interpolated inside these
+         quoted fragments: a translation containing an apostrophe would
+         otherwise close the JavaScript string it sits in. tojson also does
+         the HTML-attribute escaping, so the built markup stays well formed
+         whatever the copy says. #}
+      var L = {
+        alt: {{ t("profile.your_photo") | tojson }},
+        makeMain: {{ t("form.make_main") | tojson }},
+        remove: {{ t("form.remove_photo") | tojson }},
+        main: {{ t("form.main") | tojson }},
+        undo: {{ t("form.undo") | tojson }},
+        {#- the same glyph the server-rendered tiles use, from the same
+            registry: a tile built in the browser must not carry its own
+            private copy of a path that the slot map can no longer reach -#}
+        removeIcon: {{ icon("photo.remove") | string | tojson }}
+      };
+      function attr(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+                        .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+      tile.innerHTML =
+        '<img alt="' + attr(L.alt) + '">' +
+        '<button type="button" class="photo-main" data-main' +
+        ' aria-label="' + attr(L.makeMain) + '"></button>' +
+        '<button type="button" class="photo-x" data-remove aria-label="' + attr(L.remove) + '">' +
+        L.removeIcon + '</button>' +
+        '<span class="photo-tile-label">' + attr(L.main) + '</span>' +
+        '<button type="button" class="photo-undo" data-undo>' + attr(L.undo) + '</button>';
+      tile.querySelector("img").src = url;
+      strip.insertBefore(tile, addSlot);
+      controls(tile);
+    });
+    {#- sync() rewrites the file input from the tiles on screen, and an
+        oversized file never got a tile -- so it is dropped from the upload
+        here by the same mechanism that handles a removal, rather than
+        needing a second path of its own. -#}
+    {#- sync() rewrites the file input from the tiles on screen, so the
+        re-encoded File is what gets uploaded and an oversized one -- which
+        never got a tile -- is dropped by the same path that handles a
+        removal, with no second mechanism of its own. -#}
+    sync();
+    if (oversized.length) {
+      say(oversized.length === 1
+        ? oversized[0] + " is larger than " + maxMb + " MB, so it wasn't added."
+        : oversized.length + " photos are larger than " + maxMb +
+          " MB, so they weren't added.", true);
+    } else {
+      say("", false);
+    }
+    }).catch(function () {
+      busy(-1);
+      say("Those photos couldn't be prepared. Try picking them again.", true);
+    });
+  });
+
+  {#- The last thing between a too-large save and the 413 page. That page
+      still exists and is still correct -- a client with no JavaScript, or one
+      that is not a browser, has to land somewhere better than Werkzeug's
+      default -- but nobody should meet it by using the form. Being told on
+      the form beats being sent to a page you then have to navigate back
+      from, having lost nothing but also having been told nothing useful. -#}
+  form.addEventListener("submit", function (ev) {
+    if (preparing > 0) {
+      ev.preventDefault();
+      say("Still preparing your photos \u2014 one moment.", false);
+      return;
+    }
+    var total = files.reduce(function (sum, f) { return sum + f.size; }, 0);
+    if (total > budget) {
+      ev.preventDefault();
+      say("Those photos come to " + megabytes(total) + " MB, and one save can "
+          + "carry " + budgetMb + " MB. Remove one, or save them a few at a "
+          + "time \u2014 nothing has been lost.", true);
+      notice.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  });
+
+  // A removed tile's preview is the one thing that can be thrown away for
+  // good: the row it stood for was never saved, so nothing can bring it back.
+  window.addEventListener("pagehide", function () {
+    Object.keys(urls).forEach(function (k) { URL.revokeObjectURL(urls[k]); });
+  });
+
+  // ---- drag to reorder ----
+  // Pointer events, not HTML5 drag-and-drop: DnD never fires on touch, and
+  // this app is used on a phone. One path drives mouse and finger alike.
+  //
+  // The move and up listeners live on the document, not on the tile, and
+  // there is deliberately no setPointerCapture: capture is released the
+  // instant the captured element is moved in the DOM, which is the first
+  // thing a reorder does. Capturing here dropped the rest of the gesture on
+  // the floor after the first swap -- and swallowed the tap that sets the
+  // main photo, because a captured pointer retargets the click to the tile
+  // instead of the button inside it.
+  var held = null, from = null, moved = false, dragEndedAt = 0;
+
+  function onMove(e) {
+    if (!held) return;
+    if (!moved && Math.abs(e.clientX - from.x) + Math.abs(e.clientY - from.y) < 8) return;
+    moved = true;
+    held.classList.add("is-dragging");
+    // Swap past a neighbour once the pointer clears its midpoint, so the
+    // strip reflows under the finger instead of only on drop.
+    live().forEach(function (other) {
+      if (other === held) return;
+      var b = other.getBoundingClientRect();
+      var mid = b.left + b.width / 2;
+      var pos = other.compareDocumentPosition(held);
+      if (e.clientX > mid && (pos & Node.DOCUMENT_POSITION_PRECEDING)) {
+        strip.insertBefore(held, other.nextSibling);
+      } else if (e.clientX < mid && (pos & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        strip.insertBefore(held, other);
+      }
+    });
+  }
+
+  function onUp() {
+    if (!held) return;
+    held.classList.remove("is-dragging");
+    // A press that never moved is a tap, and [data-main] handles that on
+    // its own click -- only a real drag has anything to write.
+    if (moved) { sync(); dragEndedAt = Date.now(); }
+    held = null;
+    moved = false;
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    document.removeEventListener("pointercancel", onUp);
+  }
+
+  function drag(tile) {
+    tile.addEventListener("pointerdown", function (e) {
+      if (e.target.closest("[data-remove], [data-undo]")) return;
+      if (tile.classList.contains("is-removed")) return;
+      held = tile;
+      from = { x: e.clientX, y: e.clientY };
+      moved = false;
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
+    });
+  }
+
+  // The strip lights up while a file is over the window, so the drop target
+  // is visible before you let go rather than after.
+  var depth = 0;
+  window.addEventListener("dragenter", function (e) {
+    if (e.dataTransfer && e.dataTransfer.types.indexOf("Files") !== -1) {
+      depth++; strip.classList.add("is-dropping");
+    }
+  });
+  window.addEventListener("dragleave", function () {
+    if (--depth <= 0) { depth = 0; strip.classList.remove("is-dropping"); }
+  });
+  window.addEventListener("drop", function (e) {
+    depth = 0;
+    strip.classList.remove("is-dropping");
+    if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+    if (!strip.contains(e.target) && e.target !== strip) return;
+    e.preventDefault();
+    var dt = new DataTransfer();
+    Array.prototype.forEach.call(e.dataTransfer.files, function (f) { dt.items.add(f); });
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change"));
+  });
+  window.addEventListener("dragover", function (e) {
+    if (strip.contains(e.target) || e.target === strip) e.preventDefault();
+  });
+
+  sync();
+})();
+
+(function () {
+  // ---- bio counter ----
+  var bio = document.getElementById("bio");
+  var bioCount = document.getElementById("bio-count");
+  if (bio && bioCount) {
+    var syncBio = function () { bioCount.textContent = bio.value.length; };
+    bio.addEventListener("input", syncBio);
+    syncBio();
+  }
+
+  // ---- interest chips over the hidden CSV field ----
+  var interests = document.getElementById("interests");
+  var pills = document.getElementById("interest-pills");
+  var customIn = document.getElementById("interest-custom");
+  var customAdd = document.getElementById("interest-add");
+  var INTEREST_MAX = {{ interest_max }};
+  if (interests && pills) {
+    // hidden field -> chips, so the Fill helper (which writes the field
+    // directly) still lights up the right ones
+    function syncFromField() {
+      var on = interests.value.split(",").map(function (s) { return s.trim(); });
+      pills.querySelectorAll(".pill").forEach(function (b) {
+        var isOn = on.indexOf(b.dataset.value) !== -1;
+        b.classList.toggle("is-on", isOn);
+        b.setAttribute("aria-pressed", isOn ? "true" : "false");
+      });
+    }
+
+    // chips -> hidden field, keeping the order the chips are shown in
+    function syncFromPills() {
+      var on = [];
+      pills.querySelectorAll(".pill").forEach(function (b) {
+        if (b.classList.contains("is-on")) on.push(b.dataset.value);
+      });
+      interests.value = on.join(", ");
+    }
+
+    // Event delegation rather than a fixed button list, since a written-in
+    // interest adds a new .pill node after the page has already loaded.
+    pills.addEventListener("click", function (ev) {
+      var b = ev.target.closest(".pill[data-value]");
+      if (!b) return;
+      if (!b.classList.contains("is-on")) {
+        var onCount = pills.querySelectorAll(".pill.is-on").length;
+        if (onCount >= INTEREST_MAX) return;   // server caps too, this is just the UI
+      }
+      b.classList.toggle("is-on");
+      b.setAttribute("aria-pressed", b.classList.contains("is-on") ? "true" : "false");
+      syncFromPills();
+    });
+    interests.addEventListener("change", syncFromField);
+
+    // A written-in interest becomes a chip like any other, so it can be
+    // toggled off again rather than being stuck once added.
+    function addCustom() {
+      var value = customIn.value.replace(/,/g, " ").trim().replace(/\s+/g, " ");
+      if (!value) return;
+      var existing = pills.querySelector('.pill[data-value="' + CSS.escape(value) + '"]');
+      if (existing) {
+        if (!existing.classList.contains("is-on")) {
+          if (pills.querySelectorAll(".pill.is-on").length < INTEREST_MAX) {
+            existing.classList.add("is-on");
+            existing.setAttribute("aria-pressed", "true");
+          }
+        }
+      } else {
+        if (pills.querySelectorAll(".pill.is-on").length >= INTEREST_MAX) {
+          customIn.value = "";
+          return;
+        }
+        var pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "pill is-on";
+        pill.dataset.value = value;
+        pill.setAttribute("aria-pressed", "true");
+        pill.textContent = value;
+        pills.insertBefore(pill, pills.firstChild);
+      }
+      syncFromPills();
+      customIn.value = "";
+    }
+
+    if (customAdd && customIn) {
+      customAdd.addEventListener("click", addCustom);
+      customIn.addEventListener("keydown", function (ev) {
+        if (ev.key !== "Enter") return;
+        ev.preventDefault();
+        addCustom();
+      });
+    }
+  }
+})();
+</script>
+
+{% if sample_profile is defined %}
+<script nonce="{{ csp_nonce() }}">
+(function () {
+  var sample = JSON.parse(document.getElementById("sample-profile-data").textContent);
+
+  function pick(list) {
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  // Deterministic-enough per click; this is a testing convenience, not part
+  // of the matching engine, so plain Math.random() is fine here (unlike the
+  // bot reply engine, which must stay reproducible).
+  function fillField(name, force) {
+    var data = sample[name];
+    if (data === undefined) return;
+
+    var el = document.getElementById(name);
+    if (!el) return;
+    if (el.value && !force) return;
+
+    if (el.tagName === "SELECT" || el.type === "text" || el.type === "hidden"
+        || el.tagName === "TEXTAREA") {
+      el.value = pick(data);
+      // interests is a hidden field behind the chips, and bio has a counter;
+      // both listen rather than being poked directly from here
+      el.dispatchEvent(new Event(el.type === "hidden" ? "change" : "input"));
+    } else if (el.type === "number") {
+      var lo = data.min, hi = data.max;
+      el.value = Math.floor(lo + Math.random() * (hi - lo + 1));
+    }
+  }
+
+  document.querySelectorAll("button[data-fill]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      fillField(btn.dataset.fill, true);
+    });
+  });
+
+  var fillAll = document.getElementById("fill-all-btn");
+  if (fillAll) {
+    var clickedOnce = false;
+    fillAll.addEventListener("click", function () {
+      Object.keys(sample).forEach(function (name) {
+        fillField(name, clickedOnce);
+      });
+      clickedOnce = true;
+    });
+  }
+})();
+</script>
+{% endif %}

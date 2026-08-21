@@ -1,73 +1,360 @@
 {% extends "base.html" %}
-{% block title %}{{ profile['name'] or profile['username'] }} — Velvet{% endblock %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ profile['name'] or profile['username'] }} — Velvt{% endblock %}
 {% block content %}
-<div class="card">
-  <h1>{{ profile['name'] or profile['username'] }}{% if profile['age'] %}, {{ profile['age'] }}{% endif %}</h1>
-  <p class="subtitle">
-    @{{ profile['username'] }}
-    {% if profile['gender'] %} &middot; {{ profile['gender'] }}{% endif %}
-    {% if profile['location'] %} &middot; {{ profile['location'] }}{% endif %}
-  </p>
+{# A profile is a document, so it scrolls -- but it scrolls inside itself.
+   .wiz-fit bounds the column to the viewport, which is what lets the name
+   stay pinned at the top and the photos stay reachable by their arrows.
+   Everything under the photos is one repeated part, .pro-card, so a sparse
+   profile and a full one read as the same page. #}
+<div class="wiz profile-screen wiz-fit">
 
-  {% if profile['seeking'] %}
-    <span class="tag">Looking for: {{ profile['seeking'] }}</span>
+  {% set display_name = profile['name'] or profile['username'] %}
+
+  {# The way out sits on the left, not on the right where the reference app
+     puts it: the debug viewport chip is fixed to the top-right corner on
+     phones and would sit directly on top of it, swallowing the taps. Left
+     is also where the room and the edit form already put theirs. #}
+  <div class="pro-head">
+    <button type="button" class="pro-close" id="pro-close" aria-label="{{ t('profile.close') }}">
+      {{ icon("profile.back") }}
+    </button>
+    <h1>{{ display_name }}{% if profile['age'] %} <span class="pro-age">{{ profile['age'] }}</span>{% endif %}</h1>
+  </div>
+
+  <div class="wiz-body wiz-scroll">
+
+  {% set show_photos = photos if (is_own or can_view_photos) else [] %}
+
+  {% if not is_own and not can_view_photos %}
+    <div class="photo-locked">{{ t("profile.photos_locked") }}</div>
+  {% else %}
+    {# One photo at a time. Six is the cap (PHOTO_MAX_PER_USER), so a bar
+       per photo is always wide enough to see. #}
+    <div class="pro-gallery" id="pro-gallery" data-count="{{ show_photos | length }}">
+      {% if show_photos | length > 1 %}
+        <div class="pro-bars" id="pro-bars">
+          {% for photo in show_photos %}
+            <span{% if loop.first %} class="is-seen"{% endif %}></span>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <div class="pro-frame">
+        {% if show_photos %}
+          {% for photo in show_photos %}
+            <img class="pro-slide{% if loop.first %} is-on{% endif %}"
+                 src="{{ url_for('photo', photo_id=photo['id']) }}"
+                 alt="{{ 'Your photo' if is_own else 'Photo of ' ~ display_name }}"
+                 {% if not loop.first %}loading="lazy"{% endif %}>
+          {% endfor %}
+        {% else %}
+          <span class="ph"></span>
+        {% endif %}
+        {% if show_photos | length > 1 %}
+          <button type="button" class="pro-tap is-prev is-spent" data-step="-1"
+                  aria-label="{{ t('profile.prev_photo') }}"></button>
+          <button type="button" class="pro-tap is-next" data-step="1"
+                  aria-label="{{ t('profile.next_photo') }}"></button>
+          <button type="button" class="pro-arrow is-prev is-spent" data-step="-1"
+                  aria-label="{{ t('profile.prev_photo') }}">
+            {{ icon("profile.prev") }}
+          </button>
+          <button type="button" class="pro-arrow is-next" data-step="1"
+                  aria-label="{{ t('profile.next_photo') }}">
+            {{ icon("profile.next") }}
+          </button>
+          <span class="pro-count" id="pro-count" aria-live="polite">Photo 1 of {{ show_photos | length }}</span>
+        {% endif %}
+      </div>
+    </div>
   {% endif %}
-  {% if profile['relationship_type'] %}
-    <span class="tag">Wants: {{ profile['relationship_type'] }}</span>
+
+  {# ---- looking for --------------------------------------------------- #}
+  {% if profile['relationship_type'] or profile['seeking'] %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        {{ icon("card.looking_for") }}
+        {{ t("form.seeking") }}
+      </p>
+      {% if profile['relationship_type'] %}
+        <div class="pro-lead">
+          <span class="opt-icon">
+            {# the same four marks the first wizard step draws for these #}
+            {{ icon("rel." ~ profile["relationship_type"]) }}
+          </span>
+          <span>{{ profile['relationship_type'] }}</span>
+        </div>
+      {% endif %}
+      {% if profile['seeking'] %}
+        {% if profile['relationship_type'] %}<div class="pro-rule"></div>{% endif %}
+        <div class="pillset">
+          <span class="pill is-static">{{ profile['seeking'] }}</span>
+        </div>
+      {% endif %}
+    </div>
   {% endif %}
 
-  <dl>
-    {% if profile['bio'] %}<dt>Bio</dt><dd>{{ profile['bio'] }}</dd>{% endif %}
-    {% if profile['interests'] %}<dt>Interests</dt><dd>{{ profile['interests'] }}</dd>{% endif %}
-    {% if profile['hobbies'] %}<dt>Hobbies</dt><dd>{{ profile['hobbies'] }}</dd>{% endif %}
-    {% if profile['wants'] %}<dt>What I want</dt><dd>{{ profile['wants'] }}</dd>{% endif %}
-    {% if profile['needs'] %}<dt>What I need</dt><dd>{{ profile['needs'] }}</dd>{% endif %}
+  {# ---- about me ------------------------------------------------------ #}
+  {% if profile['bio'] %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        {{ icon("card.about") }}
+        {{ t("profile.about") }}
+      </p>
+      <p class="profile-quote">{{ profile['bio'] }}</p>
+    </div>
+  {% endif %}
 
-    {% if profile['height_cm'] %}<dt>Height</dt><dd>{{ profile['height_cm'] }} cm</dd>{% endif %}
-    {% if profile['body_type'] %}<dt>Body type</dt><dd>{{ profile['body_type'] }}</dd>{% endif %}
-    {% if profile['fitness_level'] %}<dt>Fitness</dt><dd>{{ profile['fitness_level'] }}</dd>{% endif %}
-    {% if profile['hair_color'] %}<dt>Hair</dt><dd>{{ profile['hair_color'] }}</dd>{% endif %}
-    {% if profile['eye_color'] %}<dt>Eyes</dt><dd>{{ profile['eye_color'] }}</dd>{% endif %}
-    {% if profile['tattoos'] %}<dt>Tattoos</dt><dd>{{ profile['tattoos'] }}</dd>{% endif %}
-  </dl>
+  {# ---- in short ------------------------------------------------------
+     Facts as sentences rather than label/value pairs: "180 cm" and "Lives
+     in Maastricht" read at a glance where "Height / 180 cm" does not. #}
+  {% set facts = [] %}
+  {% if profile['height_cm'] %}
+    {% set _ = facts.append(('ruler', profile['height_cm'] ~ ' cm')) %}
+  {% endif %}
+  {% if profile['body_type'] %}
+    {% set _ = facts.append(('body', profile['body_type'] ~ ' build')) %}
+  {% endif %}
+  {% if profile['fitness_level'] %}
+    {% set _ = facts.append(('pulse', profile['fitness_level'])) %}
+  {% endif %}
+  {% if profile['hair_color'] %}
+    {% set _ = facts.append(('hair', profile['hair_color'] ~ ' hair')) %}
+  {% endif %}
+  {% if profile['eye_color'] %}
+    {% set _ = facts.append(('eye', profile['eye_color'] ~ ' eyes')) %}
+  {% endif %}
+  {% if profile['tattoos'] %}
+    {% set _ = facts.append(('ink',
+        'No tattoos' if profile['tattoos'] == 'None' else profile['tattoos'] ~ ' tattoos')) %}
+  {% endif %}
+  {% if profile['gender'] %}
+    {% set _ = facts.append(('gender', profile['gender'])) %}
+  {% endif %}
+  {% if profile['location'] %}
+    {% set _ = facts.append(('pin', 'Lives in ' ~ profile['location'])) %}
+  {% endif %}
+  {% if profile['relationship_preference'] %}
+    {% set _ = facts.append(('pref', profile['relationship_preference'])) %}
+  {% endif %}
+  {% set _ = facts.append(('at', '@' ~ profile['username'])) %}
 
-  {# Only the owner sees their own stated preferences -- these drive ranking,
-     and showing them to others would invite gaming the score. #}
+  <div class="pro-card">
+    <p class="pro-eyebrow">
+      {{ icon("card.facts") }}
+      {{ t("profile.in_short") }}
+    </p>
+    <div class="pro-facts">
+      {#- the loop used to bind "icon"; the macro owns that name now -#}
+      {% for icon_slug, text in facts %}
+        <div>
+          {% if icon_slug == "gender" %}
+            {{ icon("gender." ~ profile["gender"]) }}
+          {% else %}
+            {{ icon("fact." ~ icon_slug) }}
+          {% endif %}
+          <span>{{ text }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ---- interests ------------------------------------------------------
+     clean_interests() stores these as a ", "-joined CSV, so they split
+     cleanly into one pill each. #}
+  {% if profile['interests'] %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        {{ icon("card.interests") }}
+        {{ t("crit.interests") }}
+      </p>
+      <div class="pillset">
+        {% for word in profile['interests'].split(',') %}
+          {#- a chip carries its icon before the label; which icon, or none at
+              all, is the pill.interest slot's call rather than this markup's -#}
+          {% if word.strip() %}<span class="pill is-static">{{ icon("pill.interest") }}{{ word.strip() }}</span>{% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {# ---- hobbies -------------------------------------------------------
+     Hobbies is a free textarea, not a CSV, so it only earns the pill cloud
+     when it actually looks like a list: two or more comma parts, none of
+     them long enough to be a sentence. Otherwise it stays prose. #}
+  {% if profile['hobbies'] %}
+    {% set hobby_parts = profile['hobbies'].split(',') | map('trim') | select | list %}
+    {% set as_pills = hobby_parts | length > 1
+       and (hobby_parts | map('length') | max) <= 28 %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        {{ icon("card.hobbies") }}
+        {{ t("form.hobbies") }}
+      </p>
+      {% if as_pills %}
+        <div class="pillset">
+          {% for part in hobby_parts %}
+            <span class="pill is-static">{{ part }}</span>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="profile-quote">{{ profile['hobbies'] }}</p>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {# ---- the two prompts ------------------------------------------------
+     The question stays small enough to read as a caption, so the answer is
+     the only thing on the card with a voice. #}
+  {% if profile['wants'] %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        {{ icon("card.wants") }}
+        {{ t("profile.wants_ph") }}
+      </p>
+      <p class="pro-prompt">{{ profile['wants'] }}</p>
+    </div>
+  {% endif %}
+
+  {% if profile['needs'] %}
+    <div class="pro-card">
+      <p class="pro-eyebrow">
+        {{ icon("card.needs") }}
+        {{ t("profile.needs_ph") }}
+      </p>
+      <p class="pro-prompt">{{ profile['needs'] }}</p>
+    </div>
+  {% endif %}
+
+  {# ---- stated preferences, owner only ---------------------------------
+     These drive ranking, so showing them to anyone else would invite
+     gaming the score. They keep the label/value shape: they are settings
+     you typed, not things you would say about yourself. #}
   {% if is_own %}
     {% set has_prefs = profile['pref_height_min'] or profile['pref_body_types']
        or profile['pref_fitness_level'] or profile['pref_hair_color']
        or profile['pref_eye_color'] or profile['pref_tattoos'] %}
     {% if has_prefs %}
-      <h2 style="margin-top: 1.75rem;">Looking for (physical)</h2>
-      <p class="subtitle">Only you can see this. It counts both ways when ranking matches.</p>
-      <dl>
-        {% if profile['pref_height_min'] and profile['pref_height_max'] %}
-          <dt>Height</dt>
-          <dd>{{ profile['pref_height_min'] }}–{{ profile['pref_height_max'] }} cm</dd>
-        {% endif %}
-        {% if profile['pref_body_types'] %}
-          <dt>Body types</dt><dd>{{ profile['pref_body_types'].replace(',', ', ') }}</dd>
-        {% endif %}
-        {% if profile['pref_fitness_level'] %}
-          <dt>Fitness</dt><dd>{{ profile['pref_fitness_level'] }}</dd>
-        {% endif %}
-        {% if profile['pref_hair_color'] %}
-          <dt>Hair</dt><dd>{{ profile['pref_hair_color'] }}</dd>
-        {% endif %}
-        {% if profile['pref_eye_color'] %}
-          <dt>Eyes</dt><dd>{{ profile['pref_eye_color'] }}</dd>
-        {% endif %}
-        {% if profile['pref_tattoos'] %}
-          <dt>Tattoos</dt><dd>{{ profile['pref_tattoos'] }}</dd>
-        {% endif %}
-      </dl>
+      <div class="pro-card">
+        <p class="pro-eyebrow">
+          {{ icon("card.preferences") }}
+          {{ t("profile.prefs_label") }}
+        </p>
+        <dl class="facts">
+          {% if profile['pref_height_min'] and profile['pref_height_max'] %}
+            <div><dt>{{ t("profile.height") }}</dt>
+            <dd>{{ profile['pref_height_min'] }}–{{ profile['pref_height_max'] }} cm</dd></div>
+          {% endif %}
+          {% if profile['pref_body_types'] %}
+            <div><dt>{{ t("crit.body_types") }}</dt><dd>{{ profile['pref_body_types'].replace(',', ', ') }}</dd></div>
+          {% endif %}
+          {% if profile['pref_fitness_level'] %}
+            <div><dt>{{ t("profile.fitness") }}</dt><dd>{{ profile['pref_fitness_level'] }}</dd></div>
+          {% endif %}
+          {% if profile['pref_hair_color'] %}
+            <div><dt>{{ t("profile.hair") }}</dt><dd>{{ profile['pref_hair_color'] }}</dd></div>
+          {% endif %}
+          {% if profile['pref_eye_color'] %}
+            <div><dt>{{ t("form.eyes") }}</dt><dd>{{ profile['pref_eye_color'] }}</dd></div>
+          {% endif %}
+          {% if profile['pref_tattoos'] %}
+            <div><dt>{{ t("crit.tattoos") }}</dt><dd>{{ profile['pref_tattoos'] }}</dd></div>
+          {% endif %}
+        </dl>
+        <p class="pro-note">{{ t("profile.prefs_note") }}</p>
+      </div>
     {% endif %}
   {% endif %}
 
+  </div>
+
   {% if is_own %}
-    <p style="margin-top: 1.5rem;">
-      <a class="btn btn-secondary" href="{{ url_for('edit_profile') }}">Edit profile</a>
+    <div class="wiz-nav">
+      <a class="btn btn-secondary" href="{{ url_for('edit_profile') }}">{{ t("edit.heading") }}</a>
+    </div>
+  {% else %}
+    {# Reachable from any profile, not only a current match: the person you
+       most need to report is often the one who already walked away. #}
+    <p class="hint" style="margin-top: 1.6rem; text-align: center;">
+      <a href="{{ url_for('report_user', user_id=profile['user_id']) }}">
+        Report or block {{ profile['name'] or profile['username'] }}
+      </a>
     </p>
   {% endif %}
 </div>
+
+<script nonce="{{ csp_nonce() }}">
+(function () {
+  var closeBtn = document.getElementById("pro-close");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", function () {
+      // Back is right when there is somewhere to go back to -- a profile is
+      // almost always opened from a chat or the tab bar. A profile reached
+      // by pasted URL has no history to spend, so it falls through to the
+      // screen the app considers home.
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = {{ url_for('live_search') | tojson }};
+      }
+    });
+  }
+
+  var gallery = document.getElementById("pro-gallery");
+  if (!gallery) return;
+  var slides = gallery.querySelectorAll(".pro-slide");
+  if (slides.length < 2) return;
+
+  var bars = gallery.querySelectorAll(".pro-bars > span");
+  var count = document.getElementById("pro-count");
+  var at = 0;
+
+  function show(next) {
+    // Clamped rather than wrapped: the arrows disappear at the two ends,
+    // so wrapping around would contradict what the screen is showing.
+    next = Math.max(0, Math.min(slides.length - 1, next));
+    if (next === at) return;
+    at = next;
+    for (var i = 0; i < slides.length; i++) {
+      slides[i].classList.toggle("is-on", i === at);
+      if (bars[i]) bars[i].classList.toggle("is-seen", i <= at);
+    }
+    gallery.querySelectorAll("[data-step]").forEach(function (el) {
+      var step = Number(el.getAttribute("data-step"));
+      el.classList.toggle("is-spent", step < 0 ? at === 0 : at === slides.length - 1);
+    });
+    if (count) count.textContent = "Photo " + (at + 1) + " of " + slides.length;
+  }
+
+  gallery.querySelectorAll("[data-step]").forEach(function (el) {
+    el.addEventListener("click", function () {
+      show(at + Number(el.getAttribute("data-step")));
+    });
+  });
+
+  // Swipe, on the frame rather than the page: the gallery sits inside a
+  // vertical scroll box, so only a clearly horizontal drag counts.
+  var frame = gallery.querySelector(".pro-frame");
+  var startX = null, startY = null;
+  frame.addEventListener("pointerdown", function (e) {
+    startX = e.clientX;
+    startY = e.clientY;
+  });
+  frame.addEventListener("pointerup", function (e) {
+    if (startX === null) return;
+    var dx = e.clientX - startX;
+    var dy = e.clientY - startY;
+    startX = startY = null;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+      show(at + (dx < 0 ? 1 : -1));
+    }
+  });
+  frame.addEventListener("pointercancel", function () { startX = startY = null; });
+
+  gallery.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight") { show(at + 1); e.preventDefault(); }
+    if (e.key === "ArrowLeft") { show(at - 1); e.preventDefault(); }
+  });
+})();
+</script>
 {% endblock %}

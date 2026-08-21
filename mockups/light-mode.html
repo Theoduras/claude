@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Velvet — light mode study</title>
+<style>
+/* ======================================================================
+   VELVET — LIGHT MODE STUDY (flat colour, more whitespace)
+
+   Not shipped. A proposal surface: two flat palettes drawn over the same
+   four screens, so the tokens can be judged before velvt.css is touched.
+
+   The dark world paints six radial gradients on <body>, a conic fold
+   layer, a noise nap, and per-card ::before/::after sheens. None of that
+   survives here on purpose -- flat means one flat fill per surface, and
+   depth comes from a single hairline plus space.
+   ====================================================================== */
+
+/* ---------- A: Paper & Violet ------------------------------------- */
+[data-theme="paper"] {
+  --bg:        #FBF9F7;   /* warm paper, not #fff -- white cards need ground */
+  --surface:   #FFFFFF;
+  --line:      #E7E2DE;
+  --accent:    #6D28D9;
+  --accent-sf: #F2ECFD;   /* accent at paper strength, for quiet fills */
+  --text:      #1A1520;
+  --muted:     #6B6472;
+  --faint:     #9A93A2;
+  --ok:        #0F7A6C;
+  --danger:    #B42318;
+}
+/* ---------- B: Chalk & Teal --------------------------------------- */
+[data-theme="chalk"] {
+  --bg:        #F4F6F5;
+  --surface:   #FFFFFF;
+  --line:      #E2E7E6;
+  --accent:    #0F6E6B;
+  --accent-sf: #E6F1F0;
+  --text:      #15201F;
+  --muted:     #5E6B6A;
+  --faint:     #8E9A99;
+  --ok:        #0F6E6B;
+  --danger:    #B42318;
+}
+
+:root {
+  --serif: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  --sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 18px;
+  --radius-sm: 11px;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; padding: 40px 32px 56px;
+  font-family: var(--sans);
+  background: #DCD9D6;
+  color: #1A1520;
+}
+h2.lab { font: 600 0.8rem/1 var(--sans); letter-spacing: .16em; text-transform: uppercase;
+         color: #6B6472; margin: 0 0 6px; }
+p.lab  { margin: 0 0 22px; font-size: .86rem; color: #6B6472; max-width: 60ch; }
+.row { display: flex; gap: 26px; flex-wrap: wrap; margin-bottom: 46px; }
+
+/* ---------- the phone ---------------------------------------------- */
+.phone {
+  width: 390px; height: 812px;
+  border-radius: 34px; overflow: hidden;
+  background: var(--bg); color: var(--text);
+  display: flex; flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0,0,0,.14);
+}
+.phone .cap { font: 500 .72rem var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+
+/* top bar */
+.nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px 26px 0; color: var(--muted); font-size: .78rem;
+}
+.wordmark { font: 500 1.05rem/1 var(--serif); letter-spacing: .18em;
+            text-transform: uppercase; color: var(--text); }
+
+/* the body column: generous, centred, never edge-to-edge */
+.screen { flex: 1; display: flex; flex-direction: column; padding: 0 26px; min-height: 0; }
+.pad { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 20px; }
+
+h1.big { font: 400 2.5rem/1.12 var(--serif); margin: 0; letter-spacing: -.01em; }
+.lede { margin: 0; color: var(--muted); font-size: 1rem; line-height: 1.65; max-width: 28ch; }
+.eyebrow { margin: 0; font: 500 .72rem var(--sans); letter-spacing: .18em;
+           text-transform: uppercase; color: var(--faint); }
+
+/* buttons — flat fill, no sheen, no gradient */
+.btn {
+  display: block; width: 100%; text-align: center;
+  padding: 15px 20px; border: 0; border-radius: var(--radius-sm);
+  background: var(--accent); color: #fff;
+  font: 500 .95rem var(--sans); letter-spacing: .01em; cursor: pointer;
+}
+.btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.actions { display: flex; flex-direction: column; gap: 12px; padding-bottom: 26px; }
+.live { margin: 0 0 4px; font-size: .82rem; color: var(--muted); display: flex;
+        align-items: center; gap: 8px; justify-content: center; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.fine { margin: 6px 0 0; text-align: center; font-size: .72rem; color: var(--faint); }
+
+/* cards — one flat fill, one hairline. No inner glow, no shadow stack. */
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 22px;
+}
+.card h3 { margin: 0 0 10px; font: 500 .74rem var(--sans); letter-spacing: .14em;
+           text-transform: uppercase; color: var(--faint); }
+.card p { margin: 0; line-height: 1.7; color: var(--text); font-size: .95rem; }
+
+/* pills */
+.pillset { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { padding: 7px 13px; border-radius: 999px; border: 1px solid var(--line);
+        background: var(--surface); font-size: .82rem; color: var(--muted); }
+.pill.on { background: var(--accent-sf); border-color: transparent; color: var(--accent); }
+
+/* search animation — flat rings, no glow */
+.rings { position: relative; width: 132px; height: 132px; margin: 0 auto; }
+.rings i { position: absolute; inset: 0; border: 1px solid var(--line); border-radius: 50%; }
+.rings i:nth-child(2) { inset: 18px; }
+.rings i:nth-child(3) { inset: 36px; border-color: var(--accent-sf); }
+.rings b { position: absolute; inset: 54px; border-radius: 50%; background: var(--accent); }
+.meta { margin: 0; text-align: center; color: var(--faint); font-size: .82rem;
+        font-family: var(--mono); }
+
+/* chat */
+.thread { flex: 1; display: flex; flex-direction: column; gap: 12px;
+          padding: 18px 0; overflow: hidden; }
+.msg { max-width: 76%; padding: 12px 15px; border-radius: 16px; font-size: .93rem;
+       line-height: 1.55; }
+.msg.them { background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+.msg.me { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
+.composer { display: flex; gap: 10px; padding: 12px 0 20px; }
+.composer .box { flex: 1; padding: 13px 16px; border-radius: 999px;
+                 border: 1px solid var(--line); background: var(--surface); color: var(--faint);
+                 font-size: .92rem; }
+.send { width: 46px; border-radius: 50%; background: var(--accent); color: #fff;
+        display: grid; place-items: center; font-size: 1rem; }
+
+/* profile */
+.photo { height: 300px; border-radius: var(--radius); background: var(--accent-sf);
+         display: grid; place-items: center; color: var(--accent); font-size: .8rem;
+         letter-spacing: .14em; text-transform: uppercase; }
+.segs { display: flex; gap: 5px; margin: 10px 0 20px; }
+.segs i { flex: 1; height: 3px; border-radius: 2px; background: var(--line); }
+.segs i:first-child { background: var(--accent); }
+.name { display: flex; align-items: baseline; gap: 10px; margin: 0 0 2px; }
+.name h1 { margin: 0; font: 400 1.7rem var(--serif); }
+.name span { color: var(--muted); }
+.stack { display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
+
+/* tab bar */
+.tabbar { display: flex; border-top: 1px solid var(--line); background: var(--bg); }
+.tabbar a { flex: 1; padding: 13px 0 22px; text-align: center; color: var(--faint);
+            font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
+.tabbar a.on { color: var(--accent); }
+.tabbar a i { display: block; width: 18px; height: 18px; margin: 0 auto 6px;
+              border: 1.5px solid currentColor; border-radius: 5px; }
+.scroll-title { font: 400 1.35rem var(--serif); margin: 4px 0 18px; }
+</style>
+</head>
+<body>
+
+<h2 class="lab">A — Paper &amp; Violet</h2>
+<p class="lab">Warm paper ground, one flat violet for every action, cards as white with a single
+hairline. Type carries the mood the gradients used to; spacing does the rest.</p>
+<div class="row" id="rowA"></div>
+
+<h2 class="lab">B — Chalk &amp; Teal</h2>
+<p class="lab">Same structure, cooler ground and the teal half of the existing palette as the
+single accent. Reads more utility, less romance.</p>
+<div class="row" id="rowB"></div>
+
+<template id="screens">
+  <!-- 1. landing -->
+  <div class="phone">
+    <div class="nav"><span class="wordmark">Velvet</span><span>EN</span></div>
+    <div class="screen">
+      <div class="pad">
+        <h1 class="big">Two people,<br>five minutes,<br>one decision.</h1>
+        <p class="lede">No endless swiping. Search when you're free, meet whoever is
+        searching too.</p>
+      </div>
+      <div class="actions">
+        <p class="live"><span class="dot"></span> 7 people searching right now</p>
+        <a class="btn">Create an account</a>
+        <a class="btn btn-secondary">Sign in</a>
+        <p class="fine">18+. Maastricht only, for now.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. waiting -->
+  <div class="phone">
+    <div class="nav"><span class="wordmark">Velvet</span><span>EN</span></div>
+    <div class="screen">
+      <div class="pad">
+        <div class="rings"><i></i><i></i><i></i><b></b></div>
+        <p class="eyebrow" style="text-align:center">Searching</p>
+        <h1 class="big" style="text-align:center;font-size:2rem">Looking for<br>someone free now</h1>
+        <p class="meta">1:24 · 7 searching · 3 fit</p>
+        <div class="pillset" style="justify-content:center">
+          <span class="pill on">Women</span>
+          <span class="pill on">24–34</span>
+          <span class="pill on">Something real</span>
+          <span class="pill">Interests off</span>
+        </div>
+      </div>
+      <div class="actions">
+        <a class="btn btn-secondary">Change what I'm looking for</a>
+        <a class="btn btn-secondary">Stop searching</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. profile -->
+  <div class="phone">
+    <div class="nav"><span class="wordmark">Velvet</span><span>Edit</span></div>
+    <div class="screen">
+      <div class="stack" style="padding-top:14px">
+        <div class="photo">Photo 1 of 4</div>
+        <div>
+          <div class="segs"><i></i><i></i><i></i><i></i></div>
+          <div class="name"><h1>Noor</h1><span>29 · Maastricht</span></div>
+        </div>
+        <div class="card">
+          <h3>Looking for</h3>
+          <p>Something real, and a coffee that runs long.</p>
+        </div>
+        <div class="card">
+          <h3>Interests</h3>
+          <div class="pillset">
+            <span class="pill">Cycling</span><span class="pill">Ceramics</span>
+            <span class="pill">Live music</span><span class="pill">Cooking</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <nav class="tabbar">
+      <a><i></i>Search</a><a><i></i>Chats</a><a class="on"><i></i>Profile</a>
+    </nav>
+  </div>
+
+  <!-- 4. chat -->
+  <div class="phone">
+    <div class="nav"><span class="wordmark">Noor</span><span class="cap">4:12 left</span></div>
+    <div class="screen">
+      <div class="thread">
+        <div class="msg them">Hi — you picked ceramics too. Wheel or hand-built?</div>
+        <div class="msg me">Wheel, badly. Three lopsided bowls so far.</div>
+        <div class="msg them">That's three more than me. Coffee this week?</div>
+        <div class="msg me">Yes. Thursday?</div>
+      </div>
+      <div class="composer">
+        <div class="box">Write something…</div>
+        <div class="send">→</div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+const tpl = document.getElementById('screens');
+for (const [id, theme] of [['rowA','paper'], ['rowB','chalk']]) {
+  const row = document.getElementById(id);
+  for (const node of [...tpl.content.cloneNode(true).children]) {
+    node.setAttribute('data-theme', theme);
+    row.appendChild(node);
+  }
+}
+</script>
+</body>
+</html>

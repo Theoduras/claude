@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ t("landing.title") }}{% endblock %}
+
+{# The two of them crossing the gap and holding on -- the headline's claim,
+   shown instead of restated. Decorative, so it is hidden from assistive tech:
+   a screen reader already gets the same promise from the h1 and the lede.
+
+   The still is the layer's own background, so something is always there --
+   before the video has loaded, if it fails, and for a reader who has asked
+   for less motion. The sources are attached by script rather than written
+   into the markup, so "reduce motion" costs no download at all instead of
+   fetching 344KB and then hiding it. #}
+{% block backdrop %}
+<div class="hero-film" aria-hidden="true">
+  <video class="hero-film-reel" muted playsinline preload="none"
+         data-webm="{{ url_for('static', filename='velvt-hero.webm') }}"
+         data-mp4="{{ url_for('static', filename='velvt-hero.mp4') }}"></video>
+</div>
+<script nonce="{{ csp_nonce() }}">
+  (function () {
+    var reel = document.querySelector(".hero-film-reel");
+    if (!reel) { return; }
+    // Ask before fetching. matchMedia is the same question the stylesheet
+    // asks; answering it here is what keeps the bytes on the shelf.
+    var still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (still.matches) { return; }
+    [["data-webm", "video/webm"], ["data-mp4", "video/mp4"]].forEach(function (s) {
+      var url = reel.getAttribute(s[0]);
+      if (!url) { return; }
+      var src = document.createElement("source");
+      src.src = url;
+      src.type = s[1];
+      reel.appendChild(src);
+    });
+    // It plays once and holds the last frame: they arrive, and they stay.
+    // Looping would snap them back apart every five seconds, which is the
+    // opposite of what the page is promising.
+    reel.load();
+    var go = reel.play();
+    if (go && go.catch) {
+      // A refused autoplay is not a failure worth reporting -- the still is
+      // already on screen underneath, and that is the fallback.
+      go.catch(function () {});
+    }
+    reel.addEventListener("playing", function () {
+      reel.classList.add("is-running");
+    });
+  })();
+</script>
+{% endblock %}
+
+{% block content %}
+{# The same column every other screen uses. The hero is the wizard's body,
+   the two buttons are its nav -- and .wiz-fit keeps the pair inside the
+   fold instead of letting the page scroll past the promise. #}
+<div class="wiz landing wiz-fit">
+  <div class="wiz-body">
+    <div class="landing-head">
+      {# decorative: the nav already carries the name, so this is hidden from
+         screen readers rather than read out a second time. Comes first in
+         the markup so it sits above the headline when the column is
+         stacked on a phone; the desktop row puts it back on the copy's
+         right with `order`, rather than the reverse. #}
+      <div class="landing-logo" aria-hidden="true"></div>
+      <div class="landing-copy">
+        <h1>{{ t("landing.headline") | br }}</h1>
+        <p class="landing-lede">
+          {{ t("landing.lede") }}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="wiz-nav wiz-nav-block landing-actions">
+    {# The strongest true thing we can say about how busy it is -- see
+       landing_pulse(). The pulsing dot is reserved for the tier that has
+       actual live searchers behind it; the quieter tiers are still facts,
+       but they are not "someone is here right now" and must not look it. #}
+    <p class="landing-live">
+      {% if pulse.live %}<span class="live-dot"></span>{% endif %}
+      {{ pulse.text }}
+    </p>
+    <a class="btn btn-block" href="{{ url_for('register') }}">{{ t("landing.cta_start") }}</a>
+    <a class="btn btn-secondary btn-block" href="{{ url_for('login') }}">{{ t("landing.cta_signin") }}</a>
+    <p class="landing-fine">{{ t("landing.fine") }}</p>
+  </div>
+</div>
+{% endblock %}

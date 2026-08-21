@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Reset password — Velvt{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <p class="eyebrow">{{ t("login.eyebrow") }}</p>
+  <h1 style="margin-top: 0.5rem;">{{ t("login.forgot") }}</h1>
+  <p class="subtitle" style="margin-bottom: 1.6rem;">
+    Enter the address you signed up with and we'll send you a link to choose a new one.
+  </p>
+
+  <form method="post" action="{{ url_for('forgot_password') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="email">{{ t("register.email") }}</label>
+    <input id="email" name="email" type="email" autocomplete="email" required autofocus>
+
+    <button class="btn btn-block" type="submit">Send reset link</button>
+  </form>
+
+  <p class="hint" style="margin: 1.1rem 0 0; text-align: center;">
+    <a href="{{ url_for('login') }}">Back to sign in</a>
+  </p>
+</div>
+{% endblock %}

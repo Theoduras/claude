@@ -70,34 +70,47 @@ top of `templates/base.html`.
 
 ### Running it
 
-Velvet stores its data in **PostgreSQL**, so start one and point
-`DATABASE_URL` at it:
+Velvet stores its data in **PostgreSQL**. The one-shot setup scripts start it
+in Docker, install dependencies, seed demo data, and launch the app.
+
+**Windows** — paste this into PowerShell; it clones the repo to `~\velvet`,
+opens your browser, and starts the app:
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/Theoduras/claude/claude/localhost-login-page-el4mjf/setup.ps1 -OutFile "$env:TEMP\setup.ps1"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\setup.ps1"
+```
+
+**Linux / macOS:**
 
 ```bash
-docker run -d --name velvet-pg -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=velvet -p 5432:5432 postgres:16
+curl -fsSL https://raw.githubusercontent.com/Theoduras/claude/claude/localhost-login-page-el4mjf/setup.sh -o setup.sh
+sh setup.sh
+```
 
-export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/velvet
+Re-running either one pulls the latest version before starting. They need
+[Git](https://git-scm.com/download/win),
+[Python](https://www.python.org/downloads/) (on Windows check "Add python.exe
+to PATH"), and [Docker](https://docs.docker.com/get-docker/) running. The
+script stops with a specific fix if any of the three is missing.
+
+**Manual start**, if you'd rather drive it yourself:
+
+```bash
+docker compose up -d      # PostgreSQL on 127.0.0.1:5432
 pip install -r requirements.txt
-python seed_demo.py     # optional: 20 demo members
+python seed_demo.py       # optional: 20 demo members
 python app.py
 ```
 
-**Windows quick start** — paste this into PowerShell; it clones the repo to
-`~\velvet`, installs dependencies, opens your browser, and starts the app.
-Set `DATABASE_URL` first (the script tells you how if you forget):
-
-```powershell
-iwr -useb https://raw.githubusercontent.com/Theoduras/claude/claude/determined-wozniak-orobzv/setup.ps1 -OutFile "$env:TEMP\setup.ps1"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\setup.ps1"
-```
-
-Re-running it later pulls the latest version before starting. Requires
-[Git](https://git-scm.com/download/win) and
-[Python](https://www.python.org/downloads/) (check "Add python.exe to PATH").
+`docker-compose.yml` uses the same credentials as the app's defaults, so no
+`DATABASE_URL` is needed locally — set it only to point somewhere else. The
+database keeps running between sessions: `docker compose down` stops it and
+`docker compose down -v` also deletes the data.
 
 Then open <http://localhost:5000>. Fill in your profile (name, age, gender,
 who you're looking for, location, bio, interests, hobbies, wants, needs,
-relationship type) and browse other members' profiles.
+relationship type, plus height, body type, fitness, hair, eyes and tattoos —
+and what you're looking for in each) and browse other members' profiles.
 
 **Live search** is instant matchmaking, in two steps:
 
@@ -146,8 +159,41 @@ reasons shown. People you've already matched with are filtered out, so
 the options refresh as you go.
 
 The **Matches** page is the unfiltered view: every gender-compatible
-profile ranked by shared interests/hobbies, matching relationship goals,
-age proximity, and same location.
+profile, ranked best first.
+
+### How ranking works
+
+Each pair gets a **0–100 "% mutual fit"**. Ten attributes are scored, and
+physical ones carry 74 of the 100 weight points, so they dominate:
+
+| Weight | Attribute |
+| --- | --- |
+| 18 | Height (inside your range, tapering off over 15 cm outside it) |
+| 16 | Body type (any of the ones you ticked) |
+| 14 | Fitness level (nearer your choice scores higher) |
+| 10 | Tattoos |
+| 8 + 8 | Hair colour, eye colour |
+| 12 | Shared interests and hobbies |
+| 8 | Same relationship goal |
+| 4 + 2 | Age proximity, same location |
+
+Two things make the number honest:
+
+**It counts both ways.** Each side is scored on how well the other fits what
+they asked for, then the two are combined with a harmonic mean — so the
+weaker direction governs. Someone who is exactly your type but isn't looking
+for anyone like you cannot outrank a pair that genuinely fits both ways. In
+the demo pool `clara_p` and `elias_m` fit each other and score **94**, while
+`omar_f` scores **97** toward `hana_y` but only **43** back, which drags that
+pair down to **59**.
+
+**Blanks don't count against anyone.** Every field is optional. An attribute
+is only scored when the asker stated a preference *and* the other person
+filled that field in; otherwise it drops out of the average rather than
+scoring zero. A profile with no physical details still ranks on the rest.
+
+Your own stated preferences are visible only to you, since they drive the
+ranking.
 
 Hitting **Match & chat** on a match stores the pairing and opens a shared
 **chatroom** for the two profiles, with message bubbles per side and full

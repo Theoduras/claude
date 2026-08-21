@@ -9,10 +9,16 @@ Set `PROJECT_ID` and `REGION` once and the commands below can be pasted as-is:
 
 ```bash
 export PROJECT_ID=your-project-id
-export REGION=us-central1
+export REGION=europe-west4
 export INSTANCE=velvet-db
 gcloud config set project "$PROJECT_ID"
 ```
+
+Use the **same region for Cloud Run and Cloud SQL**. Cross-region works — the
+Cloud SQL socket is reachable either way — but every query then pays a
+transatlantic round trip. A Cloud SQL instance's region is **immutable**, so
+correcting a mismatch later means creating a second instance and migrating the
+data, not moving the one you have.
 
 ## 1. Enable the APIs
 
@@ -36,8 +42,10 @@ gcloud sql instances create "$INSTANCE" \
 
 gcloud sql databases create velvet --instance="$INSTANCE"
 
-# Use a generated password rather than typing one in.
-DB_PASS="$(openssl rand -base64 32)"
+# Generate a URL-safe password. Do NOT use `openssl rand -base64 32`: its
+# alphabet includes "/", and step 7 below pastes this value straight into a
+# DATABASE_URL, where a single "/" silently truncates the credentials.
+DB_PASS="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32), end="")')"
 gcloud sql users create velvet_app --instance="$INSTANCE" --password="$DB_PASS"
 ```
 
@@ -51,13 +59,23 @@ be added later; neither requires an application change.
 printf '%s' "$DB_PASS" | gcloud secrets create velvet-db-pass --data-file=-
 python3 -c 'import secrets; print(secrets.token_hex(32), end="")' \
   | gcloud secrets create velvet-secret-key --data-file=-
-printf '%s' 'choose-a-real-admin-password' \
+python3 -c 'import secrets; print(secrets.token_urlsafe(18), end="")' \
   | gcloud secrets create velvet-admin-pass --data-file=-
 ```
 
 `APP_SECRET_KEY` **must** be set here rather than left to the app's random
 fallback: with more than one instance running, a per-instance random key
 would mean a session cookie issued by one instance is rejected by the next.
+
+`velvet-admin-pass` is only consulted the **first** time the app reaches an
+empty database: `init_db()` sets the admin password when it creates the row,
+and every later boot just re-asserts `is_admin = TRUE` (`app.py`). Changing
+the secret afterwards does not change the login — you have to update the hash
+in the database. Read the value back with:
+
+```bash
+gcloud secrets versions access latest --secret=velvet-admin-pass
+```
 
 ## 4. Grant the service account access
 
@@ -74,6 +92,17 @@ for s in velvet-db-pass velvet-secret-key velvet-admin-pass; do
 done
 ```
 
+`--source` deploys additionally upload a build context to a `run-sources-*`
+GCS bucket, which needs bucket-create rights. Grant them or the deploy fails
+with `does not have storage.buckets.create access`:
+
+```bash
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${SA}" --role=roles/storage.admin
+```
+
+Do not assume these are already in place — see the note in **CI deploy** below.
+
 ## 5. Deploy
 
 ```bash
@@ -88,16 +117,128 @@ gcloud run deploy velvet \
   --set-secrets="DB_PASS=velvet-db-pass:latest,APP_SECRET_KEY=velvet-secret-key:latest,APP_ADMIN_PASSWORD=velvet-admin-pass:latest" \
   --min-instances=0 \
   --max-instances=10 \
-  --concurrency=80
+  --concurrency=80 \
+  --memory=1Gi \
+  --startup-probe=httpGet.path=/healthz,periodSeconds=5,timeoutSeconds=5,failureThreshold=6
 ```
+
+**`--memory` is sized against uploads, not against the app.** Velvet idles in
+well under Cloud Run's 512Mi default, but `MAX_CONTENT_LENGTH` is
+`PHOTO_MAX_PER_USER * PHOTO_MAX_BYTES` — six 25MB photos, ~151MB — and
+Werkzeug spools a body that size to a temporary file rather than holding it
+in memory. On Cloud Run `/tmp` is a tmpfs, so that spill *is* memory on the
+instance serving it, and with `--concurrency=80` two people saving a full set
+of photos at the same time is 300MB before the app has done anything with
+them. 1Gi is the headroom for that; raising `PHOTO_MAX_BYTES` without raising
+this is how an instance gets OOM-killed mid-upload.
+
+Uploads are downscaled rather than stored as they arrive — in the browser
+before sending, and again in `downscale_photo()` on the way into Postgres —
+so a 10.7MB camera frame becomes ~1.4MB at 2560px. 1Gi is headroom for the
+request itself, not for what is kept.
+
+**Do not raise `PHOTO_MAX_BYTES` past the point where one photo plus the form
+around it approaches 32 MiB.** Cloud Run refuses an HTTP/1 request over
+32 MiB before it reaches the container, and answers with its own error page
+instead of the app's — `MAX_CONTENT_LENGTH` is deliberately set just under
+that so the 413 someone sees is the one this app wrote.
 
 The app creates its schema and the admin account on boot, guarded by a
 Postgres advisory lock so simultaneous instance starts don't collide.
 
+**Keep the startup probe.** Gunicorn binds the port before forking workers, so
+Cloud Run's default TCP probe passes the instant the master starts — before any
+worker has touched the database. Without an HTTP probe, a revision that cannot
+reach Cloud SQL still reports *"deployed and is serving 100 percent of
+traffic"* and then returns `Service Unavailable` on every request, with the
+real error visible only in the runtime logs. `/healthz` returns 503 (and
+retries the schema init, so a database that was merely slow recovers on its
+own) until the app can actually query, which turns that silent failure into a
+failed deploy.
+
+**Watch `/-/health`, not `/healthz`, from outside.** The probe path works
+because Cloud Run dials the container directly. Google's frontend intercepts
+the literal `/healthz` on the way in, so through the mapped domain it answers
+with Google's own 404 page and never reaches the app — every other path,
+including `/healthz/` and `/health`, gets through fine. `/-/health` is the same
+handler on a path nothing upstream claims. Point uptime monitoring at that.
+
 Deploy again with the same command to ship changes — Cloud Run keeps the
 URL and rolls traffic to the new revision.
 
-## 6. Seed the demo profiles (optional)
+## 6. Map a custom domain (optional)
+
+Cloud Run serves the app on a generated `*.run.app` URL. Pointing your own
+domain at it is three steps: prove you own the domain, create the mapping,
+then point DNS at Google.
+
+**Verify the domain.** In [Google Search Console](https://search.google.com/search-console),
+add a **Domain** property (not URL-prefix — the domain property covers every
+subdomain, so `www` needs no separate verification) and add the `TXT` record it
+gives you at your registrar. Use the same Google account as GCP and the
+verification is visible to Cloud Run automatically.
+
+**Create the mappings.** Note the `beta` track: `--region` is not on the GA
+`domain-mappings` command, which fails with a confusing `unrecognized
+arguments` error.
+
+```bash
+gcloud beta run domain-mappings create --service=velvet --domain=example.com --region="$REGION"
+gcloud beta run domain-mappings create --service=velvet --domain=www.example.com --region="$REGION"
+```
+
+**Point DNS at Google.** Read the exact records back rather than copying them
+from memory:
+
+```bash
+gcloud beta run domain-mappings describe --domain=example.com --region="$REGION" \
+  --format="table(status.resourceRecords)"
+```
+
+The apex needs four `A` records (`216.239.32.21`, `.34.21`, `.36.21`,
+`.38.21`) and optionally the matching `AAAA` records; `www` needs a single
+`CNAME` to `ghs.googlehosted.com.`. A `CNAME` on the apex is not legal — it
+cannot coexist with the zone's own `NS`/`SOA` records — so the apex must use
+`A` records. Delete any parking or redirect record the registrar put on `@`
+and `www` first, or it will keep resolving to their placeholder page.
+
+`dig +short example.com` may return only two of the four addresses on any
+given call; resolvers hand back rotating subsets. Run it twice before
+concluding a record is missing.
+
+**Wait for the certificate.** Google issues a managed TLS certificate once the
+domain resolves to it — minutes usually, up to 24h at worst. Until then the
+site serves a certificate warning, which is expected rather than a
+misconfiguration:
+
+```bash
+gcloud beta run domain-mappings describe --domain=example.com --region="$REGION" \
+  --format="value(status.conditions[].type, status.conditions[].status)"
+```
+
+`DomainRoutable: True` with `CertificateProvisioned: Unknown` and `Retry:
+True` is the normal in-progress state. An empty
+`status.conditions[].message` means it is queued, not stuck. You want
+`CertificateProvisioned: True` and `Ready: True`.
+
+**Then pick one hostname.** Serving on both the apex and `www` splits sessions:
+a cookie set on `example.com` is not sent to `www.example.com`, so a user who
+logs in on one and later lands on the other appears logged out. Set
+`CANONICAL_HOST` and the app 308-redirects every other host — `www` and the
+`*.run.app` URL alike — to that one, and marks the session cookie `Secure`:
+
+```bash
+gcloud run services update velvet --region="$REGION" \
+  --update-env-vars=CANONICAL_HOST=example.com
+```
+
+Leave it unset for local development and for any deployment without a mapped
+domain; unset means no redirect and no `Secure` flag, since a `Secure` cookie
+is never returned over plain http on localhost. `/healthz` is exempt from the
+redirect — Cloud Run's startup probe reaches the container directly rather
+than through the mapped domain, so redirecting it would fail every deploy.
+
+## 7. Seed the demo profiles (optional)
 
 The seeder needs to reach the database. Easiest is the Cloud SQL Auth Proxy
 from your own machine:
@@ -135,6 +276,75 @@ one instance. If sub-second delivery becomes a requirement, add
 **Memorystore for Redis/Valkey** pub/sub for cross-instance fan-out (needs
 Direct VPC egress, and a minimum spend) and reinstate the held-open request.
 Don't take on that complexity before the latency is an actual complaint.
+
+## CI deploy (GitHub Actions)
+
+`.github/workflows/deploy-gcp.yml` redeploys the current code to the
+already-created Cloud Run service + Cloud SQL instance above on every push
+to **`main`**. It assumes steps 1–4 have already been done once by hand.
+
+Work on a feature branch does **not** deploy — pushing there ships nothing,
+and Cloud Run keeps serving whatever `main` last built. To put a branch in
+front of the real service without merging, use **Run workflow** in the
+Actions tab (or `gh workflow run deploy-gcp.yml --ref <branch>`): the job
+checks out the ref it was dispatched on, so the branch deploys to the same
+service and URL, replacing the running revision until the next deploy.
+
+One-time setup, using **Workload Identity Federation** — GitHub Actions
+authenticates without any long-lived key. This is required on projects where
+the `iam.disableServiceAccountKeyCreation` org policy blocks SA key creation
+(the default on projects created since mid-2024), and is the recommended
+path regardless:
+
+```bash
+gcloud services enable iamcredentials.googleapis.com --project="$PROJECT_ID"
+
+gcloud iam workload-identity-pools create "github-pool" \
+  --project="$PROJECT_ID" --location=global \
+  --display-name="GitHub Actions"
+
+gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --project="$PROJECT_ID" --location=global \
+  --workload-identity-pool="github-pool" \
+  --display-name="GitHub OIDC" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+  --attribute-condition="assertion.repository=='Theoduras/claude'"
+
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+gcloud iam service-accounts add-iam-policy-binding "$SA" \
+  --project="$PROJECT_ID" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool/attribute.repository/Theoduras/claude"
+
+gcloud iam workload-identity-pools providers describe "github-provider" \
+  --project="$PROJECT_ID" --location=global \
+  --workload-identity-pool="github-pool" --format="value(name)"
+```
+
+The default compute SA does **not** automatically carry everything this deploy
+needs — an earlier version of this document claimed it did, and the first CI
+runs failed on exactly that (`does not have storage.buckets.create access`).
+Grant step 4's roles explicitly, and confirm the SA also has
+`roles/cloudbuild.builds.editor` and `roles/artifactregistry.writer` for
+`--source` builds. A dedicated `velvet-deployer` account isn't necessary unless
+you want CI's identity separated from the app's runtime identity.
+
+Then in the repo's **Settings → Secrets and variables → Actions**, add:
+
+- `GCP_WORKLOAD_IDENTITY_PROVIDER` — the resource name printed by the last
+  command above
+- `GCP_SERVICE_ACCOUNT` — `$SA` from above
+- `GCP_PROJECT_ID` — your `$PROJECT_ID`
+- `GCP_REGION` (optional, as a **variable** not a secret) — defaults to
+  `europe-west4` if unset, matching the fallback in the workflow's `env:` block
+
+Both grants (`iam.workloadIdentityPoolAdmin` to create the pool/provider,
+`iam.serviceAccountKeyAdmin` if you experiment with keys instead) are
+project-level IAM roles — grant them to your own account first if a command
+above 403s with a `PERMISSION_DENIED` naming that permission.
 
 ## Local development
 

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- A square mark, not the wordmark: velvt-logo.svg is 753x391, so at
+       favicon size it would letterbox to a few unreadable pixels. Just the V,
+       in the violet the rest of the app is built from, on the ink ground so
+       the tab reads the same in a light or a dark browser chrome. -->
+  <rect width="64" height="64" rx="14" fill="#0B0713"/>
+  <defs>
+    <linearGradient id="v" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#A855F7"/>
+      <stop offset="1" stop-color="#8A2BE2"/>
+    </linearGradient>
+  </defs>
+  <path d="M17 19 L32 45 L47 19" fill="none" stroke="url(#v)" stroke-width="8"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

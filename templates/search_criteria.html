@@ -1,102 +1,453 @@
 {% extends "base.html" %}
-{% block title %}Search for a match — Velvet{% endblock %}
+{% block title %}{{ t("crit.title") }}{% endblock %}
 {% block content %}
-<div class="card">
-  <h1>Search for a match now</h1>
-  <p class="subtitle">
-    Step 2 of 2 &middot; Looking for <strong>{{ wanted | lower }}</strong> &middot;
-    <a href="{{ url_for('live_search') }}">change</a>
+<div class="card narrow">
+  <h1 class="page-title--sm">{{ t("crit.heading") }}</h1>
+  <p class="subtitle">{{ t("crit.subtitle_six") }}</p>
+
+  <p class="recap">
+    {# wanted is a CSV now -- relationship_type can hold more than one type. #}
+    <span>{{ wanted.replace(',', ', ') }}</span>
+    <span aria-hidden="true">·</span>
+    <span>{% if place.location %}{{ place.location }}{% else %}anywhere{% endif %}{% if place.location and place.radius_km < radius_max %} · within {{ place.radius_km }} km{% endif %}</span>
+    <a href="{{ url_for('live_search') }}">{{ t("crit.change") }}</a>
   </p>
 
-  <form method="post" action="{{ url_for('search_criteria') }}">
+  <form method="post" action="{{ url_for('search_criteria') }}" id="criteria-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="relationship_type" value="{{ wanted }}">
+    <input type="hidden" name="location" value="{{ place.location }}">
+    <input type="hidden" name="location_lat" value="{{ place.lat }}">
+    <input type="hidden" name="location_lng" value="{{ place.lng }}">
+    <input type="hidden" name="radius_km" value="{{ place.radius_km }}">
 
-    <label for="seeking">I'm looking for</label>
-    <select id="seeking" name="seeking">
-      <option value="">Anyone</option>
-      {% for s in seeking_options %}
-        <option value="{{ s }}"
-          {% if (existing and existing['seeking'] == s) or (not existing and me['seeking'] == s) %}selected{% endif %}>
-          {{ s }}
-        </option>
-      {% endfor %}
-    </select>
-
-    <label>Age range <span class="slider-value" id="age-value"></span></label>
-    <div class="slider-pair">
-      <input type="range" id="age_min" name="age_min" min="18" max="120"
-             value="{{ existing['age_min'] if existing else 21 }}"
-             aria-label="Minimum age">
-      <input type="range" id="age_max" name="age_max" min="18" max="120"
-             value="{{ existing['age_max'] if existing else 35 }}"
-             aria-label="Maximum age">
+    {# ---- 1. who ---- #}
+    <div class="toggle-row">
+      <div class="toggle-head">
+        <label class="switch">
+          <input type="checkbox" name="use_gender"
+                 {% if not existing or existing['use_gender'] %}checked{% endif %}>
+          <span class="switch-track"></span>
+        </label>
+        <span class="toggle-label"><strong>{{ t("crit.who") }}</strong></span>
+        <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-gender">?</button>
+      </div>
+      <p class="help-pop" id="help-gender">
+        {{ t("crit.who_help") }}
+      </p>
+      <div class="toggle-panel"><div>
+        <select id="seeking" name="seeking" aria-label="{{ t('crit.who') }}">
+          <option value="">{{ t("chip.anyone") }}</option>
+          {% for s in seeking_options %}
+            <option value="{{ s }}"
+              {% if (existing and existing['seeking'] == s) or (not existing and me['seeking'] == s) %}selected{% endif %}>
+              {{ opt_label(s) }}
+            </option>
+          {% endfor %}
+        </select>
+      </div></div>
     </div>
 
-    <label for="location">Location</label>
-    <input id="location" name="location" type="text" list="city-list"
-           value="{{ existing['location'] if existing and existing['location'] else me['location'] }}"
-           placeholder="e.g. Berlin">
-    <datalist id="city-list">
-      {% for city in city_choices %}<option value="{{ city }}"></option>{% endfor %}
-    </datalist>
+    {# ---- 2. age ---- #}
+    <div class="toggle-row">
+      <div class="toggle-head">
+        <label class="switch">
+          <input type="checkbox" name="use_age"
+                 {% if not existing or existing['use_age'] %}checked{% endif %}>
+          <span class="switch-track"></span>
+        </label>
+        <span class="toggle-label">
+          <strong>{{ t("crit.age") }}</strong>
+          <span class="toggle-summary" id="age-value"></span>
+        </span>
+        <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-age">?</button>
+      </div>
+      <p class="help-pop" id="help-age">
+        {{ t("crit.age_help") }}
+      </p>
+      <div class="toggle-panel"><div>
+        <div class="range-dual">
+          <div class="range-dual-track"></div>
+          <div class="range-dual-fill" id="age-fill"></div>
+          <input type="range" id="age_min" name="age_min" min="{{ age_min_bound }}" max="{{ age_max_bound }}"
+                 value="{{ existing['age_min'] if existing else age_min_bound }}"
+                 aria-label="{{ t('wiz.age_min_aria') }}">
+          <input type="range" id="age_max" name="age_max" min="{{ age_min_bound }}" max="{{ age_max_bound }}"
+                 value="{{ existing['age_max'] if existing else age_max_bound }}"
+                 aria-label="{{ t('wiz.age_max_aria') }}">
+        </div>
+      </div></div>
+    </div>
 
-    <label for="radius_km">Search radius <span class="slider-value" id="radius-value"></span></label>
-    <input type="range" id="radius_km" name="radius_km" min="5" max="{{ radius_max }}" step="5"
-           value="{{ existing['radius_km'] if existing else radius_max }}">
-    <p class="hint" id="radius-hint"></p>
+    {# ---- 3. distance — the value itself is set on screen 1 ---- #}
+    {# Hidden while one city is pinned: everybody shares a set of coordinates,
+       so this switch cannot change who fits, and its help text pointed at the
+       location step that no longer exists. #}
+    {% if not single_city %}
+    <div class="toggle-row">
+      <div class="toggle-head">
+        <label class="switch">
+          <input type="checkbox" name="use_distance"
+                 {% if not existing or existing['use_distance'] %}checked{% endif %}>
+          <span class="switch-track"></span>
+        </label>
+        <span class="toggle-label">
+          <strong>{{ t("crit.distance") }}</strong>
+          <span class="toggle-summary">
+            {% if not place.location %}No location set
+            {% elif place.radius_km >= radius_max %}{{ place.location }} · any distance
+            {% else %}Within {{ place.radius_km }} km of {{ place.location }}{% endif %}
+          </span>
+        </span>
+        <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-distance">?</button>
+      </div>
+      <p class="help-pop" id="help-distance">
+        {{ t("crit.distance_help") }}
+        <a href="{{ url_for('live_search') }}">{{ t("crit.distance_change") }}</a>.
+      </p>
+    </div>
+    {% endif %}
 
-    <label for="interests">Interests (optional)</label>
-    <input id="interests" name="interests" type="text"
-           value="{{ existing['interests'] if existing else me['interests'] }}"
-           placeholder="e.g. music, hiking — used to pick the best fit">
+    {# ---- 4. physical ---- #}
+    <div class="toggle-row">
+      <div class="toggle-head">
+        <label class="switch">
+          <input type="checkbox" name="use_physical"
+                 {% if not existing or existing['use_physical'] %}checked{% endif %}>
+          <span class="switch-track"></span>
+        </label>
+        <span class="toggle-label">
+          <strong>{{ t("crit.physical") }}</strong>
+          <span class="toggle-summary">{{ t("crit.physical_summary") }}</span>
+        </span>
+        <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-physical">?</button>
+      </div>
+      <p class="help-pop" id="help-physical">
+        {{ t("crit.physical_help") }}
+      </p>
+      <div class="toggle-panel"><div>
+        <div class="field-pair">
+          <div>
+            <label for="pref_height_min">{{ t("form.height_from") }}</label>
+            <input id="pref_height_min" name="pref_height_min" type="number"
+                   min="{{ height_min }}" max="{{ height_max }}"
+                   value="{{ existing['pref_height_min'] if existing and existing['pref_height_min'] else '' }}"
+                   placeholder="{{ height_min }}">
+          </div>
+          <div>
+            <label for="pref_height_max">{{ t("form.height_to") }}</label>
+            <input id="pref_height_max" name="pref_height_max" type="number"
+                   min="{{ height_min }}" max="{{ height_max }}"
+                   value="{{ existing['pref_height_max'] if existing and existing['pref_height_max'] else '' }}"
+                   placeholder="{{ height_max }}">
+          </div>
+        </div>
 
-    <button class="btn btn-block" type="submit">&#128269; Start searching</button>
+        {% set chosen_body_types = (existing['pref_body_types'] if existing else '').split(',') %}
+        <label>{{ t("crit.body_types") }}</label>
+        <div class="checkgroup">
+          {% for bt in body_types %}
+            <label for="pref_body_types_{{ loop.index }}">
+              <input type="checkbox" id="pref_body_types_{{ loop.index }}"
+                     name="pref_body_types" value="{{ bt }}"
+                     {% if bt in chosen_body_types %}checked{% endif %}>
+              {{ bt }}
+            </label>
+          {% endfor %}
+        </div>
+
+        {% for field, label, options in [
+             ('pref_fitness_level', 'Fitness level', fitness_levels),
+             ('pref_hair_color', 'Hair colour', hair_colors),
+             ('pref_eye_color', 'Eye colour', eye_colors),
+             ('pref_tattoos', 'Tattoos', tattoo_levels),
+           ] %}
+          <label for="{{ field }}">{{ label }}</label>
+          <select id="{{ field }}" name="{{ field }}">
+            <option value="">{{ t("crit.no_preference") }}</option>
+            {% for opt in options %}
+              <option value="{{ opt }}" {% if existing and existing[field] == opt %}selected{% endif %}>{{ opt_label(opt) }}</option>
+            {% endfor %}
+          </select>
+        {% endfor %}
+      </div></div>
+    </div>
+
+    {# ---- 5. interests — a real filter now, so it sits last ---- #}
+    <div class="toggle-row">
+      <div class="toggle-head">
+        <label class="switch">
+          <input type="checkbox" name="use_interests"
+                 {% if not existing or existing['interests'] %}checked{% endif %}>
+          <span class="switch-track"></span>
+        </label>
+        <span class="toggle-label">
+          <strong>{{ t("crit.interests") }}</strong>
+          <span class="toggle-summary">{{ t("crit.interests_summary") }}</span>
+        </span>
+        <button type="button" class="help-dot" aria-expanded="false" aria-controls="help-interests">?</button>
+      </div>
+      <p class="help-pop" id="help-interests">
+        {{ t("crit.interests_help") }}
+      </p>
+      <div class="toggle-panel"><div>
+        <input id="interests" name="interests" type="text"
+               value="{{ existing['interests'] if existing else me['interests'] }}"
+               placeholder="{{ t('crit.interests_ph') }}" aria-label="{{ t('crit.interests') }}">
+      </div></div>
+    </div>
+
+    <div class="pool-live" id="pool-live" aria-live="polite">
+      <span class="muted">{{ t("crit.checking") }}</span>
+    </div>
+    <div id="pool-suggestions"></div>
+
+    <div class="criteria-nav">
+      <a class="btn btn-secondary" href="{{ url_for('live_search') }}">{{ t("crit.back") }}</a>
+      <button class="btn" type="submit">&#128269; {{ t("crit.start") }}</button>
+    </div>
   </form>
-  <p class="hint" style="margin-top: 0.75rem;">
-    You are {{ me['gender'] or 'unspecified gender' }}{% if me['age'] %}, {{ me['age'] }}{% endif %}{% if me['location'] %}, in {{ me['location'] }}{% endif %} —
-    others' filters apply to you too, so keep
-    <a href="{{ url_for('edit_profile') }}">your profile</a> accurate.
+
+  <p class="hint" style="margin-top: 0.9rem;">
+    {%- set who %}{{ opt_label(me['gender']) or t("crit.unspecified_gender") }}{% if me['age'] %}, {{ me['age'] }}{% endif %}{% if me['location'] %}, in {{ me['location'] }}{% endif %}{% endset -%}
+    {%- set profile_link %}<a href="{{ url_for('edit_profile') }}">{{ t("crit.profile_link") }}</a>{% endset -%}
+    {{ t("crit.you_are", who=who) }} — {{ t("crit.profile_note_tail", link=profile_link) | safe }}
   </p>
 </div>
 
-<script>
+<style>
+  .pool-live {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--ink-hairline);
+  }
+  #pool-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.7rem;
+  }
+  /* wrap rather than nowrap: below roughly 340px the two labels can't share a
+     row, and forcing them to was pushing the whole card past the viewport */
+  .criteria-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 1.5rem;
+  }
+  .criteria-nav .btn { text-align: center; }
+  /* Back is a way out, not a peer of the primary action, so it takes only
+     the width of its own label instead of half the row. */
+  .criteria-nav .btn-secondary { flex: 0 0 auto; }
+  .criteria-nav .btn:last-child { flex: 1 1 12rem; white-space: nowrap; }
+  /* the row a suggestion just edited, so the change is visible from the chip */
+  .toggle-row.flash { animation: row-flash 0.9s ease; }
+  @keyframes row-flash {
+    from { background: rgba(232, 211, 169, 0.14); }
+    to { background: transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .toggle-row.flash { animation: none; }
+  }
+</style>
+
+<script nonce="{{ csp_nonce() }}">
 (function () {
+  var form = document.getElementById("criteria-form");
+
+  // ---- age slider ----
   var minEl = document.getElementById("age_min");
   var maxEl = document.getElementById("age_max");
   var ageOut = document.getElementById("age-value");
-  var radiusEl = document.getElementById("radius_km");
-  var radiusOut = document.getElementById("radius-value");
-  var radiusHint = document.getElementById("radius-hint");
-  var radiusMax = parseInt(radiusEl.max, 10);
+  var ageFill = document.getElementById("age-fill");
+  var ageLo = parseInt(minEl.min, 10), ageHi = parseInt(minEl.max, 10);
+
+  function pct(v) { return ((v - ageLo) / (ageHi - ageLo)) * 100; }
 
   function syncAge(changed) {
     var lo = parseInt(minEl.value, 10);
     var hi = parseInt(maxEl.value, 10);
     if (lo > hi) {
-      // Push the other handle instead of letting the range invert.
       if (changed === "min") maxEl.value = lo; else minEl.value = hi;
       lo = parseInt(minEl.value, 10);
       hi = parseInt(maxEl.value, 10);
     }
     ageOut.textContent = lo + " – " + hi + " years";
-  }
-
-  function syncRadius() {
-    var km = parseInt(radiusEl.value, 10);
-    if (km >= radiusMax) {
-      radiusOut.textContent = "anywhere";
-      radiusHint.textContent = "Distance is ignored — match with anyone.";
-    } else {
-      radiusOut.textContent = km + " km";
-      radiusHint.textContent = "Only people within " + km + " km of your location.";
-    }
+    ageFill.style.left = pct(lo) + "%";
+    ageFill.style.width = (pct(hi) - pct(lo)) + "%";
+    // Whichever thumb is behind gets priority so overlapping handles can
+    // still be pulled apart.
+    minEl.style.zIndex = changed === "max" ? 2 : 3;
+    maxEl.style.zIndex = changed === "max" ? 3 : 2;
   }
 
   minEl.addEventListener("input", function () { syncAge("min"); });
   maxEl.addEventListener("input", function () { syncAge("max"); });
-  radiusEl.addEventListener("input", syncRadius);
   syncAge();
-  syncRadius();
+
+  // ---- switches disable their own panel ----
+  // CSS hides a closed panel; disabling is what keeps its fields out of the
+  // POST, so an unused filter is genuinely absent rather than submitted blank.
+  function syncPanels() {
+    form.querySelectorAll(".toggle-row").forEach(function (row) {
+      var sw = row.querySelector(".switch input");
+      var panel = row.querySelector(".toggle-panel");
+      if (!sw || !panel) return;
+      panel.querySelectorAll("input, select, textarea").forEach(function (el) {
+        el.disabled = !sw.checked;
+      });
+    });
+  }
+  form.querySelectorAll(".switch input").forEach(function (sw) {
+    sw.addEventListener("change", function () { syncPanels(); schedulePreview(); });
+  });
+  syncPanels();
+
+  // ---- help popovers ----
+  var helpButtons = Array.prototype.slice.call(document.querySelectorAll(".help-dot"));
+
+  function closeHelp(except) {
+    helpButtons.forEach(function (btn) {
+      if (btn === except) return;
+      btn.setAttribute("aria-expanded", "false");
+      document.getElementById(btn.getAttribute("aria-controls")).classList.remove("open");
+    });
+  }
+
+  helpButtons.forEach(function (btn) {
+    btn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      var pop = document.getElementById(btn.getAttribute("aria-controls"));
+      var open = btn.getAttribute("aria-expanded") === "true";
+      closeHelp(btn);
+      btn.setAttribute("aria-expanded", open ? "false" : "true");
+      pop.classList.toggle("open", !open);
+    });
+  });
+  document.addEventListener("click", function () { closeHelp(null); });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") closeHelp(null);
+  });
+
+  // ---- live pool count ----
+  var poolLive = document.getElementById("pool-live");
+  var poolSuggestions = document.getElementById("pool-suggestions");
+  var previewTimer = null;
+  var previewController = null;
+
+  function schedulePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(loadPreview, 350);
+  }
+
+  function chip(text, teal) {
+    var el = document.createElement("span");
+    el.className = teal ? "tag tag-teal" : "tag";
+    el.textContent = text;
+    return el;
+  }
+
+  function loadPreview() {
+    if (previewController) previewController.abort();
+    previewController = new AbortController();
+    fetch("{{ url_for('search_preview') }}", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "X-CSRF-Token": window.velvtCsrf()
+      },
+      body: new FormData(form),
+      signal: previewController.signal
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (result) {
+        poolLive.innerHTML = "";
+        poolSuggestions.innerHTML = "";
+        if (result.error) {
+          poolLive.appendChild(chip("Could not check the pool right now", false));
+          return;
+        }
+        var total = result.total_waiting;
+        var fit = result.compatible_count;
+        poolLive.appendChild(chip(
+          total + (total === 1 ? " person" : " people") + " searching right now", false));
+        poolLive.appendChild(chip(
+          fit + (fit === 1 ? " person fits" : " people fit") + " what you picked", true));
+
+        // A rescue, not an upsell: only offer a fix once nobody fits, not
+        // alongside a count that's already nonzero.
+        if (fit !== 0) return;
+
+        (result.suggestions || []).forEach(function (s) {
+          var text = "";
+          if (s.key === "age") {
+            text = "Widen to " + s.age_min + "–" + s.age_max;
+          } else if (s.key === "distance") {
+            // Clicking this only switches distance off (see apply() below);
+            // it never actually widens the radius, so it must not claim to.
+            text = "Match at any distance";
+          } else if (s.key === "gender") {
+            text = "Switch to " + s.seeking;
+          } else {
+            return;  // relationship type is fixed by the tile on screen 1
+          }
+          text += " · " + s.count + (s.count === 1 ? " person" : " people");
+
+          var el = chip(text, true);
+          el.style.cursor = "pointer";
+          el.setAttribute("role", "button");
+          el.setAttribute("tabindex", "0");
+          function apply() {
+            var row = null;
+            if (s.key === "age") {
+              minEl.value = s.age_min;
+              maxEl.value = s.age_max;
+              syncAge();
+              row = minEl.closest(".toggle-row");
+            } else if (s.key === "gender") {
+              document.getElementById("seeking").value = s.seeking;
+              row = document.getElementById("seeking").closest(".toggle-row");
+            } else if (s.key === "distance") {
+              // The radius lives on screen 1; relaxing it here means dropping
+              // the filter, which is the one thing this screen can do to it.
+              // The control is absent while one city is pinned, and a search
+              // saved before the pin can still carry another city and so still
+              // produce this suggestion. Without the guard the throw would
+              // take every other suggestion down with it.
+              var sw = form.querySelector('input[name="use_distance"]');
+              if (sw) {
+                sw.checked = false;
+                syncPanels();
+                row = sw.closest(".toggle-row");
+              }
+            }
+            if (row) {
+              row.classList.remove("flash");
+              void row.offsetWidth;  // restart the animation on a repeat click
+              row.classList.add("flash");
+            }
+            schedulePreview();
+          }
+          el.addEventListener("click", apply);
+          el.addEventListener("keydown", function (ev) {
+            if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); apply(); }
+          });
+          poolSuggestions.appendChild(el);
+        });
+      })
+      .catch(function (err) {
+        if (err.name === "AbortError") return;
+        poolLive.innerHTML = "";
+        poolLive.appendChild(chip("Could not check the pool right now", false));
+      });
+  }
+
+  form.addEventListener("input", schedulePreview);
+  form.addEventListener("change", schedulePreview);
+  loadPreview();
 })();
 </script>
 {% endblock %}

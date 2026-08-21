@@ -12,7 +12,9 @@ see the other side of a chat.
 
 import argparse
 import hashlib
+import struct
 import sys
+import zlib
 
 from werkzeug.security import generate_password_hash
 
@@ -25,12 +27,16 @@ from app import (
     HAIR_COLORS,
     HEIGHT_MAX_CM,
     HEIGHT_MIN_CM,
+    PHOTO_ALLOWED_MIMES,
+    PHOTO_MAX_BYTES,
+    PHOTO_MAX_PER_USER,
     POOL,
     RADIUS_MAX_KM,
     RELATIONSHIP_TYPES,
     SEEKING_OPTIONS,
     TATTOO_LEVELS,
     Db,
+    sniff_image_mime,
     startup,
 )
 
@@ -39,55 +45,100 @@ DEMO_PASSWORD = "demo12345"
 # username, name, age, gender, location, relationship_type, interests,
 # hobbies, seeking, age_min, age_max, radius_km
 #
+# Everyone is based in Maastricht, so the distance filter never removes a
+# member and the demo works for a local audience. The radius values are kept
+# as-is: they stay meaningful the moment a member is moved to another city.
+#
 # The first twelve are deliberate "anchors": for every relationship type
-# there is one woman and one man who are open to everyone, any age and any
-# distance. That guarantees a searcher of any gender can find someone for
-# whatever connection they pick. The remaining eight have narrow filters
-# and tight radii, which is what makes the distance/age sliders bite.
+# there is one woman and one man who are open to everyone and any age. That
+# guarantees a searcher of any gender can find someone for whatever
+# connection they pick. The remaining eight have narrow age/gender filters.
 DEMO_MEMBERS = [
     # --- anchors: seeking Everyone, ages 18-99, radius anywhere ---------
-    ("mia_b",      "Mia",     26, "Woman",      "Berlin",    "Long-term relationship",
+    ("mia_b",      "Mia",     26, "Woman",      "Maastricht","Long-term relationship",
      "music, travel, cooking", "salsa, yoga",          "Everyone", 18, 99, 500),
-    ("liam_k",     "Liam",    28, "Man",        "Hamburg",   "Long-term relationship",
+    ("liam_k",     "Liam",    28, "Man",        "Maastricht","Long-term relationship",
      "music, cooking, films",  "guitar, running",      "Everyone", 18, 99, 500),
-    ("paula_o",    "Paula",   30, "Woman",      "Munich",    "Short-term relationship",
+    ("paula_o",    "Paula",   30, "Woman",      "Maastricht","Short-term relationship",
      "whisky, sailing, films", "guitar, yoga",         "Everyone", 18, 99, 500),
-    ("stefan_g",   "Stefan",  32, "Man",        "Cologne",   "Short-term relationship",
+    ("stefan_g",   "Stefan",  32, "Man",        "Maastricht","Short-term relationship",
      "sailing, whisky",        "sailing, guitar",      "Everyone", 18, 99, 500),
-    ("noor_a",     "Noor",    24, "Woman",      "Frankfurt", "Casual dating",
+    ("noor_a",     "Noor",    24, "Woman",      "Maastricht","Short-term relationship",
      "art, photography",       "painting, cycling",    "Everyone", 18, 99, 500),
-    ("jonas_w",    "Jonas",   25, "Man",        "Stuttgart", "Casual dating",
+    ("jonas_w",    "Jonas",   25, "Man",        "Maastricht","Short-term relationship",
      "techno, gaming",         "skateboarding",        "Everyone", 18, 99, 500),
-    ("lena_h",     "Lena",    27, "Woman",      "Leipzig",   "Friendship",
+    ("lena_h",     "Lena",    27, "Woman",      "Maastricht","Friendship",
      "books, board games",     "knitting, hiking",     "Everyone", 18, 99, 500),
-    ("kai_n",      "Kai",     23, "Man",        "Dresden",   "Friendship",
+    ("kai_n",      "Kai",     23, "Man",        "Maastricht","Friendship",
      "board games, anime",     "drawing, badminton",   "Everyone", 18, 99, 500),
-    ("ava_s",      "Ava",     31, "Woman",      "Vienna",    "Marriage",
+    ("ava_s",      "Ava",     31, "Woman",      "Maastricht","Long-term relationship",
      "wine, travel, cooking",  "tennis, baking",       "Everyone", 18, 99, 500),
-    ("theo_r",     "Theo",    33, "Man",        "Zurich",    "Marriage",
+    ("theo_r",     "Theo",    33, "Man",        "Maastricht","Long-term relationship",
      "hiking, cooking, wine",  "climbing, chess",      "Everyone", 18, 99, 500),
-    ("ines_l",     "Ines",    29, "Woman",      "Düsseldorf","Not sure yet",
+    ("ines_l",     "Ines",    29, "Woman",      "Maastricht","Not sure yet",
      "cycling, gardening",     "grilling, reading",    "Everyone", 18, 99, 500),
-    ("bruno_c",    "Bruno",   35, "Man",        "Hannover",  "Not sure yet",
+    ("bruno_c",    "Bruno",   35, "Man",        "Maastricht","Not sure yet",
      "cars, cycling",          "motorsport, grilling", "Everyone", 18, 99, 500),
 
     # --- picky ones: narrow ages, one gender, tight radius --------------
-    ("clara_p",    "Clara",   33, "Woman",      "Frankfurt", "Long-term relationship",
+    ("clara_p",    "Clara",   33, "Woman",      "Maastricht","Long-term relationship",
      "jazz, cooking, museums", "pottery, running",     "Men",      29, 42, 80),
-    ("elias_m",    "Elias",   34, "Man",        "Frankfurt", "Long-term relationship",
+    ("elias_m",    "Elias",   34, "Man",        "Maastricht","Long-term relationship",
      "cooking, travel, jazz",  "cycling, pottery",     "Women",    27, 38, 60),
-    ("hana_y",     "Hana",    27, "Woman",      "Berlin",    "Long-term relationship",
+    ("hana_y",     "Hana",    27, "Woman",      "Maastricht","Long-term relationship",
      "languages, food, travel","climbing, cooking",    "Men",      25, 35, 45),
-    ("omar_f",     "Omar",    30, "Man",        "Berlin",    "Long-term relationship",
+    ("omar_f",     "Omar",    30, "Man",        "Maastricht","Long-term relationship",
      "travel, food, languages","surfing, cooking",     "Everyone", 24, 36, 120),
-    ("zoe_t",      "Zoe",     20, "Woman",      "Leipzig",   "Casual dating",
+    ("zoe_t",      "Zoe",     20, "Woman",      "Maastricht","Short-term relationship",
      "football, festivals",    "gym, dancing",         "Men",      18, 26, 35),
-    ("finn_d",     "Finn",    21, "Man",        "Leipzig",   "Casual dating",
+    ("finn_d",     "Finn",    21, "Man",        "Maastricht","Short-term relationship",
      "gaming, football",       "fifa, gym",            "Women",    18, 25, 20),
-    ("sam_v",      "Sam",     28, "Non-binary", "Berlin",    "Casual dating",
+    ("sam_v",      "Sam",     28, "Non-binary", "Maastricht","Not sure yet",
      "music, poetry, films",   "djing, swimming",      "Everyone", 21, 34, 40),
-    ("robin_e",    "Robin",   25, "Non-binary", "Dresden",   "Friendship",
+    ("robin_e",    "Robin",   25, "Non-binary", "Maastricht","Friendship",
      "anime, board games",     "drawing, hiking",      "Everyone", 20, 32, 90),
+
+    # --- second wave: 20 more Maastricht members -------------------------
+    ("emma_v",     "Emma",    26, "Woman",      "Maastricht","Long-term relationship",
+     "reading, travel, wine",  "yoga, painting",       "Men",      24, 36, 60),
+    ("daan_p",     "Daan",    29, "Man",        "Maastricht","Long-term relationship",
+     "cycling, cooking",       "running, chess",       "Women",    23, 34, 70),
+    ("sofie_k",    "Sofie",   24, "Woman",      "Maastricht","Short-term relationship",
+     "festivals, dancing",     "gym, clubbing",        "Men",      20, 30, 40),
+    ("milan_j",    "Milan",   27, "Man",        "Maastricht","Short-term relationship",
+     "gaming, football",       "fifa, gym",            "Women",    20, 30, 30),
+    ("julia_r",    "Julia",   31, "Woman",      "Maastricht","Friendship",
+     "hiking, photography",    "climbing, drawing",    "Everyone", 22, 40, 90),
+    ("tim_h",      "Tim",     33, "Man",        "Maastricht","Friendship",
+     "board games, films",     "chess, cinema",        "Everyone", 22, 45, 100),
+    ("nina_d",     "Nina",    28, "Woman",      "Maastricht","Not sure yet",
+     "art, museums",           "painting, pottery",    "Everyone", 21, 38, 50),
+    ("bram_s",     "Bram",    30, "Man",        "Maastricht","Not sure yet",
+     "cars, motorsport",       "cycling, grilling",    "Everyone", 22, 40, 60),
+    ("lotte_m",    "Lotte",   23, "Woman",      "Maastricht","Long-term relationship",
+     "music, concerts",        "guitar, running",      "Men",      21, 30, 45),
+    ("thijs_w",    "Thijs",   34, "Man",        "Maastricht","Long-term relationship",
+     "travel, cooking, wine",  "climbing, cooking",    "Women",    26, 38, 80),
+    ("fenna_b",    "Fenna",   25, "Woman",      "Maastricht","Short-term relationship",
+     "yoga, brunch",           "pilates, baking",      "Men",      22, 32, 35),
+    ("sven_l",     "Sven",    22, "Man",        "Maastricht","Short-term relationship",
+     "gym, football",          "gym, gaming",          "Women",    18, 27, 25),
+    ("iris_t",     "Iris",    29, "Woman",      "Maastricht","Friendship",
+     "books, tea, cats",       "reading, knitting",    "Everyone", 21, 40, 80),
+    ("wouter_f",   "Wouter",  36, "Man",        "Maastricht","Friendship",
+     "chess, history",         "chess, cycling",       "Everyone", 24, 45, 100),
+    ("anouk_g",    "Anouk",   27, "Woman",      "Maastricht","Not sure yet",
+     "travel, languages",      "surfing, cooking",     "Everyone", 22, 36, 70),
+    ("ruben_c",    "Ruben",   31, "Man",        "Maastricht","Not sure yet",
+     "photography, hiking",    "climbing, drawing",    "Everyone", 23, 40, 65),
+    ("saar_n",     "Saar",    24, "Non-binary", "Maastricht","Friendship",
+     "poetry, music",          "djing, writing",       "Everyone", 20, 33, 50),
+    ("jesse_o",    "Jesse",   26, "Non-binary", "Maastricht","Not sure yet",
+     "gaming, anime",          "drawing, gaming",      "Everyone", 20, 34, 55),
+    ("marit_e",    "Marit",   32, "Woman",      "Maastricht","Long-term relationship",
+     "cooking, gardening",     "baking, gardening",    "Men",      28, 42, 55),
+    ("koen_z",     "Koen",    35, "Man",        "Maastricht","Long-term relationship",
+     "wine, cooking, jazz",    "cooking, chess",       "Women",    27, 40, 70),
 ]
 
 BIO = "{name} from {location}. Into {interests}. Here for {goal}."
@@ -191,6 +242,82 @@ PREF_DEFAULTS = {
 }
 
 
+# --- demo profile photos --------------------------------------------------
+# Not real (or fabricated-to-look-real) photos of a person: hand-built
+# gradient PNGs in the app's own palette. No Pillow dependency (see
+# app.py's photo-upload notes), so this is a minimal from-scratch PNG
+# encoder rather than a real image library. First entry in each list
+# becomes the primary photo, same convention edit_profile() uses.
+DEMO_PHOTOS = {
+    "theo_r": [
+        ((58, 20, 90), (18, 128, 127)),    # violet -> teal
+        ((138, 43, 226), (11, 7, 19)),     # violet -> ink
+        ((232, 211, 169), (59, 11, 102)),  # champagne -> violet-deep
+    ],
+}
+
+# Second-wave members share one look: a plum/orange/pink gradient sampled
+# from an abstract swirl illustration (not a photo of anyone), so their
+# cards read as a matched set distinct from the first wave above.
+_SWIRL_GRADIENT = [((176, 58, 122), (230, 145, 60))]  # plum -> orange
+for _username, *_ in DEMO_MEMBERS[20:]:
+    DEMO_PHOTOS[_username] = _SWIRL_GRADIENT
+
+
+def make_gradient_png(w, h, top_rgb, bottom_rgb):
+    """A flat vertical-gradient PNG: raw scanlines, zlib-compressed by hand."""
+    def lerp(a, b, t):
+        return int(a + (b - a) * t)
+
+    rows = bytearray()
+    for y in range(h):
+        t = y / (h - 1)
+        r = lerp(top_rgb[0], bottom_rgb[0], t)
+        g = lerp(top_rgb[1], bottom_rgb[1], t)
+        bl = lerp(top_rgb[2], bottom_rgb[2], t)
+        rows.append(0)  # filter type: none
+        rows.extend([r, g, bl] * w)
+
+    def chunk(tag, data):
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data)))
+
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+    idat = chunk(b"IDAT", zlib.compress(bytes(rows), 9))
+    iend = chunk(b"IEND", b"")
+    return sig + ihdr + idat + iend
+
+
+def seed_photos(db, username, user_id):
+    """Add DEMO_PHOTOS[username], but only if that member has none yet —
+    reset() cascades photos away with the user row, so a plain re-run stays
+    idempotent without needing its own delete-then-reinsert here."""
+    gradients = DEMO_PHOTOS.get(username)
+    if not gradients:
+        return 0
+    existing = db.execute(
+        "SELECT COUNT(*) AS n FROM photos WHERE user_id = ?", (user_id,)
+    ).fetchone()["n"]
+    if existing:
+        return 0
+
+    gradients = gradients[:PHOTO_MAX_PER_USER]
+    added = 0
+    for i, (top, bottom) in enumerate(gradients):
+        data = make_gradient_png(600, 600, top, bottom)
+        assert len(data) <= PHOTO_MAX_BYTES
+        mime = sniff_image_mime(data)
+        assert mime in PHOTO_ALLOWED_MIMES, mime
+        db.execute(
+            "INSERT INTO photos (user_id, data, mime, is_primary, sort_order)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (user_id, data, mime, i == 0, i),
+        )
+        added += 1
+    return added
+
+
 def validate():
     """Fail loudly if the demo data drifts from the app's allowed values."""
     usernames = set()
@@ -274,7 +401,7 @@ def reset(db):
 
 def seed(db):
     password_hash = generate_password_hash(DEMO_PASSWORD)
-    added = refreshed = 0
+    added = refreshed = photos_added = 0
 
     for (
         username, name, age, gender, location, relationship_type,
@@ -285,14 +412,21 @@ def seed(db):
         ).fetchone()
 
         if row is None:
+            # is_bot marks these as demo members that auto-reply in chat
+            # (see maybe_bot_reply() in app.py) and auto-continue past the
+            # decision phase, so a live-search lifecycle can be exercised
+            # solo against any of them.
             user_id = db.insert_returning_id(
-                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                "INSERT INTO users (username, password_hash, is_bot) VALUES (?, ?, TRUE)",
                 (username, password_hash),
             )
             added += 1
         else:
             user_id = row["id"]
+            db.execute("UPDATE users SET is_bot = TRUE WHERE id = ?", (user_id,))
             refreshed += 1
+
+        photos_added += seed_photos(db, username, user_id)
 
         phys = derive_physical(username, age, gender)
         prefs = {**PREF_DEFAULTS, **PHYSICAL_PREFS.get(username, {})}
@@ -368,7 +502,7 @@ def seed(db):
         )
 
     db.commit()
-    return added, refreshed
+    return added, refreshed, photos_added
 
 
 def main():
@@ -388,12 +522,14 @@ def main():
             removed = reset(db)
             print(f"Removed {removed} existing demo member(s).")
 
-        added, refreshed = seed(db)
+        added, refreshed, photos_added = seed(db)
         waiting = db.execute(
             "SELECT COUNT(*) AS n FROM searches WHERE status = 'waiting'"
         ).fetchone()["n"]
 
     print(f"Added {added} new member(s), refreshed {refreshed}.")
+    if photos_added:
+        print(f"Added {photos_added} profile photo(s).")
     print(f"{waiting} member(s) are now live-searching at the same time.")
     print(f"They all log in with the password: {DEMO_PASSWORD}")
     print("\nStart the app and hit \N{LEFT-POINTING MAGNIFYING GLASS} Live search "

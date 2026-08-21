@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Members — Velvt admin{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">Admin</p>
+  <h1 style="margin-top: 0.5rem;">Members</h1>
+
+  {# Real and demo are counted apart on purpose. A single total that folded
+     the seeded demo members in would be the same overstatement the landing
+     page refuses to make -- and the gap between the two numbers is the one
+     thing this page exists to show. #}
+  <div class="admin-tally">
+    <div class="admin-tally-item is-headline">
+      <span class="admin-tally-n">{{ totals.real_active }}</span>
+      <span class="admin-tally-label">registered<br>and active</span>
+    </div>
+    <div class="admin-tally-item">
+      <span class="admin-tally-n">{{ totals.today }}</span>
+      <span class="admin-tally-label">joined<br>today</span>
+    </div>
+    <div class="admin-tally-item">
+      <span class="admin-tally-n">{{ totals.week }}</span>
+      <span class="admin-tally-label">joined this<br>week</span>
+    </div>
+    <div class="admin-tally-item is-muted">
+      <span class="admin-tally-n">{{ totals.demo }}</span>
+      <span class="admin-tally-label">demo<br>accounts</span>
+    </div>
+  </div>
+
+  <p class="hint" style="margin: 0 0 1.2rem;">
+    {{ totals.real_all }} real account{{ '' if totals.real_all == 1 else 's' }} in total —
+    {{ totals.real_active }} active,
+    {{ totals.suspended }} suspended,
+    {{ totals.banned }} banned,
+    {{ totals.pending_deletion }} pending deletion,
+    {{ totals.deleted }} deleted.
+    {% if totals.real_active < floor %}
+      The landing page shows no member count below {{ floor }}, so it is
+      currently saying <em>“Be among the first in Maastricht”</em> rather than
+      a number.
+    {% else %}
+      The landing page is showing this count to logged-out visitors.
+    {% endif %}
+  </p>
+
+  <form method="get" action="{{ url_for('admin_members') }}" class="admin-filter">
+    <input type="search" name="q" value="{{ query }}" placeholder="username, name or email">
+    <input type="hidden" name="show" value="{{ show }}">
+    <button class="btn btn-secondary btn-small" type="submit">Search</button>
+  </form>
+
+  <p class="hint" style="margin-bottom: 1.2rem;">
+    {% for key, label in [('real', 'Real'), ('demo', 'Demo'), ('all', 'All')] %}
+      {%- if not loop.first %}&nbsp;·&nbsp;{% endif -%}
+      <a href="{{ url_for('admin_members', show=key, q=query) }}"
+         {% if show == key %}style="font-weight:700"{% endif %}>{{ label }}</a>
+    {%- endfor %}
+  </p>
+
+  {% if not members %}
+    <p class="subtitle">Nobody matches that.</p>
+  {% endif %}
+
+  {% for m in members %}
+    <article class="admin-member">
+      <div class="admin-member-head">
+        <h2>
+          {# A member with no profile row yet still gets a link: their profile
+             page is where you find out how far they got. #}
+          <a href="{{ url_for('view_profile', user_id=m.id) }}">{{ m.name or m.username }}</a>
+          {% if m.age %}<span class="hint">{{ m.age }}</span>{% endif %}
+        </h2>
+        <span class="admin-badges">
+          {% if m.is_bot %}<span class="tag">demo</span>{% endif %}
+          {% if m.status != 'active' %}<span class="tag">{{ m.status }}</span>{% endif %}
+          {% if m.searching %}<span class="tag is-live">searching</span>{% endif %}
+        </span>
+      </div>
+      <p class="hint admin-member-meta">
+        @{{ m.username }}{% if m.email %} · {{ m.email }}{% endif %}
+        {%- if not m.email_verified_at and not m.is_bot %} · <strong>email unconfirmed</strong>{% endif %}
+        · joined {{ m.created_at.strftime('%Y-%m-%d') }}
+        {%- if m.last_seen_at %} · last seen {{ m.last_seen_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}
+        · {{ m.photos }} photo{{ '' if m.photos == 1 else 's' }}
+        {%- if not m.name %} · <strong>no profile yet</strong>{% endif %}
+      </p>
+    </article>
+  {% endfor %}
+
+  {% if members | length == 500 %}
+    <p class="hint">Showing the 500 most recent. Narrow it with the search above.</p>
+  {% endif %}
+</div>
+{% endblock %}

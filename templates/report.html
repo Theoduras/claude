@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Report — Velvt{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <p class="eyebrow">{{ t("chat.report") }}</p>
+  <h1 style="margin-top: 0.5rem;">Report {{ subject.name or subject.username }}</h1>
+  <p class="subtitle" style="margin-bottom: 1.6rem;">
+    Tell us what happened. A moderator reads every report, and we'll let you
+    know once it's been looked at.
+  </p>
+
+  <form method="post" action="{{ url_for('report_user', user_id=subject.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if match_id %}<input type="hidden" name="match_id" value="{{ match_id }}">{% endif %}
+
+    <fieldset style="border: 0; padding: 0; margin: 0 0 1rem;">
+      <legend class="label">What's wrong?</legend>
+      {% for key, label in reasons %}
+      <label class="switch-row" for="reason-{{ key }}">
+        <input id="reason-{{ key }}" type="radio" name="reason" value="{{ key }}"
+               {% if loop.first %}required{% endif %}>
+        <span>{{ label }}</span>
+      </label>
+      {% endfor %}
+    </fieldset>
+
+    <label for="detail">Anything else we should know?</label>
+    <textarea id="detail" name="detail" rows="4" maxlength="2000"
+              placeholder="Optional — what happened, and when."></textarea>
+
+    <label class="switch-row" for="block" style="margin-top: 1rem;">
+      <input id="block" name="block" type="checkbox" value="1" checked>
+      <span>Also block them</span>
+    </label>
+    <p class="hint">Blocking ends any chat you have and stops you being matched again.</p>
+
+    <button class="btn btn-block" type="submit">Send report</button>
+  </form>
+
+  <p class="hint" style="margin: 1.1rem 0 0; text-align: center;">
+    If you're in immediate danger, contact your local emergency services first.
+  </p>
+</div>
+{% endblock %}
