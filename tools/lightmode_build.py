@@ -1,18 +1,28 @@
 #!/usr/bin/env python3
 """Assemble the light-mode artifact.
 
-Stage A: one screen and a legend, published for a yes/no on the look.
+Stage A was one screen and a legend, for a yes/no on the look. Stage B added
+the other screens and made the palette live. This is the editor: every screen
+is now a surface you click into, and the thing you clicked is what you change
+-- its colours, its text, its icon, its hover state and its motion.
+
+Two scopes of edit, deliberately kept apart. The rail edits *tokens*, so one
+swatch repaints every screen at once; the inspector edits *one element*, and
+writes a real CSS rule for it. Neither can do the other's job, and collapsing
+them would lose the distinction that makes a design system a system.
 
 The page chrome around the screen is painted in literal colours, never from the
 tokens being shown. The Restyler already paid for that lesson: a toolbar drawn
 from the palette under edit disappears the moment someone sets the ground to
 match the text.
 """
+import json
 import os
 import pathlib
 import re
 
 import lightmode_cutout as cutout
+import lightmode_editor as editor
 import lightmode_screens as screens
 import lightmode_theme as theme
 
@@ -68,6 +78,12 @@ h2.sec { font-size: .7rem; font-weight: 700; letter-spacing: .14em; text-transfo
 .note { border-left: 2px solid var(--c-accent); padding: .1rem 0 .1rem .9rem; margin: 0 0 1rem; }
 .note b { display: block; font-size: .85rem; margin-bottom: .1rem; }
 .note span { font-size: .82rem; color: var(--c-muted); }
+
+/* The editor needs the phone column to stay put while the inspector on the
+   right grows and shrinks with whatever is selected. */
+.split { align-items: start; }
+.col-left { position: sticky; top: 1.5rem; }
+@media (max-width: 880px) { .col-left { position: static; } }
 """
 
 
@@ -75,7 +91,6 @@ def build():
     import lightmode_assets as assets
 
     brand = assets.brand()
-    body = screens.landing(brand)
     art = (
         "  --film-still: url(%s);\n"
         "  --logo-art: url(%s);" % (brand["still"], brand["logo"])
@@ -158,17 +173,37 @@ def build():
          "block and the first draft's standing mascot pair. The felt "
          "characters already carry the guide's texture and its mascots "
          "principle at once, so nothing invented was needed on top."),
+        ("The match-reveal pair is a placeholder",
+         "Two hatched circles stand in for the felt mascots ch.06 puts here. "
+         "Reading them out of the guide needs its HTML re-uploaded and "
+         "<code>LIGHTMODE_GUIDE_HTML</code> pointed at it &mdash; the guide "
+         "isn't in this session, so this build shipped without them rather "
+         "than inventing art in their place."),
     ]
     dep_html = "\n".join(
         '<div class="note"><b>%s</b><span>%s</span></div>' % (t, d)
         for t, d in departures)
 
-    html = """<title>Velvt Light</title>
+    # Any state the artifact already carries. Republishing from source would
+    # otherwise wipe whatever was saved through the page itself -- the saved
+    # state lives *in* the published HTML, so a rebuild has to be handed it
+    # back or it silently throws the user's work away. Point LIGHTMODE_STATE
+    # at the JSON pulled out of the live artifact.
+    state_path = os.environ.get("LIGHTMODE_STATE")
+    state = ""
+    if state_path:
+        raw = pathlib.Path(state_path).read_text(encoding="utf-8").strip()
+        json.loads(raw)  # fail loudly here rather than in the browser
+        state = ('<script type="application/json" id="saved-state">%s</script>\n'
+                 % raw.replace("<", "\\u003c"))
+
+    html = state + """<title>Velvt Light</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
 %(chrome)s
+%(editor_css)s
 
 /* ==== the light skin, from the guide's elements ==================== */
 :root {
@@ -178,38 +213,93 @@ def build():
 }
 %(screen)s
 %(landing)s
+%(keyframes)s
+
+/* ==== the same names, re-answered for the dark world ================ */
+%(dark)s
 </style>
+<style id="tokens"></style>
+<style id="overrides"></style>
+<!-- written last so a custom rule wins without needing !important -->
+<style id="custom"></style>
+
+%(savebar)s
 
 <div class="page">
   <header class="top">
     <p class="word">Velvt <span>Light</span></p>
-    <p>One screen, built from the design system's elements rather than from the
-      mockup's surface &mdash; the velvet treatment, the radius and elevation
-      scales, Inter's type scale, and the mascots, all where chapter and verse
-      put them. The colours are the mockup's, and every one of them becomes
-      editable next. This stage only asks: is this the look?</p>
+    <p>Every screen in the app, built from the design system's elements rather
+      than from the mockup's surface, and in both worlds. <b>Click anything in
+      the phone</b> and the inspector opens on it: its colours, its words, its
+      icon, what it does under the cursor, and whether it moves. The palette
+      rail edits the other scope &mdash; a token, so one swatch repaints every
+      screen at once. <b>Only colour is answered twice</b>: the mode switch
+      changes which answer you are editing, while an icon, a word, a radius or
+      a hover lift is the same decision in both worlds and lands in both at
+      once.</p>
   </header>
 
   <div class="split">
-    <div>
-      <div class="device">%(body)s</div>
+    <div class="col-left">
+      <div class="bar">
+        <div class="modes" id="modes">
+          <button data-mode="light" class="is-on">Light</button>
+          <button data-mode="dark">Dark</button>
+        </div>
+        <span class="bar-note">%(count)d screens</span>
+      </div>
+      <div class="tabs">%(tabs)s</div>
+      <div class="device">%(screens)s</div>
       <p class="device-cap">390 &times; 844 &mdash; the guide's baseline viewport</p>
+      <div class="bar" style="margin-top:1rem;">
+        <button class="btn-tool" id="reset-all" type="button">Reset every element</button>
+        <span class="bar-note">click an element to begin</span>
+      </div>
     </div>
     <div>
-      <h2 class="sec">Where it departs from the mockup</h2>
+      <h2 class="sec">Inspector</h2>
+      %(save)s
+      %(insp)s
+
+      <div class="rail-head">
+        <h2 class="sec" style="margin:0;">Palette &mdash; the active mode</h2>
+        <button class="rail-reset" id="rail-reset" type="button">Reset</button>
+      </div>
+      %(rail)s
+
+      <h2 class="sec">Export</h2>
+      <div class="export">
+        <p class="bar-note" style="margin:0 0 .5rem;">Per-element rules, both modes</p>
+        <textarea id="export-css" readonly></textarea>
+        <p class="bar-note" style="margin:.9rem 0 .5rem;">Palettes</p>
+        <textarea id="export-tokens" readonly style="min-height:7rem;"></textarea>
+      </div>
+
+      <h2 class="sec" style="margin-top:2.2rem;">Where it departs from the mockup</h2>
       %(dep)s
-      <h2 class="sec">Every element on this screen, and the chapter it comes from</h2>
+      <h2 class="sec">Every element, and the chapter it comes from</h2>
       <div class="leg">%(leg)s</div>
     </div>
   </div>
 </div>
+%(script)s
 """ % {
         "chrome": CHROME,
+        "editor_css": editor.EDITOR_CSS,
+        "keyframes": editor.KEYFRAMES,
         "art": art,
         "root": theme.root_block(),
+        "dark": theme.dark_block(),
         "screen": theme.screen_css(),
         "landing": screens.LANDING_CSS,
-        "body": body,
+        "count": len(screens.SCREENS),
+        "tabs": editor.tabs_html(),
+        "screens": screens.render_all(brand),
+        "insp": editor.inspector_html(),
+        "save": editor.save_html(),
+        "savebar": editor.savebar_html(),
+        "rail": editor.rail_html(),
+        "script": editor.script(),
         "leg": leg_html,
         "dep": dep_html,
     }

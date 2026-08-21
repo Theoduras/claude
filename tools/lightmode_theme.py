@@ -20,38 +20,54 @@ So `.velvet` exists for large surfaces only, and `.btn-primary` deliberately
 does not use it.
 """
 
-# The mockup's palette. Named for what it paints, which is also how the Stage B
-# rail will label it -- so the name in the tool and the name in the CSS agree.
+# Two palettes, one set of names. The screens are written once and painted by
+# whichever mode is active, which is the whole point of naming a token for what
+# it *paints* rather than for its colour: `--canvas` is the page's ground in
+# both worlds, and nothing downstream has to know which world it is in.
+#
+# The light column is the user's mockup, exempted from the guide by their
+# instruction. The dark column is not invented either -- it is the app's own
+# shipped palette, read out of templates/velvt.css, so "dark mode" here is the
+# product that exists rather than a guess at one.
 PALETTE = [
-    # (css custom property, control label, group, value)
-    ("canvas",        "Page background",   "Ground",   "#F4F3F0"),
-    ("surface",       "Card surface",      "Ground",   "#FBFAF8"),
-    ("field",         "Field fill",        "Ground",   "#EFEEEA"),
-    ("hairline",      "Hairline",          "Ground",   "#E5E3DE"),
+    # (css custom property, control label, group, light, dark)
+    ("canvas",        "Page background",   "Ground",   "#F4F3F0", "#0B0713"),
+    ("surface",       "Card surface",      "Ground",   "#FBFAF8", "#150C22"),
+    ("field",         "Field fill",        "Ground",   "#EFEEEA", "#1D1230"),
+    ("hairline",      "Hairline",          "Ground",   "#E5E3DE", "#2A1B42"),
 
-    ("ink",           "Headline",          "Text",     "#14121A"),
-    ("ink-accent",    "Headline accent",   "Text",     "#6D28D9"),
-    ("body",          "Body",              "Text",     "#3D3A45"),
-    ("quiet",         "Quiet",             "Text",     "#8B8794"),
+    ("ink",           "Headline",          "Text",     "#14121A", "#F7F1FB"),
+    ("ink-accent",    "Headline accent",   "Text",     "#6D28D9", "#A855F7"),
+    ("body",          "Body",              "Text",     "#3D3A45", "#B7A6CB"),
+    ("quiet",         "Quiet",             "Text",     "#8B8794", "#7C6B92"),
 
-    ("action",        "Button fill",       "Action",   "#6D28D9"),
-    ("on-action",     "Button label",      "Action",   "#FFFFFF"),
-    ("action-wash",   "Wash",              "Action",   "#EDE4FE"),
-    ("velvet-1",      "Velvet start",      "Action",   "#6739FF"),
-    ("velvet-2",      "Velvet middle",     "Action",   "#6D53F4"),
-    ("velvet-3",      "Velvet end",        "Action",   "#3C2E86"),
+    ("action",        "Button fill",       "Action",   "#6D28D9", "#8A2BE2"),
+    ("on-action",     "Button label",      "Action",   "#FFFFFF", "#FFFFFF"),
+    ("action-wash",   "Wash",              "Action",   "#EDE4FE", "#2B1247"),
+    ("velvet-1",      "Velvet start",      "Action",   "#6739FF", "#A855F7"),
+    ("velvet-2",      "Velvet middle",     "Action",   "#6D53F4", "#8A2BE2"),
+    ("velvet-3",      "Velvet end",        "Action",   "#3C2E86", "#3B0B66"),
 
-    ("delight",       "Delight",           "Delight",  "#FAE83E"),
-    ("on-delight",    "Delight text",      "Delight",  "#242424"),
-    ("delight-deep",  "Delight as text",   "Delight",  "#8A7C0C"),
+    # ch.01: gold rewards. On light it is the mockup's acid yellow; on dark it
+    # is the guide's champagne, which is the same role played by the colour
+    # that actually reads as a highlight on a near-black ground.
+    ("delight",       "Delight",           "Delight",  "#FAE83E", "#E8D3A9"),
+    ("on-delight",    "Delight text",      "Delight",  "#242424", "#241B0C"),
+    ("delight-deep",  "Delight as text",   "Delight",  "#8A7C0C", "#E8D3A9"),
 
-    ("live",          "Live dot",          "Status",   "#0E9F6E"),
-    ("success",       "Success",           "Status",   "#05B216"),
-    ("danger",        "Danger",            "Status",   "#EA4545"),
+    ("live",          "Live dot",          "Status",   "#0E9F6E", "#1DA6A2"),
+    ("success",       "Success",           "Status",   "#05B216", "#35D07F"),
+    ("danger",        "Danger",            "Status",   "#EA4545", "#FF7A8A"),
 
-    ("nav-shell",     "Nav shell",         "Nav",      "#1B1B1B"),
-    ("nav-active",    "Active tab",        "Nav",      "#FFFFFF"),
-    ("nav-rest",      "Resting tab",       "Nav",      "#8C8C8C"),
+    ("nav-shell",     "Nav shell",         "Nav",      "#1B1B1B", "#150C22"),
+    ("nav-active",    "Active tab",        "Nav",      "#FFFFFF", "#FFFFFF"),
+    ("nav-rest",      "Resting tab",       "Nav",      "#8C8C8C", "#7C6B92"),
+
+    # The landing's film scrim. This is a token rather than a literal because
+    # it is the one colour that *must* follow the mode: the scrim exists to
+    # make type legible over the video, so it lightens under dark type and
+    # darkens under pale type. Same five stops, same job, inverted.
+    ("scrim",         "Film scrim",        "Film",     "#F4F3F0", "#0B0713"),
 ]
 
 # ch.04, quoted. The comment on each is the guide's own "Use" column.
@@ -64,12 +80,22 @@ RADIUS = [
     ("r-pill", "999px", "chips, nav, avatars"),
 ]
 
+# Elevation cannot be one set of numbers across both modes. A shadow works by
+# darkening the ground beneath it, and on a near-black ground there is nothing
+# left to darken -- the light scale's 6% black is simply invisible there. The
+# dark column therefore leans on deeper, wider shadows plus a hairline of lift,
+# which is how depth reads when the ground is already at the bottom.
 ELEVATION = [
-    ("e1",      "0 1px 2px rgba(36,36,36,.06)",   "rest"),
-    ("e2",      "0 4px 12px rgba(36,36,36,.08)",  "raised"),
-    ("e3",      "0 8px 24px rgba(36,36,36,.10)",  "overlay"),
-    ("e-brand", "0 8px 20px rgba(109,83,244,.32)", "primary CTA, like, super-like only"),
-    ("e-nav",   "0 8px 28px rgba(27,27,27,.24)",  "floating tab bar"),
+    ("e1",      "0 1px 2px rgba(36,36,36,.06)",
+                "0 1px 2px rgba(0,0,0,.5), 0 0 0 1px rgba(168,133,247,.10)", "rest"),
+    ("e2",      "0 4px 12px rgba(36,36,36,.08)",
+                "0 4px 14px rgba(0,0,0,.55), 0 0 0 1px rgba(168,133,247,.12)", "raised"),
+    ("e3",      "0 8px 24px rgba(36,36,36,.10)",
+                "0 10px 30px rgba(0,0,0,.6), 0 0 0 1px rgba(168,133,247,.14)", "overlay"),
+    ("e-brand", "0 8px 20px rgba(109,83,244,.32)",
+                "0 8px 26px rgba(138,43,226,.45)", "primary CTA, like, super-like only"),
+    ("e-nav",   "0 8px 28px rgba(27,27,27,.24)",
+                "0 8px 28px rgba(0,0,0,.65)", "floating tab bar"),
 ]
 
 MOTION = [
@@ -92,23 +118,49 @@ NOISE = (
 )
 
 
+def palette_block(mode):
+    """Just the colours, for one mode. Index 3 is light, index 4 is dark."""
+    i = 4 if mode == "dark" else 3
+    return "\n".join("  --%s: %s;" % (row[0], row[i]) for row in PALETTE)
+
+
+def elevation_block(mode):
+    i = 2 if mode == "dark" else 1
+    return "\n".join(
+        "  --%s: %s;  /* %s */" % (row[0], row[i], row[3]) for row in ELEVATION)
+
+
 def root_block():
-    lines = []
-    for name, _label, _group, value in PALETTE:
-        lines.append("  --%s: %s;" % (name, value))
-    lines.append("")
+    """The light world, plus everything that does not vary by mode.
+
+    Radius, motion and space are the guide's structural scales -- they describe
+    how big a corner is and how long a press takes, neither of which has a dark
+    equivalent. Only colour and elevation are re-stated per mode.
+    """
+    lines = [palette_block("light"), ""]
     for name, value, use in RADIUS:
-        lines.append("  --%s: %s;%s" % (name, value, "  /* %s */" % use))
+        lines.append("  --%s: %s;  /* %s */" % (name, value, use))
     lines.append("")
-    for name, value, use in ELEVATION:
-        lines.append("  --%s: %s;%s" % (name, value, "  /* %s */" % use))
+    lines.append(elevation_block("light"))
     lines.append("")
     for name, value, use in MOTION:
-        lines.append("  --%s: %s;%s" % (name, value, "  /* %s */" % use))
+        lines.append("  --%s: %s;  /* %s */" % (name, value, use))
     lines.append("")
     for step in SPACE:
         lines.append("  --space-%d: %dpx;" % (step, step * 4))
     return "\n".join(lines)
+
+
+def dark_block():
+    """The dark world: the same names, re-answered.
+
+    Scoped to an explicit `[data-mode="dark"]` stamp rather than to
+    `prefers-color-scheme`, because this is a design tool -- the point is to
+    look at either mode on demand, not to be handed whichever one the laptop
+    happens to be set to.
+    """
+    return '[data-mode="dark"] {\n%s\n\n%s\n}' % (
+        palette_block("dark"), elevation_block("dark"))
 
 
 SCREEN_CSS = """
@@ -229,6 +281,13 @@ SCREEN_CSS = """
 /* Outline, round caps and joins, 2px at a 24 canvas. The registry emits the
    stroke already scaled per canvas, so a 20-box glyph is not heavier. */
 .vl svg { display: block; }
+/* An icon sitting inside a sentence is the exception: `display: block` there
+   breaks the line and drops the words underneath the mark. Flex parents
+   (chips, rows, the tab bar) are unaffected, since display is ignored on a
+   flex item -- so this only has to name the prose case. */
+.vl p > svg, .vl label > svg, .vl summary > svg, .vl strong > svg, .vl span > svg {
+  display: inline-block; vertical-align: -0.15em; margin-right: 3px;
+}
 .vl .tap { min-width: 44px; min-height: 44px; display: inline-flex;
            align-items: center; justify-content: center; }
 
@@ -242,11 +301,170 @@ SCREEN_CSS = """
 .vl .mascot-pair .mascot:last-child  { transform: rotate(-7deg); transform-origin: bottom center; }
 
 /* ---- the shell ---------------------------------------------------- */
-.vl-top { display: flex; align-items: center; justify-content: space-between;
-          padding: var(--space-4) var(--gutter) var(--space-2); flex: none; }
+/* Three slots, the outer two equal-weight, so whatever sits in the middle is
+   centred on the screen rather than on whatever is left over. A flex row with
+   space-between would hang the mark off-axis by half the back arrow. */
+.vl-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+          padding: var(--space-3) var(--gutter) var(--space-2); flex: none; gap: var(--space-2);
+          min-height: 44px; }
+.vl-slot { display: flex; align-items: center; min-width: 0; }
+.vl-slot-end { justify-content: flex-end; }
 .vl-word { font-size: 13px; font-weight: 700; letter-spacing: 0.22em; color: var(--ink); }
+/* The mark itself, not the letters retyped: the same artwork the landing
+   masks, sized by height with the drawing's own ratio so it cannot be
+   squashed, and filled with the same travelling gradient the landing uses.
+   It is the brand's one moment of colour on an otherwise quiet bar, and the
+   fill is shared rather than restated -- see `.brand-fill` below. */
+.vl-logo { display: block; height: 66px; aspect-ratio: 753 / 391; }
+
+/* ---- the mark's fill ---------------------------------------------- */
+/* One rule for both marks: the bar's and the landing's. A mask keeps the
+   letterforms exactly as drawn, and what fills them is a gradient wide
+   enough to slide -- so the colour *travels* through the letters instead of
+   the whole mark cross-fading, which at this size reads as a flicker.
+   It is one purple lightening and coming back: --action against the same
+   hue lifted toward white. The lift is mixed from --action rather than
+   written down, so it follows a palette change instead of drifting off it,
+   and it mixes toward white rather than toward --surface so that "lighter"
+   still means lighter in dark mode. */
+.brand-fill {
+  --brand-lift: color-mix(in srgb, var(--action) 42%, #FFFFFF);
+  background-image: linear-gradient(100deg,
+    var(--action) 0%, var(--brand-lift) 25%, var(--action) 50%,
+    var(--brand-lift) 75%, var(--action) 100%);
+  background-size: 340% 100%;
+  background-repeat: no-repeat;
+  -webkit-mask: var(--logo-art) center / contain no-repeat;
+  mask: var(--logo-art) center / contain no-repeat;
+  animation: brand-travel 9s linear infinite;
+}
+@keyframes brand-travel {
+  from { background-position: 0% 50%; }
+  to   { background-position: 100% 50%; }
+}
+/* ch.05: motion is decoration here, so it is the first thing to go. The
+   resting position is off the champagne stop, which has the least contrast
+   against a pale ground. */
+@media (prefers-reduced-motion: reduce) {
+  .brand-fill { animation: none; background-position: 0% 50%; }
+}
 .vl-main { flex: 1 1 auto; min-height: 0; padding: 0 var(--gutter); display: flex; flex-direction: column; }
 .vl-foot { flex: none; padding: var(--space-4) var(--gutter) var(--space-6); }
+.vl .vl-scroll { overflow-y: auto; }
+.vl-back { color: var(--body); flex: none; }
+.vl-title { font-size: 15px; font-weight: 600; color: var(--ink); }
+
+/* ---- the tab bar (ch.05) ------------------------------------------ */
+/* A floating pill on its own shell colour, which is the one component the
+   guide keeps dark in both modes -- it is chrome, and chrome that inverts
+   with the ground stops reading as a fixed landmark. */
+.vl-tabbar {
+  flex: none; margin: var(--space-2) var(--gutter) var(--space-4);
+  background: var(--nav-shell); border-radius: var(--r-pill); box-shadow: var(--e-nav);
+  display: flex; align-items: center; justify-content: space-around;
+  padding: var(--space-2) var(--space-3);
+}
+.vl-tabbar a { display: flex; flex-direction: column; align-items: center; gap: 2px;
+               min-width: 44px; min-height: 44px; justify-content: center;
+               color: var(--nav-rest); text-decoration: none; font-size: 10px; font-weight: 600; }
+.vl-tabbar a.is-on { color: var(--nav-active); }
+.vl-tabbar svg { width: 21px; height: 21px; }
+
+/* ---- list rows and sections ---------------------------------------- */
+.vl .stack { display: flex; flex-direction: column; gap: var(--space-3); }
+.vl .stack-tight { display: flex; flex-direction: column; gap: var(--space-2); }
+.vl .row-link { display: flex; align-items: center; gap: var(--space-3); text-decoration: none;
+                color: inherit; }
+.vl .row-main { flex: 1; min-width: 0; }
+.vl .row-main strong { display: block; color: var(--ink); font-size: 15px; font-weight: 600; }
+.vl .row-main span { display: block; color: var(--quiet); font-size: 13px;
+                     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vl .row-end { flex: none; color: var(--quiet); display: flex; align-items: center; gap: var(--space-2); }
+.vl .avatar { width: 46px; height: 46px; border-radius: var(--r-pill); flex: none;
+              background: var(--field); object-fit: cover; }
+.vl .ph { background: var(--field); display: block; }
+.vl .section-label { font-size: 11px; font-weight: 600; letter-spacing: .09em;
+                     text-transform: uppercase; color: var(--quiet);
+                     margin: var(--space-5) 0 var(--space-2); }
+.vl .section-label:first-child { margin-top: 0; }
+
+/* ---- tags (ch.05 badges) -------------------------------------------- */
+.vl .tag { display: inline-flex; align-items: center; gap: 4px; border-radius: var(--r-xs);
+           padding: 3px 7px; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+           text-transform: uppercase; background: var(--action-wash); color: var(--ink-accent); }
+.vl .tag-gold { background: var(--delight); color: var(--on-delight); }
+.vl .tag-quiet { background: var(--field); color: var(--quiet); }
+.vl .tag-danger { background: var(--danger); color: var(--on-action); }
+
+/* ---- switches (ch.05) ------------------------------------------------ */
+/* Selection is a fill change, never an outline -- the same rule the chips
+   follow, applied to the control that reads as its own object. */
+.vl .switch { width: 44px; height: 26px; border-radius: var(--r-pill); background: var(--hairline);
+              position: relative; flex: none; transition: background var(--d-base) var(--ease); }
+.vl .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+                     border-radius: var(--r-pill); background: var(--surface); box-shadow: var(--e1);
+                     transition: transform var(--d-base) var(--ease); }
+.vl .switch.is-on { background: var(--action); }
+.vl .switch.is-on::after { transform: translateX(18px); }
+
+/* ---- steps / progress ------------------------------------------------ */
+.vl .steps { display: flex; gap: 4px; margin-bottom: var(--space-4); }
+.vl .steps i { height: 3px; flex: 1; border-radius: var(--r-pill); background: var(--hairline); }
+.vl .steps i.is-on { background: var(--action); }
+
+/* ---- chat bubbles ---------------------------------------------------- */
+.vl .log { display: flex; flex-direction: column; gap: var(--space-2); flex: 1;
+           overflow-y: auto; padding: var(--space-3) 0; }
+.vl .bubble { max-width: 78%; padding: 9px 13px; border-radius: var(--r-lg);
+              font-size: 14px; line-height: 19px; }
+.vl .bubble.them { align-self: flex-start; background: var(--surface); color: var(--ink);
+                   box-shadow: var(--e1); border-bottom-left-radius: var(--r-xs); }
+.vl .bubble.me { align-self: flex-end; background: var(--action); color: var(--on-action);
+                 border-bottom-right-radius: var(--r-xs); }
+.vl .composer { display: flex; gap: var(--space-2); align-items: center; }
+.vl .composer .field { flex: 1; }
+.vl .send { width: 44px; height: 44px; flex: none; border-radius: var(--r-pill);
+            background: var(--action); color: var(--on-action); border: 0;
+            display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+
+/* ---- the timer strip ------------------------------------------------- */
+.vl .strip { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3);
+             background: var(--surface); border-radius: var(--r-md); box-shadow: var(--e1); }
+.vl .strip-time { font-weight: 700; font-size: 17px; color: var(--ink);
+                  font-variant-numeric: tabular-nums; flex: none; }
+
+/* ---- prose (legal, faq, safety) -------------------------------------- */
+.vl .prose h2 { font-size: 15px; font-weight: 600; color: var(--ink); margin: var(--space-5) 0 var(--space-1); }
+.vl .prose h2:first-child { margin-top: 0; }
+.vl .prose p { font-size: 14px; line-height: 21px; color: var(--body); margin-bottom: var(--space-3); }
+.vl .qa { border-bottom: 1px solid var(--hairline); padding: var(--space-3) 0; }
+.vl .qa:last-child { border-bottom: 0; }
+.vl .qa summary { font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer;
+                  list-style: none; display: flex; justify-content: space-between; gap: var(--space-3); }
+.vl .qa summary::-webkit-details-marker { display: none; }
+.vl .qa p { margin: var(--space-2) 0 0; font-size: 14px; line-height: 20px; color: var(--body); }
+
+/* ---- forms ------------------------------------------------------------ */
+.vl .form { display: flex; flex-direction: column; gap: var(--space-3); }
+.vl .lbl { font-size: 12px; font-weight: 600; color: var(--quiet); display: block;
+           margin-bottom: var(--space-1); }
+.vl textarea.field { min-height: 84px; padding: var(--space-3) var(--space-4); line-height: 20px;
+                     resize: none; font-family: inherit; }
+
+/* ---- admin: denser, and unapologetically so --------------------------- */
+.vl .adm-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) 0;
+               border-bottom: 1px solid var(--hairline); }
+.vl .adm-row:last-child { border-bottom: 0; }
+.vl .adm-num { font-weight: 700; font-size: 20px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.vl .adm-stat { flex: 1; }
+.vl .adm-stat span { display: block; font-size: 11px; color: var(--quiet); text-transform: uppercase;
+                     letter-spacing: .08em; font-weight: 600; }
+
+/* ---- error screens ----------------------------------------------------- */
+.vl .mid { flex: 1; display: flex; flex-direction: column; align-items: center;
+           justify-content: center; text-align: center; gap: var(--space-3); }
+.vl .mid-badge { width: 64px; height: 64px; border-radius: var(--r-pill); background: var(--field);
+                 color: var(--quiet); display: flex; align-items: center; justify-content: center; }
 """
 
 
