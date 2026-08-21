@@ -1,7 +1,7 @@
 # Velvet
 
 Flask 3 + **PostgreSQL** dating app, server-rendered Jinja. Deps: `flask`, `requests`,
-`gunicorn`, `psycopg[binary]`, `psycopg-pool` — no ORM, no LLM SDK.
+`gunicorn`, `psycopg[binary]`, `psycopg-pool`, `cryptography` — no ORM, no LLM SDK.
 
 The dependency list is deliberately short, so things that usually arrive as a library are
 hand-rolled instead: CSRF on `itsdangerous` (a hard Flask dependency, so already
@@ -10,6 +10,12 @@ and transactional email as an HTTPS call to Resend through `requests`. Postgres-
 rate limiting is also the *correct* choice here, not just the dependency-free one: Cloud
 Run runs many instances against one database, and an in-process counter would hand an
 attacker the whole budget again on every instance they reached.
+
+`cryptography` is the one exception to that instinct, and `webpush.py` says why: Web
+Push means ECDH on P-256, HKDF, an AES-GCM seal and an ES256 signature, and those are
+not "a library for something you could write in twenty lines" — they are the category
+where hand-rolling leaks keys and plaintexts. Everything *above* the primitives is
+still ours, at ~150 lines against `pywebpush` and its four transitive dependencies.
 
 ## Local development
 
@@ -23,6 +29,7 @@ python check_bots.py      # demo members never reach a real person's search pool
 python check_presence.py  # a search leaves the pool when its browser stops polling
 python check_i18n.py      # both languages complete, and they still match each other
 python check_pin.py       # every profile and search lands in the one city
+python check_notifications.py  # who is told what, how often, over which channel
 python check_landing.py   # the landing page's busyness line is true at every tier
 python tools/check_hero_fits.py   # landing hero fits above the buttons (needs a browser)
 ```
@@ -66,7 +73,8 @@ Keep replies concise; prefer the smallest diff that does the job.
 ## Layout
 
 - `app.py` — **~5,000 lines**, single module: all routes, DB access, and helpers
-- `templates/` — 27 Jinja templates, all extending `base.html`
+- `templates/` — 32 Jinja templates, all extending `base.html`
+  (plus `sw.js`, which is a template only because it interpolates `url_for`)
 - `templates/velvt.css` — the whole design system, a Jinja template of its own
 
 **The stylesheet is not in the page.** It is 134KB — inlined in `base.html` it was
@@ -86,6 +94,42 @@ under 1KB, and sets `Vary: Accept-Encoding` either way.
 **Photos carry an ETag**, so a revisit is a 304 with no body rather than up to
 `PHOTO_MAX_BYTES` again — six of those to a profile is the heaviest thing the app
 serves, and it comes out of Postgres through the app with no CDN in front of it.
+
+**`PHOTO_MAX_BYTES` is 25MB, and what is *stored* is downscaled twice over.** 2MB was
+rejecting an ordinary photo from an ordinary phone, so the limit was being enforced
+against the camera rather than against anything the app cares about. Accepting 25MB and
+keeping it would only have moved the problem into the database, so nothing keeps it:
+
+- **The browser re-encodes before uploading** (`_profile_fields.html`), to
+  `PHOTO_UPLOAD_MAX_EDGE` on the long side. A 10.7MB 4032×3024 camera frame leaves as
+  1.5MB — 86% of the transfer saved before a byte goes over mobile data. This is also
+  what makes a six-photo save possible at all; see the ceiling below.
+- **`downscale_photo()` does it again on the way in**, and that one is the guarantee: it
+  runs on whatever actually arrives, including from a client that executed none of our
+  JavaScript. Same 10.7MB photo, 1.4MB stored.
+
+**It strips EXIF, and that matters more than the pixels.** A phone photo routinely
+carries the GPS coordinates of where it was taken. `pinned_place()` puts everyone in one
+city deliberately; storing someone's street and handing it to whoever they match with
+would undo that quietly, with nothing on screen looking wrong. Orientation is *applied*
+before the tag is dropped, or every portrait photo would be stored on its side.
+An image that will not decode is stored as it came — it already passed the magic-byte
+check and the size cap, and refusing a save because an optimisation failed is the wrong
+trade.
+
+**`MAX_CONTENT_LENGTH` is capped by the platform, not by our arithmetic.** The form's own
+sum says `PHOTO_MAX_PER_USER * PHOTO_MAX_BYTES` (~151MB), but **Cloud Run refuses an
+HTTP/1 request over 32 MiB at the front door**, before it reaches the container, and
+answers with its own error rather than ours. So the cap is the smaller of the two, and
+six 25MB originals in one request cannot be made to work here by raising a number —
+the browser-side re-encode is what makes six photos a few megabytes instead. On Cloud Run
+`/tmp` is a tmpfs, so Werkzeug's spill of a body that size is real instance memory: see
+the `--memory` note in `docs/deploy-gcp.md`.
+
+A 413 is now a rendered page (`upload_too_large.html`) rather than Werkzeug's bare one —
+there was no `errorhandler` at all before, which at a 25MB limit people would actually
+have met. `_profile_fields.html` also checks each picked file's size before anything is
+sent, because the server's answer cannot arrive until the whole upload has.
 
 **`overflow: hidden` hides bugs, not just content.** `.wiz-fit` clips rather than
 scrolls, which is right for a step whose contents are known — but it means a box
@@ -110,6 +154,22 @@ the pull-up won and slid the wizard's Next row under the bar. `.match` redefines
 `--fit-tight` locally with a higher knee, because at full size the reveal does not fit
 an 812px phone. One height query survives, in `.match-note.is-aside`: an aside is a
 line or it is nothing, and there is no fractional version to ramp to.
+**Icons are a registry, not markup.** `templates/_icons.html` holds all 38 glyphs in
+`ICONS` (keyed by what they *are* — a heart, a pin, a ruler) and a `SLOTS` map (keyed by
+where they *go* — `tab.search`, `card.interests`, `rel.Long-term relationship`). Templates
+call `{{ icon("tab.search") }}` and nothing else. They used to carry 28 inline `<svg>`
+blocks across six files, several of them an `{% if %}` chain with a branch per option,
+which meant an icon had no name to ask for, no list to choose from, and a weight change
+meant 28 edits that could silently disagree — `search_start.html` had already invented
+half the fix with a dict of path data keyed by relationship type.
+
+Changing which mark a place uses is now one line in `SLOTS`; an empty value draws nothing,
+which is how `.pill` carries an icon on interests and none on hobbies without either
+template knowing. **The spec lives on the macro, not the drawings**: `ICON_STROKE` (2) and
+`ICON_CAP` (round) are emitted on the `<svg>` and inherited by shapes that no longer state
+their own, scaled per glyph because a few are drawn on a 20 or 21 box and 2px there would
+read heavier than 2px on 24. The Restyler previews all of it and exports the diff.
+
 - `docs/style-guide.html` — velvet-textured design system; `docs/deploy-gcp.md` — Cloud Run
 - `docs/launch-readiness.html` — the pre-launch audit these changes came from, with what
   is still outstanding (image scanning, passkeys, selfie verification, stepped
@@ -119,6 +179,9 @@ line or it is nothing, and there is no fractional version to ramp to.
 - `check_onboarding.py` — behaviour checks for the first-search gate and the explainer
 - `check_presence.py` — behaviour checks for the search heartbeat and ghost matches
 - `check_pin.py` — behaviour checks for the single-city pin
+- `check_notifications.py` — behaviour checks for the notification system
+- `webpush.py` — Web Push spoken directly: VAPID and aes128gcm. Run it to mint a key
+  pair. Imported by `app.py` and nothing else
 - `check_landing.py` — behaviour checks for the landing page's member/searcher line
 - `translations.py` — every user-facing string, `en` + `nl`; `check_i18n.py` and
   `tools/check_translations.py` guard it
@@ -126,6 +189,7 @@ line or it is nothing, and there is no fractional version to ramp to.
   chat. Idempotent; `--reset` to rebuild
 - `smoke.py`, `dev.ps1`, `docker-compose.yml` — local dev only, not deployed
 - `vastai_client.py` — standalone Vast.ai GPU-rental CLI, **not imported by the app**
+- `templates/_icons.html` — **every icon in the app, in one place.** See below
 - `static/velvt-icon.svg` — the square tab mark; also served as `/favicon.ico`, since
   browsers ask for that whether or not a `<link rel="icon">` tells them to
 - `make_search_avatars.py`, `static/velvet-searching.lottie` — **both dead now.** The
@@ -310,6 +374,100 @@ never what it says. Demo members are excluded from every tier.
 rather than folded in, and every member's profile one click away. `check_landing.py`
 holds each tier to the database.
 
+## Notifications
+
+Four reasons to interrupt someone — **a new message**, **someone searching you could
+match with**, **a reminder**, **a new feature** — and three ways of doing it: an open
+tab, a push to a browser that is closed, an email. `NOTIFY_KINDS` and `NOTIFY_CHANNELS`
+(`app.py:~410`) are that grid, and `/settings` renders it as one.
+
+**The kinds are the reasons, not the transports.** A single "notifications on/off", or
+an email switch with nothing saying what it is about, gives someone the choice between
+all of it and none of it — which is how people end up turning everything off. Rows are
+what happened, columns are how you hear about it.
+
+**`notifications` is a ledger, and the three channels read from it.** Without it, "did
+we tell them?" has three answers that cannot be reconciled — and the in-tab channel
+could not exist at all, since a browser tab has nowhere to receive anything and can
+only poll. `/notifications` is a *history*, not a fourth channel: turning every switch
+off means "do not interrupt me", never "do not tell me".
+
+Two defaults are deliberately off. **Feature announcements are opt-in for mail and
+push** — an announcement is marketing however carefully it is written, and mailing it to
+people who never asked is what PECR and the ePrivacy Directive are about. **Pool notices
+are opt-in for mail** for a plainer reason: they are true for about five minutes, and an
+inbox is not a five-minute medium.
+
+`notify()` records the row and starts it moving; the four timestamps on it *are* the
+delivery record. `seen_at` is "an open tab raised it", `read_at` is "they opened it",
+and `pushed_at`/`emailed_at` mean that channel is finished with the row — delivered,
+refused, or not wanted. Nothing is ever mailed to an unconfirmed address, whatever the
+preference says.
+
+**Only a chat message is pushed on the request that caused it** (`push_now=True`): one
+call, to one person's subscriptions, while the conversation is still happening.
+Everything else leaves `pushed_at` NULL for `/tasks/notifications` to drain, because a
+search that notifies twelve people must not hold the searcher's request open for twelve
+sequential round trips to somebody else's push service.
+
+**Email waits `NOTIFY_EMAIL_DELAY_MINUTES` (15) and is then skipped if it has been
+read.** Most notices are read before they are due, which is the point — and three that
+are still due become one email, not three.
+
+`NOTIFY_DEDUPE_MINUTES` is what stops it becoming noise: ten messages in one
+conversation are one notification (`dedupe_key = message:<match_id>`), and a second
+pool notice twenty minutes after the first is nagging.
+
+**The pool notice never names anybody.** It only goes out when the two searches are
+mutually compatible by the same `searches_compatible()` the matcher uses — if they
+would not be paired, "someone you could match with" is not true — and anyone already
+searching is skipped, since the matcher will pair them anyway. Blocked either way,
+already in a live match, consent withdrawn, or a demo member: all excluded.
+`POOL_NOTICE_MAX_RECIPIENTS` (12) is what keeps it from becoming a broadcast channel.
+It hangs off `save_search()` rather than the two screens that call it, so a third entry
+point cannot silently fail to tell anyone.
+
+**Web Push is spoken directly, in `webpush.py`.** VAPID (RFC 8292) signs an ES256 JWT
+that identifies us to the push service; the payload is sealed with aes128gcm (RFC 8291)
+so the service relays bytes it cannot read. `python webpush.py` mints the key pair.
+Unset keys mean the push channel is simply off and the other two carry on — the settings
+screen says so rather than offering a button that cannot work.
+
+`push_subscriptions.endpoint` is UNIQUE service-wide and is the natural key: signing in
+as somebody else on a shared laptop **moves** the subscription rather than leaving the
+previous account's notifications arriving on a device that is no longer theirs. A 404 or
+410 from a push service means the browser is gone, so the row is deleted rather than
+retried forever; anything else is counted, and only `PUSH_FAILURE_LIMIT` consecutive
+failures give up on it.
+
+**The unread count is worn in four places and read once.** `unread_badge()` in
+`base.html` renders it into the desktop nav, the desktop footer, the tab bar's More
+sheet and — the one that matters on a phone, where the other three are hidden or behind
+a tap — the More trigger itself. It carries `hidden` at zero rather than drawing a "0",
+caps at `99+`, and the same poll that raises the in-tab toasts repaints all four, so a
+page left open for ten minutes does not go on claiming a number that has moved. The
+count is cached on `g` for the render, and cleared in `load_current_user()` — `g` is
+scoped to the *app* context, not the request, so without that a reused app context
+(a test client inside `test_request_context`, a CLI command) carries the previous
+request's number into the next one.
+
+`/sw.js` is served from the root, not `/static`, so its scope is the whole site — a
+worker registered from `/static/` may only control `/static/`, and one that cannot open
+the page it is notifying about is no use. It has no fetch handler on purpose: this
+worker exists to receive pushes, not to become a second copy of the app's routing.
+`/manifest.webmanifest` is there because iOS hands out a push subscription only to a web
+app that was added to the home screen.
+
+**Notification text is stored rendered, in English**, the same choice the transactional
+email already makes and for the same reason: mail and push leave with no request and no
+session, so there is no language to render into.
+
+`check_notifications.py` holds all of it, and pairs every "this goes out" with a "this
+stays quiet" — a notifier that tells everybody everything passes any test that only
+asks whether something was sent. It also decrypts a real payload the way a browser
+would, because if `encrypt()` and the browser ever disagree every push in production is
+an undecryptable blob and nothing else would say so.
+
 ## Languages
 
 Two, `en` and `nl`, in `translations.py` — plain dicts, no gettext and no build step,
@@ -345,13 +503,14 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 
 | Area | Routes |
 |---|---|
-| misc | `/lab` (admin), `/`, `/healthz` + `/-/health`, `/how-matching-works`, `/lang/<code>`, `/tasks/purge-deletions` |
+| misc | `/lab` (admin), `/`, `/healthz` + `/-/health`, `/how-matching-works`, `/lang/<code>`, `/tasks/purge-deletions`, `/tasks/notifications` |
 | auth | `/register`, `/login`, `/logout`, `/verify/<token>`, `/verify/resend`, `/forgot`, `/reset/<token>` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
 | legal | `/terms`, `/privacy`, `/imprint`, `/safety`, `/faq` |
-| settings | `/settings`, `…/password`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/export`, `…/delete`, `…/delete/cancel` |
+| settings | `/settings`, `…/password`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/notifications`, `…/export`, `…/delete`, `…/delete/cancel` |
 | safety | `/report/<id>`, `/block/<id>`, `/unblock/<id>` |
-| moderation | `/admin/members`, `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate` |
+| moderation | `/admin/members`, `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate`, `/admin/announce` |
+| notifications | `/notifications`, `…/feed`, `…/seen`, `/push/subscribe`, `/push/unsubscribe`, `/sw.js`, `/manifest.webmanifest` |
 | search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/chips` (GET+POST), `/search/status`, `/search/cancel` |
 | match lifecycle | `/match/<id>/state`, `/match/<id>/decide`, `/match/<id>/skip-reveal` |
 | chat | `/chats`, `/chat/<id>`, `…/messages`, `…/send` |
@@ -377,6 +536,12 @@ device does not see it again.
 has no background worker, so without something calling this daily, deletions never
 actually complete.
 
+**There are two such endpoints now, and one shared secret.** `/tasks/notifications`
+wants calling every few minutes: it drains the queued mail and the queued pushes and
+raises the scheduled reminders. Separate from the daily purge because the cadences
+genuinely differ, not because it was easier — mail that waits a day is not a
+notification, and a deletion purge does not want running every five minutes.
+
 That one call does two jobs — `purge_due_deletions()` finishes accounts past their
 grace period, then `purge_expired_data()` enforces the retention schedule. The
 schedule is the block of `*_RETENTION_DAYS` constants near `DELETION_GRACE_DAYS`
@@ -390,6 +555,8 @@ schedule is the block of `*_RETENTION_DAYS` constants near `DELETION_GRACE_DAYS`
 | resolved reports | 365 days | the record of a moderation decision |
 | `rate_hits` | 2 days | operational, outlives no window |
 | `security_events` | 90 days | holds IP addresses; not exempt for being useful |
+| notifications | 60 days | a receipt for something that still exists elsewhere |
+| push subscriptions | 180 days | aged from the last *successful* push, not creation |
 
 `security_event()` records login success/failure, password changes and resets, reports
 filed, admin actions, CSRF rejections and rate-limit hits — to the `security_events`

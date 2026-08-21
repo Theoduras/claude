@@ -54,6 +54,82 @@
     </form>
   </section>
 
+  <!-- ---------- notifications ---------- -->
+  {#- A grid, not a single "notifications on/off": the choice worth offering
+      is *what* you hear about, and someone who only wants to know when a
+      person has written to them should not have to give up that to silence
+      product news. Rows are the reasons, columns are the ways. -#}
+  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
+    <h2 style="font-size: 1.1rem; margin: 0 0 0.3rem;">Notifications</h2>
+    <p class="hint" style="margin: 0 0 0.9rem;">
+      Whatever you choose here, everything still lands in
+      <a href="{{ url_for('notifications_inbox') }}">your notifications</a> —
+      these settings decide what interrupts you, not what you are told.
+    </p>
+
+    <form method="post" action="{{ url_for('update_notification_prefs') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {#- .switch-row is the design system's own control for a checkbox with a
+          sentence beside it: it undoes the global `label` rule (which would
+          set these as uppercase eyebrows) and the global `input` rule (which
+          would stretch the box to full width), and it carries the violet
+          accent colour. Laid out as a wrapping flex row so the three
+          channels sit side by side wherever there is room for them. -#}
+      {% set channel_labels = {'browser': 'In this tab', 'push': 'On my devices',
+                               'email': 'By email'} %}
+      {% for kind, heading, blurb in notify_kinds %}
+        <div style="margin: 0 0 1.3rem;">
+          <strong style="display:block;">{{ heading }}</strong>
+          <span class="hint" style="display:block; margin: 0.15rem 0 0.5rem;">{{ blurb }}</span>
+          <div style="display:flex; flex-wrap:wrap; column-gap:1.2rem;">
+            {% for channel in notify_channels %}
+              <label class="switch-row">
+                <input type="checkbox" name="{{ kind }}.{{ channel }}" value="1"
+                       {% if notify_prefs[kind][channel] %}checked{% endif %}>
+                <span>{{ channel_labels[channel] }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+      <button class="btn" type="submit">Save notification settings</button>
+    </form>
+
+    <div style="margin-top: 1.2rem;">
+      <h3 style="font-size: 0.98rem; margin: 0 0 0.35rem;">Devices that can be pushed to</h3>
+      {% if not push_ready %}
+        <p class="hint" style="margin: 0;">
+          Push isn't configured on this deployment, so "On my devices" has
+          nothing to send through. The other two work as normal.
+        </p>
+      {% else %}
+        {% if not push_devices %}
+          <p class="hint" style="margin: 0 0 0.5rem;">
+            None yet. Turning this on asks the browser for permission, once.
+          </p>
+        {% endif %}
+        {% for d in push_devices %}
+          <p class="hint" style="margin: 0 0 0.35rem;">
+            {{ d.user_agent or 'Unknown browser' }}<br>
+            added {{ d.created_at.strftime('%Y-%m-%d') }}
+            {%- if d.last_ok_at %} · last reached {{ d.last_ok_at.strftime('%Y-%m-%d') }}
+            {%- else %} · nothing sent yet{% endif %}
+          </p>
+        {% endfor %}
+        {#- Enabled by script once the browser has actually shown it supports
+            push. Rendered disabled so a browser with no service worker
+            support -- or with JavaScript off -- never offers a button that
+            could not possibly work. -#}
+        <button class="btn btn-secondary" type="button" id="push-toggle" disabled
+                data-vapid="{{ vapid_public_key }}"
+                data-subscribe="{{ url_for('push_subscribe') }}"
+                data-unsubscribe="{{ url_for('push_unsubscribe') }}"
+                data-worker="{{ url_for('service_worker') }}">Checking this browser…</button>
+        <p class="hint" id="push-status" style="margin: 0.4rem 0 0;"></p>
+      {% endif %}
+    </div>
+  </section>
+
   <!-- ---------- devices ---------- -->
   <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
     <h2 style="font-size: 1.1rem; margin: 0 0 0.6rem;">Where you're signed in</h2>
@@ -147,4 +223,99 @@
   </section>
   {% endif %}
 </div>
+
+{#- Subscribing is the browser's job, not the server's: only it can mint the
+    PushSubscription, and only after a real click -- a permission prompt
+    raised on page load is the pattern browsers now refuse outright. All the
+    server does is hand over the public key and take the result. -#}
+<script nonce="{{ csp_nonce() }}">
+(function () {
+  var button = document.getElementById("push-toggle");
+  var status = document.getElementById("push-status");
+  if (!button) return;
+
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    button.textContent = "This browser can't do push";
+    status.textContent = "Safari needs Velvt added to your home screen first.";
+    return;
+  }
+
+  function post(url, body) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json",
+                 "X-CSRF-Token": window.velvtCsrf() },
+      body: JSON.stringify(body)
+    });
+  }
+
+  /* base64url -> Uint8Array. The browser wants the application server key as
+     bytes; the server sends the same base64url every other Web Push tool
+     exchanges keys in. */
+  function keyBytes(text) {
+    var padded = (text + "===".slice((text.length + 3) % 4))
+      .replace(/-/g, "+").replace(/_/g, "/");
+    var raw = atob(padded);
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  var registration = null;
+
+  function paint(subscription) {
+    button.disabled = false;
+    button.textContent = subscription ? "Stop pushing to this device"
+                                      : "Push to this device";
+    button.dataset.on = subscription ? "1" : "";
+    if (Notification.permission === "denied") {
+      button.disabled = true;
+      status.textContent =
+        "This browser is blocking notifications for Velvt. Undo that in its " +
+        "site settings and reload.";
+    }
+  }
+
+  navigator.serviceWorker.register(button.dataset.worker, { scope: "/" })
+    .then(function (reg) {
+      registration = reg;
+      return reg.pushManager.getSubscription();
+    })
+    .then(paint)
+    .catch(function () {
+      button.textContent = "Push isn't available here";
+    });
+
+  button.addEventListener("click", function () {
+    button.disabled = true;
+    if (button.dataset.on) {
+      registration.pushManager.getSubscription().then(function (sub) {
+        if (!sub) return paint(null);
+        var endpoint = sub.endpoint;
+        return sub.unsubscribe()
+          .then(function () { return post(button.dataset.unsubscribe, { endpoint: endpoint }); })
+          .then(function () { paint(null); status.textContent = "This device won't be pushed to."; });
+      });
+      return;
+    }
+    Notification.requestPermission().then(function (permission) {
+      if (permission !== "granted") return paint(null);
+      return registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: keyBytes(button.dataset.vapid)
+      }).then(function (sub) {
+        var raw = sub.toJSON();
+        return post(button.dataset.subscribe, raw).then(function (resp) {
+          if (!resp.ok) throw new Error("subscribe rejected");
+          paint(sub);
+          status.textContent = "Done. Reload the page to see it listed.";
+        });
+      });
+    }).catch(function () {
+      paint(null);
+      status.textContent = "The browser wouldn't hand out a subscription.";
+    });
+  });
+})();
+</script>
 {% endblock %}

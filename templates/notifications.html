@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Notifications — Velvt{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">Everything you missed</p>
+  <h1 style="margin-top: 0.5rem;">Notifications</h1>
+
+  {#- A history, not a fourth channel. It is here whatever the settings say,
+      so somebody who has turned off push, mail and toasts alike can still
+      find out what happened -- turning notifications off should mean "do not
+      interrupt me", never "do not tell me". -#}
+  <p class="hint" style="margin-bottom: 1.4rem;">
+    Kept for {{ notification_retention_days }} days.
+    <a href="{{ url_for('settings') }}">Choose how you hear about these</a>.
+  </p>
+
+  {% if not rows %}
+    <p class="subtitle">Nothing yet. This is where new messages, matches
+      worth knowing about and product news will land.</p>
+  {% endif %}
+
+  {% for n in rows %}
+  <article style="border-top: 1px solid var(--ink-hairline); padding: 1rem 0;">
+    <p class="hint" style="margin: 0 0 0.3rem;">
+      {{ kind_labels.get(n.kind, n.kind) }} ·
+      {{ n.created_at.strftime('%d %b, %H:%M') }}
+      {%- if not n.read_at %} · <strong>new</strong>{% endif %}
+    </p>
+    <h2 style="font-size: 1.02rem; margin: 0 0 0.25rem;">
+      <a href="{{ n.url }}">{{ n.title }}</a>
+    </h2>
+    {% if n.body %}<p class="hint" style="margin: 0;">{{ n.body }}</p>{% endif %}
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

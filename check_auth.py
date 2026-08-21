@@ -869,6 +869,191 @@ try:
 finally:
     A.CANONICAL_HOST = _host
 
+# --- photo upload limits ------------------------------------------------
+# The per-photo cap and the whole-request cap are two different refusals with
+# two different failure modes, and only one of them can name the file that
+# caused it. Both are checked, along with the relationship between them --
+# a request cap below what the form is allowed to carry would refuse a save
+# that every individual photo was within its rights to make.
+import io as _io
+
+MB = 1024 * 1024
+_buf = _io.BytesIO()
+try:
+    from PIL import Image as _Image
+    _Image.new("RGB", (64, 64), (120, 60, 200)).save(_buf, "JPEG")
+    JPEG_HEAD = _buf.getvalue()
+except ImportError:                       # Pillow is not a dependency of the app
+    JPEG_HEAD = bytes.fromhex("ffd8ffe000104a46494600010100000100010000")
+
+
+def jpeg(size_bytes):
+    """A real JPEG header padded to length -- what the app measures."""
+    return (_io.BytesIO(JPEG_HEAD + b"\x00" * (size_bytes - len(JPEG_HEAD))),
+            "photo.jpg")
+
+
+# Cloud Run refuses an HTTP/1 request over 32 MiB before it reaches the
+# container, with its own error page rather than ours -- so a cap above that
+# is not a cap this app enforces, and the 413 below would never be seen.
+check("the request cap stays under what the platform allows",
+      app.config["MAX_CONTENT_LENGTH"] < A.CLOUD_RUN_REQUEST_CEILING,
+      "%d MB, ceiling %d MB" % (app.config["MAX_CONTENT_LENGTH"] // MB,
+                                A.CLOUD_RUN_REQUEST_CEILING // MB))
+# The browser is given a budget to check against so a save that is too big is
+# a message on the form, not a page someone has to navigate back from. It has
+# to be under the real cap, or the guard would wave through what the server
+# then refuses.
+with app.test_request_context():
+    _ctx = A.inject_user()
+check("the browser's budget is under the cap it protects",
+      _ctx["upload_budget_bytes"] < app.config["MAX_CONTENT_LENGTH"],
+      "%d MB of %d MB, the rest is the form's own fields"
+      % (_ctx["upload_budget_bytes"] // MB,
+         app.config["MAX_CONTENT_LENGTH"] // MB))
+check("...and still fits a full-size photo",
+      _ctx["upload_budget_bytes"] > A.PHOTO_MAX_BYTES)
+
+check("...while still carrying a full-size photo",
+      app.config["MAX_CONTENT_LENGTH"] > A.PHOTO_MAX_BYTES,
+      "%d MB for a %d MB photo" % (app.config["MAX_CONTENT_LENGTH"] // MB,
+                                   A.PHOTO_MAX_MB))
+import translations as _T
+check("the size in the copy is the size in the code",
+      all("{size}" in _T.TRANSLATIONS[code]["msg.photo_too_big"]
+          for code in _T.LANGUAGE_CODES),
+      "in every language, so none of them can drift when the limit moves")
+
+with app.test_request_context():
+    db = A.get_db()
+    up = db.execute(
+        "INSERT INTO users (username, password_hash) VALUES (?, 'x') RETURNING id",
+        ("upload_" + A.secrets.token_hex(3),)).fetchone()["id"]
+    db.execute(
+        "INSERT INTO profiles (user_id, name, age, gender, seeking)"
+        " VALUES (?, 'Upload', 30, 'Man', 'Everyone')", (up,))
+    db.commit()
+
+up_client = app.test_client()
+login_as(up_client, up)
+_token = up_client.get("/profile/edit").get_data(as_text=True).split(
+    'name="csrf-token" content="')[1].split('"')[0]
+
+
+def save_photo(size_bytes):
+    return up_client.post("/profile/edit", data={
+        "csrf_token": _token, "name": "Upload", "age": "30",
+        "gender": "Man", "seeking": "Everyone", "photos": jpeg(size_bytes),
+    }, content_type="multipart/form-data", follow_redirects=True)
+
+
+def stored():
+    with app.test_request_context():
+        return A.get_db().execute(
+            "SELECT COUNT(*) AS n FROM photos WHERE user_id = ?", (up,)
+        ).fetchone()["n"]
+
+
+save_photo(A.PHOTO_MAX_BYTES - MB)
+check("a photo just inside the limit is stored", stored() == 1, str(stored()))
+
+# --- what actually lands in the database --------------------------------
+# The browser re-encodes before uploading, which saves the transfer. This is
+# the half that decides what is *kept*, and it has to hold for a client that
+# ran none of our JavaScript -- which is exactly what this test client is.
+try:
+    from PIL import Image as _PILImage
+    import numpy as _np
+
+    def _camera(w, h):
+        """A photo the shape and weight of one off a phone."""
+        rng = _np.random.default_rng(11)
+        small = rng.integers(0, 255, (h // 8, w // 8, 3), dtype=_np.uint8)
+        big = _PILImage.fromarray(small).resize((w, h), _PILImage.BICUBIC)
+        out = _io.BytesIO()
+        big.save(out, "JPEG", quality=98, subsampling=0)
+        return out.getvalue()
+
+    raw = _camera(4032, 3024)
+    with app.test_request_context():
+        mime, kept = A.downscale_photo(raw, "image/jpeg")
+    shrunk = _PILImage.open(_io.BytesIO(kept))
+
+    check("a camera-sized photo is downscaled before it is stored",
+          max(shrunk.size) <= A.PHOTO_STORE_MAX_EDGE,
+          "%dx%d -> %dx%d" % (4032, 3024, shrunk.size[0], shrunk.size[1]))
+    check("...which is most of its weight",
+          len(kept) < len(raw) / 4,
+          "%.1f MB -> %.1f MB" % (len(raw) / MB, len(kept) / MB))
+
+    # Small in both senses -- inside the pixel cap *and* already light. Only
+    # then is there nothing to gain, and recompressing would cost quality to
+    # save nothing.
+    _modest = _io.BytesIO()
+    _PILImage.open(_io.BytesIO(_camera(1000, 750))).save(
+        _modest, "JPEG", quality=70)
+    modest = _modest.getvalue()
+    with app.test_request_context():
+        _, untouched = A.downscale_photo(modest, "image/jpeg")
+    check("an already-modest photo is left exactly as it arrived",
+          untouched == modest,
+          "%dx%d, %d KB -- inside both thresholds"
+          % (1000, 750, len(modest) // 1024))
+
+    # A phone writes the GPS coordinates of where a photo was taken into it.
+    # This app pins every profile to one city on purpose; storing someone's
+    # street and handing it to whoever they match with would undo that, and
+    # nothing on screen would look wrong.
+    located = _io.BytesIO()
+    shot = _PILImage.new("RGB", (3000, 2000), (10, 90, 160))
+    _exif = shot.getexif()
+    _exif[274] = 6                       # orientation: the camera was turned
+    _exif[271] = "TestPhone"
+    _gps = _exif.get_ifd(0x8825)
+    _gps[1] = "N"
+    _gps[2] = (52.0, 22.0, 0.0)
+    shot.save(located, "JPEG", exif=_exif)
+
+    before = _PILImage.open(_io.BytesIO(located.getvalue()))
+    check("the fixture really does carry GPS",
+          bool(before.getexif().get_ifd(0x8825)), "or the next check proves nothing")
+
+    with app.test_request_context():
+        _, cleaned = A.downscale_photo(located.getvalue(), "image/jpeg")
+    after = _PILImage.open(_io.BytesIO(cleaned))
+    check("a stored photo carries no EXIF, so no location",
+          not dict(after.getexif()) and not after.getexif().get_ifd(0x8825))
+    check("...and the rotation it carried was applied, not just dropped",
+          after.size[0] < after.size[1],
+          "%s landscape + orientation tag -> %s" % ((3000, 2000), after.size))
+
+    with app.test_request_context():
+        _, as_is = A.downscale_photo(b"\xff\xd8\xff\xe0" + b"\x00" * 4000,
+                                     "image/jpeg")
+    check("something undecodable is stored, not refused",
+          as_is[:4] == b"\xff\xd8\xff\xe0",
+          "it already passed the magic-byte check and the size cap")
+except ImportError:                       # pragma: no cover
+    check("Pillow is installed, so photos can be downscaled", False,
+          "pip install -r requirements.txt")
+
+reply = save_photo(A.PHOTO_MAX_BYTES + MB)
+check("a photo over it is refused by name",
+      "under %d MB" % A.PHOTO_MAX_MB in reply.get_data(as_text=True))
+check("...and nothing of it is kept", stored() == 1, str(stored()))
+
+# Past the whole-request cap there is no parsed form and no filename to
+# blame, so this is the one that used to be a bare Werkzeug error page.
+huge = up_client.post(
+    "/profile/edit",
+    data={"csrf_token": _token, "name": "Upload",
+          "photos": jpeg(app.config["MAX_CONTENT_LENGTH"] + MB)},
+    content_type="multipart/form-data")
+check("an oversized request is refused with a 413", huge.status_code == 413,
+      str(huge.status_code))
+check("...on a page that explains itself",
+      "Each photo can be up to" in huge.get_data(as_text=True))
+
 failed = [n for n, ok, _ in RESULTS if not ok]
 print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
 if failed:

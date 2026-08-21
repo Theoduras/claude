@@ -52,7 +52,48 @@ jobs:
             echo "resend=" >> "$GITHUB_OUTPUT"
           fi
 
+      # 4b. Push and the scheduled tasks are optional in exactly the way the
+      #     mail key is, and for the same reason: a reference to a secret that
+      #     does not exist fails the whole revision, so a half-finished setup
+      #     must not be able to take the site down.
+      #
+      #     Both degrade deliberately. Without the VAPID pair the push channel
+      #     is simply off and the settings screen says so, while email and the
+      #     in-tab toasts carry on. Without TASK_TOKEN the /tasks endpoints
+      #     refuse outright rather than running unauthenticated -- which is
+      #     the safe answer for one that permanently erases accounts, and the
+      #     reason the warning below is worth reading.
+      - name: Look for the push and task secrets
+        id: optional
+        run: |
+          extra=""
+
+          # Both halves or neither: one key alone cannot sign or be subscribed
+          # to, so attaching half a pair only makes the failure harder to see.
+          if gcloud secrets describe velvet-vapid-private --project="velvet-app-505108" >/dev/null 2>&1 \
+             && gcloud secrets describe velvet-vapid-public --project="velvet-app-505108" >/dev/null 2>&1; then
+            extra="$extra,VAPID_PRIVATE_KEY=velvet-vapid-private:latest,VAPID_PUBLIC_KEY=velvet-vapid-public:latest"
+          else
+            echo "::warning::VAPID keys not found - web push stays off (email and in-app notifications are unaffected). Mint a pair with 'python webpush.py' and store them as velvet-vapid-private / velvet-vapid-public."
+          fi
+
+          if gcloud secrets describe velvet-task-token --project="velvet-app-505108" >/dev/null 2>&1; then
+            extra="$extra,TASK_TOKEN=velvet-task-token:latest"
+          else
+            echo "::warning::velvet-task-token not found - /tasks/purge-deletions and /tasks/notifications will refuse, so no notification email, no reminders, no deletion purge and no retention enforcement."
+          fi
+
+          echo "extra=$extra" >> "$GITHUB_OUTPUT"
+
       # 5. Deploy to Cloud Run (FORCED PROJECT FLAG)
+      #
+      #    --memory is sized against uploads, not against the app, which idles
+      #    far below Cloud Run's 512Mi default. A photo save spools up to
+      #    ~31MB to /tmp -- a tmpfs here, so real memory -- and downscale_photo()
+      #    then decodes it, which costs several times the file size as raw
+      #    bitmap. At --concurrency=80 the default is not enough headroom, and
+      #    the symptom would be an instance OOM-killed mid-upload.
+      #    See docs/deploy-gcp.md.
       - name: Deploy
         run: |
           gcloud run deploy "$SERVICE" \
@@ -62,8 +103,9 @@ jobs:
             --allow-unauthenticated \
             --add-cloudsql-instances="${{ steps.sql.outputs.conn_name }}" \
             --set-env-vars="INSTANCE_CONNECTION_NAME=${{ steps.sql.outputs.conn_name }},DB_USER=velvet_app,DB_NAME=velvet,AUTO_LOGIN=0,FLASK_DEBUG=0,MAIL_FROM=Velvt <noreply@velvt.nl>,SUPPORT_EMAIL=support@velvt.nl,MAIL_REPLY_TO=support@velvt.nl" \
-            --set-secrets="DB_PASS=velvet-db-pass:latest,APP_SECRET_KEY=velvet-secret-key:latest,APP_ADMIN_PASSWORD=velvet-admin-pass:latest${{ steps.mail.outputs.resend }}" \
+            --set-secrets="DB_PASS=velvet-db-pass:latest,APP_SECRET_KEY=velvet-secret-key:latest,APP_ADMIN_PASSWORD=velvet-admin-pass:latest${{ steps.mail.outputs.resend }}${{ steps.optional.outputs.extra }}" \
             --min-instances=0 \
             --max-instances=10 \
             --concurrency=80 \
+            --memory=1Gi \
             --startup-probe=httpGet.path=/healthz,periodSeconds=5,timeoutSeconds=5,failureThreshold=6

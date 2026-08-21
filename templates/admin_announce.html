@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Announce — Velvt admin{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">Admin</p>
+  <h1 style="margin-top: 0.5rem;">Announce a new feature</h1>
+
+  <p class="hint" style="margin-bottom: 1.2rem;">
+    Goes to every active member's notifications. It only reaches their inbox
+    or their phone if they have asked for feature news there — announcements
+    are opt-in for email and push, and in-app for everyone else.
+    Sending the same title, text and link twice does nothing the second time.
+  </p>
+
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label for="an-title">Title</label>
+    <input id="an-title" name="title" type="text" maxlength="120" required
+           placeholder="Photos now reorder by dragging">
+
+    <label for="an-body">One line more</label>
+    <input id="an-body" name="body" type="text" maxlength="240"
+           placeholder="Drag a tile on your profile to change the order.">
+
+    <label for="an-url">Where it opens</label>
+    <input id="an-url" name="url" type="text" value="/" maxlength="200"
+           pattern="/.*" title="A path on this site, starting with /">
+
+    <button class="btn" type="submit">Announce it</button>
+  </form>
+
+  {% if recent %}
+  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.6rem;">
+    <h2 style="font-size: 1.05rem; margin: 0 0 0.6rem;">Already announced</h2>
+    {% for a in recent %}
+      <p class="hint" style="margin: 0 0 0.5rem;">
+        {{ a.sent_at.strftime('%Y-%m-%d %H:%M') }} · {{ a.people }} members<br>
+        <strong>{{ a.title }}</strong>
+        {% if a.body %}— {{ a.body }}{% endif %}
+      </p>
+    {% endfor %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

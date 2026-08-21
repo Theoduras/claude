@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -12,6 +13,11 @@
      request browsers make regardless of what is declared here. #}
   <link rel="icon" href="{{ url_for('static', filename='velvt-icon.svg') }}" type="image/svg+xml">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='velvt-icon.svg') }}">
+  {# iOS hands out a push subscription only to a web app that was added to
+     the home screen, and it will only offer that for a page with a manifest
+     declaring display: standalone. Everywhere else this is a nicety; on an
+     iPhone it is the difference between the push channel existing and not. #}
+  <link rel="manifest" href="{{ url_for('web_manifest') }}">
   {# The stylesheet is 134KB and identical on every page. Inlined, it was
      re-sent on every navigation and could never be cached; as its own URL,
      carrying a hash of its contents, it is fetched once and then served
@@ -51,6 +57,20 @@
     </script>
 </head>
 <body>
+  {# The unread count, said once and worn in three places: the desktop nav,
+     the desktop footer, and -- the one that matters on a phone -- the tab
+     bar's More trigger, which is otherwise the only route to it and gives
+     away nothing until it is tapped.
+
+     Always rendered, `hidden` while the count is zero, so the poll further
+     down can reveal it without having to build an element. A badge reading
+     "0" would be a worse answer than no badge. #}
+  {% macro unread_badge(extra="") %}
+    {%- set n = unread_notifications() -%}
+    <span class="count-badge{% if extra %} {{ extra }}{% endif %}" data-unread
+          {% if not n %}hidden{% endif %}>{{ n if n <= 99 else "99+" }}</span>
+  {%- endmacro %}
+
   {# The footer's links, in one place -- said once, used from the desktop
      footer and the mobile "More" sheet alike, so the two can never drift. #}
   {% macro more_links() %}
@@ -60,6 +80,13 @@
     <a href="{{ url_for('terms') }}">{{ t("footer.terms") }}</a>
     <a href="{{ url_for('privacy') }}">{{ t("footer.privacy") }}</a>
     <a href="{{ url_for('imprint') }}">{{ t("footer.imprint") }}</a>
+    {%- if current_user %}
+      {#- The count is read inside unread_badge() rather than passed by every
+          route: this macro is rendered on every page, and a badge only some
+          screens knew about would be worse than none. -#}
+      <a href="{{ url_for('notifications_inbox') }}"
+         >{{ t("footer.notifications") }}{{ unread_badge() }}</a>
+    {%- endif %}
     {% if current_user %}<a href="{{ url_for('settings') }}">{{ t("footer.settings") }}</a>{% endif %}
     <a href="mailto:{{ support_email }}">{{ t("footer.contact") }}</a>
   {% endmacro %}
@@ -94,12 +121,17 @@
       <a class="tab-dup" href="{{ url_for('live_search') }}">{{ t("nav.live_search") }}</a>
       <a class="tab-dup" href="{{ url_for('chats') }}">{{ t("nav.chats") }}</a>
       <a class="tab-dup" href="{{ url_for('view_profile', user_id=current_user['id']) }}">{{ t("nav.profile") }}</a>
+      {#- .tab-dup like its neighbours: on a phone these three collapse into
+          the tab bar, where the badge is carried by the More trigger. -#}
+      <a class="tab-dup" href="{{ url_for('notifications_inbox') }}"
+         >{{ t("footer.notifications") }}{{ unread_badge() }}</a>
       {% if current_user['is_admin'] %}
         {#- Admin screens are English-only (see CLAUDE.md), so these are the
             one part of the nav that is not translated. -#}
         <a href="{{ url_for('admin_members') }}">Members</a>
         <a href="{{ url_for('admin_reports') }}">Reports</a>
         <a href="{{ url_for('admin_new_profile') }}">{{ t("nav.new_profile") }}</a>
+        <a href="{{ url_for('admin_announce') }}">Announce</a>
       {% endif %}
       {#- Signing out lives in the tab bar's Info sheet on a phone and in the
           footer on a desktop. It was here as well, which made a destructive
@@ -146,41 +178,34 @@
       <a href="{{ url_for('live_search') }}"
          class="{% if ep in search_eps %}is-active{% endif %}"
          {% if ep in search_eps %}aria-current="page"{% endif %}>
-        <svg width="21" height="21" viewBox="0 0 21 21" fill="none" aria-hidden="true">
-          <circle cx="9" cy="9" r="6.2" stroke="currentColor" stroke-width="1.6"/>
-          <path d="M13.6 13.6L18.5 18.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-        </svg>
+        {{ icon("tab.search") }}
         <span class="tab-label">{{ t("tab.search") }}</span>
         <span class="tab-dot"></span>
       </a>
       <a href="{{ url_for('chats') }}"
          class="{% if ep in chat_eps %}is-active{% endif %}"
          {% if ep in chat_eps %}aria-current="page"{% endif %}>
-        <svg width="21" height="21" viewBox="0 0 21 21" fill="none" aria-hidden="true">
-          <rect x="2" y="3.5" width="14" height="10.5" rx="3.4" stroke="currentColor" stroke-width="1.6"/>
-          <path d="M6.5 17.5v-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-        </svg>
+        {{ icon("tab.chats") }}
         <span class="tab-label">{{ t("tab.chats") }}</span>
         <span class="tab-dot"></span>
       </a>
       <a href="{{ url_for('view_profile', user_id=current_user['id']) }}"
          class="{% if ep in you_eps %}is-active{% endif %}"
          {% if ep in you_eps %}aria-current="page"{% endif %}>
-        <svg width="21" height="21" viewBox="0 0 21 21" fill="none" aria-hidden="true">
-          <circle cx="10.5" cy="7" r="3.6" stroke="currentColor" stroke-width="1.6"/>
-          <path d="M3.8 18c0-3.4 3-5.4 6.7-5.4s6.7 2 6.7 5.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-        </svg>
+        {{ icon("tab.you") }}
         <span class="tab-label">{{ t("tab.you") }}</span>
         <span class="tab-dot"></span>
       </a>
     {% endif %}
+    {%- set unread = unread_notifications() if current_user else 0 %}
     <button type="button" class="tabbar-more" id="more-trigger"
-            aria-haspopup="dialog" aria-expanded="false" aria-controls="more-sheet">
-      <svg width="21" height="21" viewBox="0 0 21 21" fill="none" aria-hidden="true">
-        <circle cx="10.5" cy="10.5" r="8" stroke="currentColor" stroke-width="1.6"/>
-        <path d="M10.5 9.4v5.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-        <circle cx="10.5" cy="6.6" r="0.95" fill="currentColor"/>
-      </svg>
+            aria-haspopup="dialog" aria-expanded="false" aria-controls="more-sheet"
+            {#- the visible label is "Info", so the number needs saying out
+                loud or it is a decoration with no meaning attached -#}
+            aria-label="{{ t('tab.info') }}{% if unread %} — {{ unread }} unread notification{{ '' if unread == 1 else 's' }}{% endif %}"
+            data-unread-label="{{ t('tab.info') }}">
+      {% if current_user %}{{ unread_badge("tab-badge") }}{% endif %}
+      {{ icon("tab.info") }}
       <span class="tab-label">{{ t("tab.info") }}</span>
       {# The tabs are icon + label + dot; this one has no page to be "current"
          on, so its dot never lights. It is still here because without it the
@@ -198,9 +223,7 @@
       <div class="sheet-head">
         <h2>{{ t("sheet.title") }}</h2>
         <button type="button" class="sheet-x" data-close aria-label="{{ t('sheet.close') }}">
-          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-          </svg>
+          {{ icon("sheet.close") }}
         </button>
       </div>
       <div class="sheet-body">
@@ -218,12 +241,7 @@
           <form method="post" action="{{ url_for('logout') }}" class="more-sheet-logout">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit">
-              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path d="M8 17H4.5A1.5 1.5 0 0 1 3 15.5v-11A1.5 1.5 0 0 1 4.5 3H8"
-                      stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-                <path d="M12.5 13.5 16.5 10l-4-3.5M16 10H7.5"
-                      stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+              {{ icon("sheet.logout") }}
               {{ t("nav.log_out") }}
             </button>
           </form>
@@ -232,6 +250,91 @@
     </div>
   </div>
   </div>
+  {%- if current_user %}
+  {# The browser channel, entire. A tab cannot be pushed to, so it asks --
+     and only while somebody is looking at it: a background tab raising a
+     notification is one nobody asked for, and the poll behind it is work
+     with no reader. The server never marks these seen itself; this does,
+     after it has actually raised them, so a visitor who never granted
+     permission does not silently lose every notice. #}
+  <script nonce="{{ csp_nonce() }}">
+    (function () {
+      var EVERY = 45000;
+      var feed = "{{ url_for('notifications_feed') }}";
+      var seenUrl = "{{ url_for('notifications_seen') }}";
+      var timer = null;
+
+      function raise(items) {
+        if (!("Notification" in window) || Notification.permission !== "granted") {
+          return;
+        }
+        var shown = [];
+        items.forEach(function (item) {
+          try {
+            var note = new Notification(item.title, {
+              body: item.body,
+              icon: "{{ url_for('static', filename='velvt-icon.svg') }}",
+              tag: "velvt-" + item.kind
+            });
+            note.onclick = function () { window.focus(); location.href = item.url; };
+            shown.push(item.id);
+          } catch (err) { /* a browser that refuses is not an error to report */ }
+        });
+        if (shown.length) {
+          fetch(seenUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json",
+                       "X-CSRF-Token": window.velvtCsrf() },
+            body: JSON.stringify({ ids: shown })
+          });
+        }
+      }
+
+      /* The badges the server rendered are correct for the moment the page
+         loaded and stale from then on. Someone reading a chat for ten
+         minutes should not have to reload to find out three things
+         happened, so every poll repaints them from the same response the
+         toasts come out of -- one request, both jobs. */
+      function paint(unread) {
+        var shown = unread > 99 ? "99+" : String(unread);
+        document.querySelectorAll("[data-unread]").forEach(function (badge) {
+          badge.textContent = shown;
+          badge.hidden = !unread;
+        });
+        var trigger = document.querySelector("[data-unread-label]");
+        if (trigger) {
+          trigger.setAttribute("aria-label", trigger.dataset.unreadLabel +
+            (unread ? " \u2014 " + unread + " unread notification" +
+                      (unread === 1 ? "" : "s") : ""));
+        }
+      }
+
+      function poll() {
+        if (document.visibilityState !== "visible") return;
+        fetch(feed, { headers: { "Accept": "application/json" } })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) {
+            if (!data) return;
+            paint(data.unread);
+            if (data.fresh.length) raise(data.fresh);
+          })
+          .catch(function () { /* offline; the next tick will do */ });
+      }
+
+      function start() {
+        if (timer) return;
+        timer = setInterval(poll, EVERY);
+        poll();
+      }
+      function stop() { clearInterval(timer); timer = null; }
+
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") { start(); } else { stop(); }
+      });
+      start();
+    })();
+  </script>
+  {%- endif %}
   <script nonce="{{ csp_nonce() }}">
     (function () {
       var trigger = document.getElementById("more-trigger");

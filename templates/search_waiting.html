@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ t("waiting.title") }}{% endblock %}
 {% block content %}
 {# Same column shape as the wizard this screen follows on from: a fixed
@@ -91,10 +92,7 @@
         <h2 id="filter-sheet-title">{{ t("waiting.filter_aria") }}</h2>
       </div>
       <button type="button" class="sheet-x" data-close aria-label="{{ t('sheet.close') }}">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round"/>
-        </svg>
+        {{ icon("sheet.close.wide") }}
       </button>
     </div>
     <div class="sheet-body">

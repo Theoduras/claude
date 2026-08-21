@@ -1,0 +1,156 @@
+{#- Every icon in the app, in one place.
+
+  Before this file the 38 glyphs lived as 28 inline <svg> blocks across six
+  templates, several of them an {% if %} chain with a branch per option. That
+  made an icon unaddressable: there was no name to ask for, no list to choose
+  from, and changing the stroke weight meant 28 edits that could silently
+  disagree. search_start.html already pointed the way with a dict of path data
+  keyed by relationship type -- this is that idea, for all of them.
+
+  Two things are separated on purpose:
+
+    ICONS  -- the drawings, keyed by what they are (a heart, a pin, a ruler).
+    SLOTS  -- what the app puts where, keyed by the place (tab.search,
+              pill.interest). A slot's value is a glyph name.
+
+  Changing which icon a place uses is therefore a one-line change in SLOTS,
+  and never a hunt through markup. The Restyler exports exactly that line.
+
+  Stroke width and cap style stay on each drawing for now, which is why the
+  same X mark appears three times at three weights -- close-sm (1.7),
+  close (2) and photo-remove (2.4). The design system asks for one weight,
+  2px on a 24 canvas with round caps and joins; when that lands these three
+  collapse into one glyph.
+-#}
+{%- set ICONS = {
+  'photo-remove': ['0 0 24 24', '<path d="M6 6l12 12M18 6 6 18" stroke="currentColor"/>'],
+  'tab-search': ['0 0 21 21', '<circle cx="9" cy="9" r="6.2" stroke="currentColor"/> <path d="M13.6 13.6L18.5 18.5" stroke="currentColor"/>'],
+  'tab-chats': ['0 0 21 21', '<rect x="2" y="3.5" width="14" height="10.5" rx="3.4" stroke="currentColor"/> <path d="M6.5 17.5v-3.5" stroke="currentColor"/>'],
+  'tab-you': ['0 0 21 21', '<circle cx="10.5" cy="7" r="3.6" stroke="currentColor"/> <path d="M3.8 18c0-3.4 3-5.4 6.7-5.4s6.7 2 6.7 5.4" stroke="currentColor"/>'],
+  'tab-info': ['0 0 21 21', '<circle cx="10.5" cy="10.5" r="8" stroke="currentColor"/> <path d="M10.5 9.4v5.2" stroke="currentColor"/> <circle cx="10.5" cy="6.6" r="0.95" fill="currentColor"/>'],
+  'close-sm': ['0 0 20 20', '<path d="M5 5l10 10M15 5L5 15" stroke="currentColor"/>'],
+  'log-out': ['0 0 20 20', '<path d="M8 17H4.5A1.5 1.5 0 0 1 3 15.5v-11A1.5 1.5 0 0 1 4.5 3H8" stroke="currentColor"/> <path d="M12.5 13.5 16.5 10l-4-3.5M16 10H7.5" stroke="currentColor"/>'],
+  'chevron-left': ['0 0 24 24', '<path d="M15 5 8 12l7 7" stroke="currentColor"/>'],
+  'chevron-right': ['0 0 24 24', '<path d="M9 5l7 7-7 7" stroke="currentColor"/>'],
+  'target': ['0 0 24 24', '<circle cx="12" cy="12" r="9" stroke="currentColor"/> <circle cx="12" cy="12" r="4.5" stroke="currentColor"/> <circle cx="12" cy="12" r="0.2" stroke="currentColor"/>'],
+  'rings': ['0 0 24 24', '<circle cx="9.5" cy="12" r="6" stroke="currentColor"/> <circle cx="14.5" cy="12" r="6" stroke="currentColor"/>'],
+  'question': ['0 0 24 24', '<circle cx="12" cy="12" r="9.2" stroke="currentColor"/> <path d="M9.6 9.4a2.4 2.4 0 1 1 3.4 2.2c-.8.4-1 1-1 1.9" stroke="currentColor"/> <circle cx="12" cy="16.7" r="0.15" stroke="currentColor"/>'],
+  'flame': ['0 0 24 24', '<path d="M12 21c4 0 6.5-2.6 6.5-6 0-2.7-1.6-4.3-2.6-5.9.1 1.7-.7 2.7-1.6 2.7-1.2 0-1.3-1.2-1.1-2.3.3-1.8-.4-3.9-2.2-5C10.6 6 10 8 8.6 9.6 7.4 11 6 12.4 6 15c0 3.4 2 6 6 6Z" stroke="currentColor"/>'],
+  'heart': ['0 0 24 24', '<path d="M12 20.2s-7.8-4.6-10-9.3C.4 7.4 2.6 4 6.2 4c2 0 3.7 1 4.8 2.6C12.1 5 13.8 4 15.8 4c3.6 0 5.8 3.4 4.2 6.9-2.2 4.7-10 9.3-10 9.3Z" stroke="currentColor"/>'],
+  'quotes': ['0 0 24 24', '<path d="M9 6c-2.5 1-4 3.2-4 6h3.4V18H4v-6M20 6c-2.5 1-4 3.2-4 6h3.4V18H15v-6" stroke="currentColor"/>'],
+  'id-card': ['0 0 24 24', '<rect x="3.2" y="5" width="17.6" height="14" rx="3" stroke="currentColor"/> <circle cx="9" cy="11" r="2" stroke="currentColor"/> <path d="M6 16.2c.6-1.4 1.7-2 3-2s2.4.6 3 2M14.5 10h4M14.5 13.5h4" stroke="currentColor"/>'],
+  'ruler': ['0 0 24 24', '<rect x="2.6" y="8.2" width="18.8" height="7.6" rx="1.6" stroke="currentColor"/> <path d="M7 8.2v3M11 8.2v4.4M15 8.2v3M19 8.2v4.4" stroke="currentColor"/>'],
+  'build': ['0 0 24 24', '<circle cx="12" cy="5.4" r="2.6" stroke="currentColor"/> <path d="M7.4 20v-4.2a4.6 4.6 0 0 1 9.2 0V20M6 12.2 9 9.6M18 12.2 15 9.6" stroke="currentColor"/>'],
+  'pulse': ['0 0 24 24', '<path d="M3 12h3.2l2-4.6 3.2 9.4L14 12h7" stroke="currentColor"/>'],
+  'hair': ['0 0 24 24', '<path d="M12 3.4c-4 0-6.4 3-6.4 7v7.8M18.4 18.2v-7.8c0-4-2.4-7-6.4-7" stroke="currentColor"/> <path d="M8.6 11.4c2.2 1 4.6 1 6.8 0" stroke="currentColor"/>'],
+  'eye': ['0 0 24 24', '<path d="M2.6 12S6 6.6 12 6.6 21.4 12 21.4 12 18 17.4 12 17.4 2.6 12 2.6 12Z" stroke="currentColor"/> <circle cx="12" cy="12" r="2.6" stroke="currentColor"/>'],
+  'star': ['0 0 24 24', '<path d="m12 2.8 2.3 5.3 5.7.5-4.3 3.8 1.3 5.6L12 15.1l-5 2.9 1.3-5.6L4 8.6l5.7-.5Z" stroke="currentColor"/>'],
+  'mars': ['0 0 24 24', '{# the same three marks step 2 of the wizard draws, so a row saying "Woman" is not stamped with the Mars glyph #} <circle cx="10.5" cy="13.5" r="5" stroke="currentColor"/> <path d="M14.5 9.5 20 4m0 0h-5m5 0v5" stroke="currentColor"/>'],
+  'nonbinary': ['0 0 24 24', '{# the same three marks step 2 of the wizard draws, so a row saying "Woman" is not stamped with the Mars glyph #} <circle cx="12" cy="13.5" r="4.6" stroke="currentColor"/> <path d="M12 8.9V2m-2.2 2.2L12 2l2.2 2.2" stroke="currentColor"/>'],
+  'venus': ['0 0 24 24', '{# the same three marks step 2 of the wizard draws, so a row saying "Woman" is not stamped with the Mars glyph #} <circle cx="12" cy="9" r="5" stroke="currentColor"/> <path d="M12 14v7M9 18.5h6" stroke="currentColor"/>'],
+  'pin': ['0 0 24 24', '<path d="M12 21s6.6-5.6 6.6-10.4A6.6 6.6 0 0 0 5.4 10.6C5.4 15.4 12 21 12 21Z" stroke="currentColor"/> <circle cx="12" cy="10.4" r="2.4" stroke="currentColor"/>'],
+  'at': ['0 0 24 24', '<circle cx="12" cy="12" r="3.4" stroke="currentColor"/> <path d="M15.4 8.6V13a2.8 2.8 0 0 0 5.2 1 9 9 0 1 0-3.4 6.4" stroke="currentColor"/>'],
+  'tag': ['0 0 24 24', '<path d="M4 4h7.2l8.4 8.4a2 2 0 0 1 0 2.8l-4.4 4.4a2 2 0 0 1-2.8 0L4 11.2Z" stroke="currentColor"/> <circle cx="8.2" cy="8.2" r="1.3" stroke="currentColor"/>'],
+  'palm': ['0 0 24 24', '<path d="M12 3.2c-4.9 0-8.8 3.7-8.8 8.4 0 4.4 3.3 7.2 7 7.2 1.4 0 2.2-.8 2.2-1.8 0-.9-.7-1.4-.7-2.2 0-.8.6-1.4 1.5-1.4h1.9c3 0 5.7-2 5.7-5.1 0-3-3.4-5.1-8.8-5.1Z" stroke="currentColor"/> <circle cx="8" cy="10" r="1.1" stroke="currentColor"/> <circle cx="12.6" cy="7.6" r="1.1" stroke="currentColor"/>'],
+  'compass': ['0 0 24 24', '<circle cx="12" cy="12" r="9" stroke="currentColor"/> <path d="m15.6 8.4-2 5.2-5.2 2 2-5.2Z" stroke="currentColor"/>'],
+  'ankh': ['0 0 24 24', '<circle cx="12" cy="5.8" r="2.4" stroke="currentColor"/> <path d="M12 8.2V21M6.6 12h10.8M4 14.6a8 8 0 0 0 16 0" stroke="currentColor"/>'],
+  'sliders': ['0 0 24 24', '<path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor"/> <circle cx="9" cy="7" r="1.9" stroke="currentColor"/> <circle cx="15" cy="12" r="1.9" stroke="currentColor"/> <circle cx="8" cy="17" r="1.9" stroke="currentColor"/>'],
+  'venus-lg': ['0 0 24 24', '<circle cx="12" cy="9" r="5" stroke="currentColor"/> <path d="M12 14v7M9 18.5h6" stroke="currentColor"/>'],
+  'mars-lg': ['0 0 24 24', '<circle cx="10.5" cy="13.5" r="5" stroke="currentColor"/> <path d="M14.5 9.5 20 4m0 0h-5m5 0v5" stroke="currentColor"/>'],
+  'nonbinary-lg': ['0 0 24 24', '<circle cx="12" cy="13.5" r="4.6" stroke="currentColor"/> <path d="M12 8.9V2m-2.2 2.2L12 2l2.2 2.2" stroke="currentColor"/>'],
+  'hearts': ['0 0 24 24', '<path d="M12 20.5c-3.6-2.4-6.5-4.6-6.5-7.6a3.6 3.6 0 0 1 6.5-2.1 3.6 3.6 0 0 1 6.5 2.1c0 3-2.9 5.2-6.5 7.6Z" stroke="currentColor"/> <circle cx="6.6" cy="5.4" r="1.9" stroke="currentColor"/> <circle cx="17.4" cy="5.4" r="1.9" stroke="currentColor"/>'],
+  'person': ['0 0 24 24', '<circle cx="12" cy="6.4" r="3.1" stroke="currentColor"/> <path d="M6.5 20.5v-4a5.5 5.5 0 0 1 11 0v4" stroke="currentColor"/>'],
+  'close': ['0 0 24 24', '<path d="M6 6l12 12M18 6 6 18" stroke="currentColor"/>'],
+} -%}
+
+{#- What sits where. The left side is a place in the app; the right side is a
+    glyph above. An empty value draws nothing, which is how a pill carries no
+    icon without the markup having to know that.
+
+    The pill.* slots are the design system's chips: a chip carries an icon
+    before its label, and --space-1 exists for exactly that gap. Set a glyph
+    and every pill of that kind grows one; clear it and they all lose it. -#}
+{%- set SLOTS = {
+  "tab.search": "tab-search",
+  "tab.chats": "tab-chats",
+  "tab.you": "tab-you",
+  "tab.info": "tab-info",
+  "sheet.close": "close-sm",
+  "sheet.close.wide": "close",
+  "sheet.logout": "log-out",
+  "wiz.back": "chevron-left",
+  "wiz.next": "chevron-right",
+  "profile.back": "chevron-left",
+  "profile.prev": "chevron-left",
+  "profile.next": "chevron-right",
+  "photo.remove": "photo-remove",
+
+  "card.looking_for": "target",
+  "card.about": "quotes",
+  "card.facts": "id-card",
+  "card.interests": "tag",
+  "card.hobbies": "palm",
+  "card.wants": "compass",
+  "card.needs": "ankh",
+  "card.preferences": "sliders",
+
+  "fact.ruler": "ruler",
+  "fact.body": "build",
+  "fact.pulse": "pulse",
+  "fact.hair": "hair",
+  "fact.eye": "eye",
+  "fact.ink": "star",
+  "fact.pin": "pin",
+  "fact.at": "at",
+
+  "rel.Long-term relationship": "heart",
+  "rel.Short-term relationship": "flame",
+  "rel.Friendship": "rings",
+  "rel.Not sure yet": "question",
+
+  "seek.Women": "venus-lg",
+  "seek.Men": "mars-lg",
+  "seek.Non-binary people": "nonbinary-lg",
+  "seek.Everyone": "hearts",
+
+  "gender.Man": "mars",
+  "gender.Woman": "venus",
+  "gender.Non-binary": "nonbinary",
+
+  "body.type": "person",
+
+  "pill.interest": "tag",
+  "pill.chip": "",
+  "pill.seeking": ""
+} -%}
+
+{#- The design system's icon spec, chapter 07: outline, rounded caps and
+    joins, 2px on a 24px canvas. The glyphs no longer carry these themselves --
+    they used to run 1.6 to 2.4 with mixed joins, which is what a set of icons
+    drifts into when each one states its own weight -- so changing the whole
+    app's icon weight is these two lines and nothing else.
+
+    STROKE is quoted at the spec's 24px canvas and scaled per glyph, because a
+    few of them are drawn on a 20 or 21 box: 2px there would read heavier than
+    2px here, which is the opposite of one weight. -#}
+{%- set ICON_STROKE = 2 -%}
+{%- set ICON_CAP = "round" -%}
+
+{#- One <svg>, from a slot or straight from a glyph name.
+
+    width/height are written out as the drawing's own canvas so an icon has an
+    intrinsic size even where no CSS rule reaches it; every rule in velvt.css
+    that sizes an icon still wins over the attribute. Stroke properties sit on
+    the <svg> and the shapes inherit them, which is why stripping them from the
+    drawings was enough. -#}
+{%- macro icon(slot, cls="") -%}
+  {%- set name = SLOTS.get(slot, slot) -%}
+  {%- set g = ICONS.get(name) -%}
+  {%- if g -%}
+    {%- set box = g[0].split(" ")[2] | float -%}
+    <svg width="{{ box | int }}" height="{{ box | int }}" viewBox="{{ g[0] }}" fill="none"
+         stroke-width="{{ (ICON_STROKE * box / 24) | round(2) }}"
+         stroke-linecap="{{ ICON_CAP }}" stroke-linejoin="{{ ICON_CAP }}"
+         aria-hidden="true"{% if cls %} class="{{ cls }}"{% endif %}>{{ g[1]|safe }}</svg>
+  {%- endif -%}
+{%- endmacro -%}
