@@ -362,7 +362,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 
 | Area | Routes |
 |---|---|
-| misc | `/lab` (admin), `/`, `/healthz` + `/-/health`, `/how-matching-works`, `/lang/<code>`, `/tasks/purge-deletions` |
+| misc | `/lab` (admin), `/`, `/healthz` + `/-/health`, `/how-matching-works`, `/lang/<code>`, `/robots.txt`, `/tasks/purge-deletions` |
 | auth | `/register`, `/login`, `/logout`, `/verify/<token>`, `/verify/resend`, `/forgot`, `/reset/<token>` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
 | legal | `/terms`, `/privacy`, `/imprint`, `/safety`, `/faq` |

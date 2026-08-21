@@ -61,7 +61,7 @@ jobs:
             --region="$REGION" \
             --allow-unauthenticated \
             --add-cloudsql-instances="${{ steps.sql.outputs.conn_name }}" \
-            --set-env-vars="INSTANCE_CONNECTION_NAME=${{ steps.sql.outputs.conn_name }},DB_USER=velvet_app,DB_NAME=velvet,AUTO_LOGIN=0,FLASK_DEBUG=0,MAIL_FROM=Velvt <noreply@velvt.nl>,SUPPORT_EMAIL=support@velvt.nl,MAIL_REPLY_TO=support@velvt.nl" \
+            --set-env-vars="INSTANCE_CONNECTION_NAME=${{ steps.sql.outputs.conn_name }},DB_USER=velvet_app,DB_NAME=velvet,AUTO_LOGIN=0,FLASK_DEBUG=0,SEARCH_INDEXING=1,MAIL_FROM=Velvt <noreply@velvt.nl>,SUPPORT_EMAIL=support@velvt.nl,MAIL_REPLY_TO=support@velvt.nl" \
             --set-secrets="DB_PASS=velvet-db-pass:latest,APP_SECRET_KEY=velvet-secret-key:latest,APP_ADMIN_PASSWORD=velvet-admin-pass:latest${{ steps.mail.outputs.resend }}" \
             --min-instances=0 \
             --max-instances=10 \
