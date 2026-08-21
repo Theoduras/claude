@@ -95,16 +95,36 @@ under 1KB, and sets `Vary: Accept-Encoding` either way.
 `PHOTO_MAX_BYTES` again — six of those to a profile is the heaviest thing the app
 serves, and it comes out of Postgres through the app with no CDN in front of it.
 
-**`PHOTO_MAX_BYTES` is 25MB, and nothing downscales.** 2MB was rejecting an ordinary
-photo from an ordinary phone, so the limit was being enforced against the camera rather
-than against anything the app cares about. What it costs is stated plainly: an original
-is stored in `photos.data` at full size and served back at full size, and
-`MAX_CONTENT_LENGTH` is *derived* from it (`PHOTO_MAX_PER_USER * PHOTO_MAX_BYTES`,
-~151MB) because the edit form can carry every photo at once — any smaller number refuses
-a save each individual file was entitled to make. On Cloud Run `/tmp` is a tmpfs, so
-Werkzeug's spill of a body that size is real instance memory: see the `--memory` note in
-`docs/deploy-gcp.md`. **Resizing on upload is the outstanding fix**, and it needs an
-image library the dependency list does not have.
+**`PHOTO_MAX_BYTES` is 25MB, and what is *stored* is downscaled twice over.** 2MB was
+rejecting an ordinary photo from an ordinary phone, so the limit was being enforced
+against the camera rather than against anything the app cares about. Accepting 25MB and
+keeping it would only have moved the problem into the database, so nothing keeps it:
+
+- **The browser re-encodes before uploading** (`_profile_fields.html`), to
+  `PHOTO_UPLOAD_MAX_EDGE` on the long side. A 10.7MB 4032×3024 camera frame leaves as
+  1.5MB — 86% of the transfer saved before a byte goes over mobile data. This is also
+  what makes a six-photo save possible at all; see the ceiling below.
+- **`downscale_photo()` does it again on the way in**, and that one is the guarantee: it
+  runs on whatever actually arrives, including from a client that executed none of our
+  JavaScript. Same 10.7MB photo, 1.4MB stored.
+
+**It strips EXIF, and that matters more than the pixels.** A phone photo routinely
+carries the GPS coordinates of where it was taken. `pinned_place()` puts everyone in one
+city deliberately; storing someone's street and handing it to whoever they match with
+would undo that quietly, with nothing on screen looking wrong. Orientation is *applied*
+before the tag is dropped, or every portrait photo would be stored on its side.
+An image that will not decode is stored as it came — it already passed the magic-byte
+check and the size cap, and refusing a save because an optimisation failed is the wrong
+trade.
+
+**`MAX_CONTENT_LENGTH` is capped by the platform, not by our arithmetic.** The form's own
+sum says `PHOTO_MAX_PER_USER * PHOTO_MAX_BYTES` (~151MB), but **Cloud Run refuses an
+HTTP/1 request over 32 MiB at the front door**, before it reaches the container, and
+answers with its own error rather than ours. So the cap is the smaller of the two, and
+six 25MB originals in one request cannot be made to work here by raising a number —
+the browser-side re-encode is what makes six photos a few megabytes instead. On Cloud Run
+`/tmp` is a tmpfs, so Werkzeug's spill of a body that size is real instance memory: see
+the `--memory` note in `docs/deploy-gcp.md`.
 
 A 413 is now a rendered page (`upload_too_large.html`) rather than Werkzeug's bare one —
 there was no `errorhandler` at all before, which at a 25MB limit people would actually

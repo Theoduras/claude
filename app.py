@@ -22,6 +22,7 @@ during local development and browse as admin automatically.
 
 import gzip
 import hashlib
+import io
 import json
 import math
 import mimetypes
@@ -33,6 +34,7 @@ from datetime import date, datetime as dt, timedelta, timezone
 
 import requests
 import psycopg
+from PIL import Image, ImageOps
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
@@ -702,19 +704,112 @@ PHOTO_MAX_PER_USER = 6
 PHOTO_MAX_MB = PHOTO_MAX_BYTES // (1024 * 1024)
 PHOTO_ALLOWED_MIMES = {"image/jpeg", "image/png", "image/webp"}
 
-# The whole-request cap, and the reason it is derived rather than typed: the
-# edit form can carry every photo at once, so any number smaller than this
-# refuses a save that each individual file was within its rights to make --
-# and the person doing it gets a 413 naming a limit none of their photos
-# broke. The slack is for the form fields travelling with them.
+# What a stored photo is allowed to be. Enforced on the server, so it is a
+# property of the database rather than a hope about the client -- the browser
+# does the same job first (below), but only to save the upload.
+PHOTO_STORE_MAX_EDGE = 2560
+# Below this, an already-modest photo is left exactly as it arrived: a
+# re-encode would cost quality to save little, and the point is the outliers.
+PHOTO_STORE_LEAVE_ALONE_BYTES = 600 * 1024
+PHOTO_STORE_JPEG_QUALITY = 85
+PHOTO_STORE_WEBP_QUALITY = 82
+
+# The long edge a photo is re-encoded to in the browser before it is sent.
+# A phone camera produces four to six thousand pixels across; the largest a
+# photo is ever *shown* here is a profile card a few hundred CSS pixels wide,
+# so 2560 is already generous on a retina screen and turns a 25MB original
+# into well under a megabyte. Applied client-side, in _profile_fields.html.
+PHOTO_UPLOAD_MAX_EDGE = 2560
+
+# The whole-request cap. Two numbers want to set it and the smaller wins.
 #
-# Werkzeug spools the body past a few hundred KB to a temporary file rather
-# than holding it in memory, but on Cloud Run /tmp is a tmpfs, so a full
-# six-photo save is still real memory on the instance serving it. That is
-# the number to size an instance against -- see docs/deploy-gcp.md.
+# The form's own arithmetic says PHOTO_MAX_PER_USER * PHOTO_MAX_BYTES, since
+# a save can carry every photo at once. The platform says something else:
+# **Cloud Run refuses an HTTP/1 request over 32 MiB at the front door**,
+# before it reaches the container at all, and answers with its own error
+# rather than ours. A cap above that is not a cap we enforce -- it is a
+# promise the platform breaks first, in wording we do not control.
+#
+# So six 25MB originals in one request cannot be made to work here by
+# raising a number, and pretending otherwise would just move where the
+# failure appears. What makes a six-photo save fit is the browser
+# re-encoding each one before it leaves, after which six photos are a few
+# megabytes rather than 150. This limit is the backstop for whatever still
+# arrives -- a client with JavaScript off, or one that is not a browser.
 UPLOAD_SLACK_BYTES = 1024 * 1024
-app.config["MAX_CONTENT_LENGTH"] = (
-    PHOTO_MAX_PER_USER * PHOTO_MAX_BYTES + UPLOAD_SLACK_BYTES)
+CLOUD_RUN_REQUEST_CEILING = 32 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = min(
+    PHOTO_MAX_PER_USER * PHOTO_MAX_BYTES + UPLOAD_SLACK_BYTES,
+    CLOUD_RUN_REQUEST_CEILING - UPLOAD_SLACK_BYTES,
+)
+
+
+def downscale_photo(data, mime):
+    """Re-encode an upload into something worth keeping. Returns (mime, data).
+
+    Three things happen here and only one of them is about bytes:
+
+      * **The long edge is capped.** A 4032px camera frame would otherwise be
+        stored at full size, served at full size, and served again to every
+        viewer -- and the largest it is ever shown is a card a few hundred
+        CSS pixels wide. This is what stops PHOTO_MAX_BYTES becoming the
+        size of the database.
+      * **EXIF is dropped**, which matters more than the pixels. A photo off
+        a phone routinely carries the GPS coordinates of where it was taken.
+        This app pins every profile to one city deliberately (see
+        pinned_place); storing someone's street and handing it to whoever
+        they match with would undo that quietly, and nothing on screen would
+        look wrong.
+      * **The orientation EXIF was carrying is applied first**, or dropping
+        the tag would store every portrait photo on its side.
+
+    The browser does the same job before uploading, which is what keeps a
+    six-photo save inside Cloud Run's request ceiling. This one is the
+    guarantee: it runs on whatever actually arrives, including from a client
+    that never executed any of our JavaScript.
+
+    Never raises. An image that cannot be decoded is stored as it came --
+    it already passed the magic-byte check and the size cap, and refusing a
+    save because an optimisation failed would be the wrong trade.
+    """
+    try:
+        img = Image.open(io.BytesIO(data))
+        img = ImageOps.exif_transpose(img)
+    except Exception:
+        app.logger.warning("could not decode a %s upload; storing it as received", mime)
+        return mime, data
+
+    longest = max(img.size)
+    if longest <= PHOTO_STORE_MAX_EDGE and len(data) <= PHOTO_STORE_LEAVE_ALONE_BYTES:
+        return mime, data
+
+    if longest > PHOTO_STORE_MAX_EDGE:
+        scale = PHOTO_STORE_MAX_EDGE / longest
+        img = img.resize((max(1, round(img.width * scale)),
+                          max(1, round(img.height * scale))),
+                         Image.LANCZOS)
+
+    # A transparent PNG flattened into a JPEG gains a black background, so
+    # anything carrying alpha goes to WebP instead -- which the app already
+    # accepts and serves.
+    transparent = img.mode in ("RGBA", "LA") or (
+        img.mode == "P" and "transparency" in img.info)
+    buffer = io.BytesIO()
+    if transparent:
+        out_mime = "image/webp"
+        img.convert("RGBA").save(buffer, "WEBP",
+                                 quality=PHOTO_STORE_WEBP_QUALITY, method=6)
+    else:
+        out_mime = "image/jpeg"
+        img.convert("RGB").save(buffer, "JPEG",
+                                quality=PHOTO_STORE_JPEG_QUALITY,
+                                optimize=True, progressive=True)
+
+    shrunk = buffer.getvalue()
+    if len(shrunk) >= len(data) and longest <= PHOTO_STORE_MAX_EDGE:
+        # Recompression made it bigger and there were no pixels to lose.
+        return mime, data
+    return out_mime, shrunk
 
 
 def sniff_image_mime(data):
@@ -2024,6 +2119,7 @@ def inject_user():
         # one number.
         "photo_max_mb": PHOTO_MAX_MB,
         "photo_max_bytes": PHOTO_MAX_BYTES,
+        "photo_upload_max_edge": PHOTO_UPLOAD_MAX_EDGE,
         # Handed to the browser so it can subscribe. Public by design: it is
         # the key every push service checks our signature against, and an
         # empty string is how the settings screen knows push is not
@@ -3209,7 +3305,10 @@ def edit_profile():
             if mime is None or mime not in PHOTO_ALLOWED_MIMES:
                 error = error or t("msg.photo_type")
                 break
-            uploads.append((mime, data))
+            # Sniffed first: this decodes the file, and deciding what it is
+            # from its magic bytes has to happen before handing it to an
+            # image library rather than after.
+            uploads.append(downscale_photo(data, mime))
         else:
             if uploads:
                 owned = {

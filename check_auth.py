@@ -893,10 +893,17 @@ def jpeg(size_bytes):
             "photo.jpg")
 
 
-check("the request cap can carry a full form of photos",
-      app.config["MAX_CONTENT_LENGTH"] >= A.PHOTO_MAX_BYTES * A.PHOTO_MAX_PER_USER,
-      "%d MB for %d x %d MB" % (app.config["MAX_CONTENT_LENGTH"] // MB,
-                                A.PHOTO_MAX_PER_USER, A.PHOTO_MAX_MB))
+# Cloud Run refuses an HTTP/1 request over 32 MiB before it reaches the
+# container, with its own error page rather than ours -- so a cap above that
+# is not a cap this app enforces, and the 413 below would never be seen.
+check("the request cap stays under what the platform allows",
+      app.config["MAX_CONTENT_LENGTH"] < A.CLOUD_RUN_REQUEST_CEILING,
+      "%d MB, ceiling %d MB" % (app.config["MAX_CONTENT_LENGTH"] // MB,
+                                A.CLOUD_RUN_REQUEST_CEILING // MB))
+check("...while still carrying a full-size photo",
+      app.config["MAX_CONTENT_LENGTH"] > A.PHOTO_MAX_BYTES,
+      "%d MB for a %d MB photo" % (app.config["MAX_CONTENT_LENGTH"] // MB,
+                                   A.PHOTO_MAX_MB))
 import translations as _T
 check("the size in the copy is the size in the code",
       all("{size}" in _T.TRANSLATIONS[code]["msg.photo_too_big"]
@@ -935,6 +942,86 @@ def stored():
 
 save_photo(A.PHOTO_MAX_BYTES - MB)
 check("a photo just inside the limit is stored", stored() == 1, str(stored()))
+
+# --- what actually lands in the database --------------------------------
+# The browser re-encodes before uploading, which saves the transfer. This is
+# the half that decides what is *kept*, and it has to hold for a client that
+# ran none of our JavaScript -- which is exactly what this test client is.
+try:
+    from PIL import Image as _PILImage
+    import numpy as _np
+
+    def _camera(w, h):
+        """A photo the shape and weight of one off a phone."""
+        rng = _np.random.default_rng(11)
+        small = rng.integers(0, 255, (h // 8, w // 8, 3), dtype=_np.uint8)
+        big = _PILImage.fromarray(small).resize((w, h), _PILImage.BICUBIC)
+        out = _io.BytesIO()
+        big.save(out, "JPEG", quality=98, subsampling=0)
+        return out.getvalue()
+
+    raw = _camera(4032, 3024)
+    with app.test_request_context():
+        mime, kept = A.downscale_photo(raw, "image/jpeg")
+    shrunk = _PILImage.open(_io.BytesIO(kept))
+
+    check("a camera-sized photo is downscaled before it is stored",
+          max(shrunk.size) <= A.PHOTO_STORE_MAX_EDGE,
+          "%dx%d -> %dx%d" % (4032, 3024, shrunk.size[0], shrunk.size[1]))
+    check("...which is most of its weight",
+          len(kept) < len(raw) / 4,
+          "%.1f MB -> %.1f MB" % (len(raw) / MB, len(kept) / MB))
+
+    # Small in both senses -- inside the pixel cap *and* already light. Only
+    # then is there nothing to gain, and recompressing would cost quality to
+    # save nothing.
+    _modest = _io.BytesIO()
+    _PILImage.open(_io.BytesIO(_camera(1000, 750))).save(
+        _modest, "JPEG", quality=70)
+    modest = _modest.getvalue()
+    with app.test_request_context():
+        _, untouched = A.downscale_photo(modest, "image/jpeg")
+    check("an already-modest photo is left exactly as it arrived",
+          untouched == modest,
+          "%dx%d, %d KB -- inside both thresholds"
+          % (1000, 750, len(modest) // 1024))
+
+    # A phone writes the GPS coordinates of where a photo was taken into it.
+    # This app pins every profile to one city on purpose; storing someone's
+    # street and handing it to whoever they match with would undo that, and
+    # nothing on screen would look wrong.
+    located = _io.BytesIO()
+    shot = _PILImage.new("RGB", (3000, 2000), (10, 90, 160))
+    _exif = shot.getexif()
+    _exif[274] = 6                       # orientation: the camera was turned
+    _exif[271] = "TestPhone"
+    _gps = _exif.get_ifd(0x8825)
+    _gps[1] = "N"
+    _gps[2] = (52.0, 22.0, 0.0)
+    shot.save(located, "JPEG", exif=_exif)
+
+    before = _PILImage.open(_io.BytesIO(located.getvalue()))
+    check("the fixture really does carry GPS",
+          bool(before.getexif().get_ifd(0x8825)), "or the next check proves nothing")
+
+    with app.test_request_context():
+        _, cleaned = A.downscale_photo(located.getvalue(), "image/jpeg")
+    after = _PILImage.open(_io.BytesIO(cleaned))
+    check("a stored photo carries no EXIF, so no location",
+          not dict(after.getexif()) and not after.getexif().get_ifd(0x8825))
+    check("...and the rotation it carried was applied, not just dropped",
+          after.size[0] < after.size[1],
+          "%s landscape + orientation tag -> %s" % ((3000, 2000), after.size))
+
+    with app.test_request_context():
+        _, as_is = A.downscale_photo(b"\xff\xd8\xff\xe0" + b"\x00" * 4000,
+                                     "image/jpeg")
+    check("something undecodable is stored, not refused",
+          as_is[:4] == b"\xff\xd8\xff\xe0",
+          "it already passed the magic-byte check and the size cap")
+except ImportError:                       # pragma: no cover
+    check("Pillow is installed, so photos can be downscaled", False,
+          "pip install -r requirements.txt")
 
 reply = save_photo(A.PHOTO_MAX_BYTES + MB)
 check("a photo over it is refused by name",

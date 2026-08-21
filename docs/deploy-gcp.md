@@ -132,10 +132,16 @@ of photos at the same time is 300MB before the app has done anything with
 them. 1Gi is the headroom for that; raising `PHOTO_MAX_BYTES` without raising
 this is how an instance gets OOM-killed mid-upload.
 
-The durable fix is to downscale on upload rather than to keep buying memory:
-a 25MB original is stored in Postgres at full size and served back through
-the app with no CDN, which the ETag on `/photo/<id>` softens but does not
-solve. That needs an image library the app does not currently carry.
+Uploads are downscaled rather than stored as they arrive — in the browser
+before sending, and again in `downscale_photo()` on the way into Postgres —
+so a 10.7MB camera frame becomes ~1.4MB at 2560px. 1Gi is headroom for the
+request itself, not for what is kept.
+
+**Do not raise `PHOTO_MAX_BYTES` past the point where one photo plus the form
+around it approaches 32 MiB.** Cloud Run refuses an HTTP/1 request over
+32 MiB before it reaches the container, and answers with its own error page
+instead of the app's — `MAX_CONTENT_LENGTH` is deliberately set just under
+that so the 413 someone sees is the one this app wrote.
 
 The app creates its schema and the admin account on boot, guarded by a
 Postgres advisory lock so simultaneous instance starts don't collide.
