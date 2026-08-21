@@ -1,125 +1,260 @@
 {% extends "base.html" %}
 {% block title %}Design — Velvt admin{% endblock %}
 {% block content %}
-<div class="card">
-  <p class="eyebrow">Admin</p>
-  <h1 style="margin-top: 0.5rem;">Design tokens</h1>
+<div class="dsg">
+  <header class="dsg-head">
+    <p class="eyebrow">Admin</p>
+    <h1>Design tokens</h1>
+    <p class="hint">
+      Every colour and measure the whole app paints from. Pick a screen, click
+      anything in it, and the inspector opens on the tokens that element
+      actually paints with. Edits preview live — in this page and in the frame
+      — and go live for everyone on <strong>Save</strong>. Anything left at its
+      shipped value is not stored, so <strong>Reset</strong> puts the design
+      back exactly as it is in <code>templates/velvt.css</code>.
+    </p>
+  </header>
 
-  <p class="hint" style="margin-bottom: 1.2rem;">
-    Every colour and measure the whole app paints from. Changes preview on this
-    page as you make them — this screen wears the same stylesheet as everything
-    else — and go live for everyone on Save.
-    Anything left at its shipped value is not stored, so
-    <strong>Reset</strong> puts the design back exactly as it is in
-    <code>templates/velvt.css</code>.
-  </p>
-
-  <form method="post" id="design-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-    {% for group, tokens in groups %}
-    <section style="margin-bottom: 1.6rem;">
-      <h2 style="font-size: 1rem; margin: 0 0 0.7rem;">{{ group }}</h2>
-
-      {% for name, label, default, is_colour in tokens %}
-      {% set current = overrides.get(name, default) %}
-      <div class="dt-row" data-token="{{ name }}">
-        <label for="dt{{ name }}" class="dt-label">
-          {{ label }}
-          <span class="dt-name">{{ name }}</span>
-        </label>
-
-        {% if is_colour %}
-        <input type="color" class="dt-swatch" value="{{ current }}"
-               aria-label="{{ label }} colour picker">
-        {% endif %}
-
-        <input id="dt{{ name }}" name="{{ name }}" type="text"
-               class="dt-value" value="{{ current }}" maxlength="200"
-               spellcheck="false" autocomplete="off">
-
-        <button type="button" class="dt-revert" title="Back to {{ default }}"
-                data-default="{{ default }}"
-                {% if name not in overrides %}hidden{% endif %}>Revert</button>
+  <div class="dsg-grid">
+    {# ---------------- left: the real app, in a frame ---------------- #}
+    <section class="dsg-preview">
+      <div class="dsg-screens">
+        {% for group, pages in preview %}
+        <div class="dsg-screen-row">
+          <span class="dsg-screen-group">{{ group }}</span>
+          <div class="dsg-screen-chips">
+            {% for label, path in pages %}
+            <button type="button" class="dsg-chip" data-path="{{ path }}">{{ label }}</button>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
       </div>
-      {% endfor %}
+
+      <div class="dsg-phone">
+        <iframe id="dsg-frame" title="Screen preview" src="/"></iframe>
+      </div>
+      <p class="hint dsg-frame-note">
+        Showing <code id="dsg-path">/</code> — the real page, with the real
+        stylesheet. Nothing here is a reproduction, so no screen can go quietly
+        out of date.
+      </p>
     </section>
-    {% endfor %}
 
-    <div style="display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: center;">
-      <button class="btn" type="submit">Save</button>
-      <button class="btn btn-secondary" type="submit" name="action" value="reset"
-              formnovalidate
-              onclick="return confirm('Put every token back to the shipped value?')">
-        Reset all
-      </button>
-      <span class="hint" id="dt-count"></span>
-    </div>
-  </form>
+    {# ---------------- right: inspector, palette, saved states -------- #}
+    <section class="dsg-side">
+      <h2 class="dsg-h2">Inspector</h2>
+      <div class="dsg-inspector" id="dsg-inspector">
+        <p class="hint" id="dsg-inspector-empty">
+          Click an element in the frame to edit the tokens it paints with.
+        </p>
+        <div id="dsg-inspector-body" hidden>
+          <p class="dsg-el" id="dsg-el"></p>
+          <div id="dsg-el-tokens"></div>
+          <p class="hint" id="dsg-el-none" hidden>
+            This element paints with no token of its own — it inherits. Try its
+            card or the page behind it.
+          </p>
+        </div>
+      </div>
 
-  <p class="hint" style="margin-top: 1.4rem;">
-    Not editable here: {% for name in locked %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
-    The first three are the height curve every screen sizes itself from, and
-    the last is an embedded texture — a colour picker has nothing to say about
-    any of them, and a bad value would break every layout at once.
-  </p>
+      <form method="post" id="dsg-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <h2 class="dsg-h2">Palette</h2>
+        {% for group, tokens in groups %}
+        <div class="dsg-group">
+          <p class="dsg-group-name">{{ group }}</p>
+          {% for name, label, default, is_colour in tokens %}
+          {% set current = overrides.get(name, default) %}
+          <div class="dt-row" data-token="{{ name }}">
+            <label for="dt{{ name }}" class="dt-label">
+              {{ label }}<span class="dt-name">{{ name }}</span>
+            </label>
+            {% if is_colour %}
+            <input type="color" class="dt-swatch" value="{{ current }}"
+                   aria-label="{{ label }} colour picker">
+            {% endif %}
+            <input id="dt{{ name }}" name="{{ name }}" type="text"
+                   class="dt-value" value="{{ current }}" maxlength="200"
+                   spellcheck="false" autocomplete="off">
+            <button type="button" class="dt-revert" data-default="{{ default }}"
+                    title="Back to {{ default }}"
+                    {% if name not in overrides %}hidden{% endif %}>Revert</button>
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+
+        <div class="dsg-actions">
+          <button class="btn" type="submit">Save</button>
+          <button class="btn btn-secondary" type="submit" name="action" value="reset"
+                  formnovalidate
+                  onclick="return confirm('Put every token back to the shipped value?')">
+            Reset all
+          </button>
+          <span class="hint" id="dt-count"></span>
+        </div>
+
+        <h2 class="dsg-h2">Saved palettes</h2>
+        <p class="hint">
+          A palette is the whole set of overrides under a name. Saving snapshots
+          what is <em>live</em>, not what is unsaved in the form — so save first,
+          then name it.
+        </p>
+        <div class="dsg-saveas">
+          <input type="text" name="palette_name" maxlength="60"
+                 placeholder="Name this palette" autocomplete="off">
+          <button class="btn btn-small" type="submit" name="action" value="save_as"
+                  formnovalidate>Save as</button>
+        </div>
+      </form>
+
+      {% if palettes %}
+      <ul class="dsg-palettes">
+        {% for p in palettes %}
+        <li>
+          <span class="dsg-palette-name">{{ p.name }}</span>
+          <span class="hint">{{ p.created_at.strftime('%b %d %H:%M') }}</span>
+          <form method="post" class="dsg-palette-acts">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="palette_id" value="{{ p.id }}">
+            <button class="btn btn-small" type="submit" name="action" value="restore"
+                    onclick="return confirm('Replace the live design with {{ p.name }}?')">
+              Restore
+            </button>
+            <button class="dt-revert" type="submit" name="action" value="delete"
+                    onclick="return confirm('Delete {{ p.name }}?')">Delete</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="hint">No saved palettes yet.</p>
+      {% endif %}
+
+      <p class="hint dsg-locked">
+        Not editable: {% for name in locked %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+        The height curve every screen sizes itself from, the bar height derived
+        from it, and an embedded texture — a colour picker has nothing to say
+        about any of them, and a bad value breaks every layout at once.
+      </p>
+    </section>
+  </div>
 </div>
 
 <style>
-  .dt-row {
-    display: grid;
-    grid-template-columns: 1fr auto minmax(9rem, 14rem) auto;
-    gap: 0.6rem;
-    align-items: center;
-    padding: 0.35rem 0;
-  }
+  .dsg { max-width: 100%; }
+  .dsg-head { margin-bottom: 1.4rem; }
+  .dsg-head h1 { margin: 0.4rem 0 0.6rem; }
+  .dsg-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
+              gap: 1.6rem; align-items: start; }
+  .dsg-h2 { font-size: 1rem; margin: 1.6rem 0 0.6rem; }
+  .dsg-side > .dsg-h2:first-child { margin-top: 0; }
+
+  .dsg-preview { position: sticky; top: 1rem; }
+  .dsg-screen-row { display: flex; gap: 0.6rem; align-items: baseline;
+                    margin-bottom: 0.4rem; }
+  .dsg-screen-group { color: var(--text-faint); font-size: 0.7rem;
+                      letter-spacing: .08em; text-transform: uppercase;
+                      min-width: 5.5rem; }
+  .dsg-screen-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .dsg-chip { border: 1px solid var(--ink-hairline); background: var(--ink-raised);
+              color: var(--text-muted); border-radius: var(--radius-sm);
+              padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; }
+  .dsg-chip:hover { color: var(--text); }
+  .dsg-chip.is-on { background: var(--violet); color: #fff; border-color: transparent; }
+
+  .dsg-phone { margin-top: 1rem; border: 1px solid var(--ink-hairline);
+               border-radius: var(--radius); overflow: hidden;
+               background: var(--ink); height: min(78vh, 900px); }
+  .dsg-phone iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .dsg-frame-note { margin-top: 0.5rem; }
+
+  .dsg-inspector { border: 1px solid var(--ink-hairline); border-radius: var(--radius);
+                   padding: 0.9rem; margin-bottom: 0.4rem; }
+  .dsg-el { font-family: var(--mono); font-size: 0.78rem; color: var(--text-muted);
+            margin: 0 0 0.7rem; word-break: break-all; }
+
+  .dsg-group { margin-bottom: 1.1rem; }
+  .dsg-group-name { color: var(--text-faint); font-size: 0.7rem; margin: 0 0 0.3rem;
+                    letter-spacing: .08em; text-transform: uppercase; }
+  .dt-row { display: grid; grid-template-columns: 1fr auto minmax(7rem, 10rem) auto;
+            gap: 0.5rem; align-items: center; padding: 0.3rem 0; }
   .dt-row + .dt-row { border-top: 1px solid var(--ink-hairline); }
-  .dt-label { display: flex; flex-direction: column; gap: 0.1rem; margin: 0; }
-  .dt-name { color: var(--text-faint); font-family: var(--mono); font-size: 0.75rem; }
-  .dt-swatch { width: 2.6rem; height: 2.1rem; padding: 0; border-radius: var(--radius-sm); }
-  .dt-value { font-family: var(--mono); font-size: 0.85rem; margin: 0; }
+  .dt-row.is-hit { outline: 2px solid var(--champagne); outline-offset: 3px;
+                   border-radius: var(--radius-sm); }
+  .dt-label { display: flex; flex-direction: column; gap: 0.05rem; margin: 0;
+              font-size: 0.9rem; }
+  .dt-name { color: var(--text-faint); font-family: var(--mono); font-size: 0.7rem; }
+  .dt-swatch { width: 2.2rem; height: 1.9rem; padding: 0; border-radius: var(--radius-sm); }
+  .dt-value { font-family: var(--mono); font-size: 0.78rem; margin: 0; }
   .dt-row.is-changed .dt-name { color: var(--champagne); }
   .dt-revert { background: none; border: 0; color: var(--text-faint);
-               font-size: 0.8rem; cursor: pointer; padding: 0.2rem 0.3rem; }
+               font-size: 0.78rem; cursor: pointer; padding: 0.2rem 0.3rem; }
   .dt-revert:hover { color: var(--text); }
-  @media (max-width: 640px) {
-    .dt-row { grid-template-columns: 1fr auto; grid-template-areas:
-      "label swatch" "value revert"; }
-    .dt-label { grid-area: label; }
-    .dt-swatch { grid-area: swatch; }
-    .dt-value { grid-area: value; }
-    .dt-revert { grid-area: revert; justify-self: end; }
+
+  .dsg-actions { display: flex; gap: 0.7rem; flex-wrap: wrap; align-items: center;
+                 margin-top: 0.8rem; }
+  .dsg-saveas { display: flex; gap: 0.5rem; }
+  .dsg-saveas input { margin: 0; }
+  .dsg-palettes { list-style: none; padding: 0; margin: 0.6rem 0 0; }
+  .dsg-palettes li { display: flex; gap: 0.6rem; align-items: center;
+                     padding: 0.4rem 0; border-top: 1px solid var(--ink-hairline); }
+  .dsg-palette-name { font-weight: 600; }
+  .dsg-palette-acts { margin-left: auto; display: flex; gap: 0.4rem; align-items: center; }
+  .dsg-locked { margin-top: 1.4rem; }
+
+  @media (max-width: 1024px) {
+    .dsg-grid { grid-template-columns: minmax(0, 1fr); }
+    .dsg-preview { position: static; }
+    .dsg-phone { height: 60vh; }
   }
 </style>
 
 <script nonce="{{ csp_nonce() }}">
 (function () {
-  var form = document.getElementById("design-form");
-  if (!form) return;
+  var form = document.getElementById("dsg-form");
+  var frame = document.getElementById("dsg-frame");
+  if (!form || !frame) return;
 
-  // The preview is a :root block appended to the document, which is exactly
-  // what the server appends to the stylesheet on save -- so what this page
-  // shows while you drag is the same mechanism that will paint every other
-  // page, not an approximation of it.
+  var rows = Array.prototype.slice.call(form.querySelectorAll(".dt-row"));
   var preview = document.createElement("style");
   document.head.appendChild(preview);
 
-  var rows = Array.prototype.slice.call(form.querySelectorAll(".dt-row"));
+  function declarations() {
+    return rows.map(function (row) {
+      return row.dataset.token + ": " + row.querySelector(".dt-value").value + ";";
+    }).join("");
+  }
+
+  // The same :root block the server appends to the stylesheet on save, so
+  // what the frame shows while you drag is the mechanism that will paint
+  // every page -- not an approximation of it.
+  function paintFrame() {
+    var doc = frame.contentDocument;
+    if (!doc || !doc.head) return;          // cross-origin or not loaded yet
+    var tag = doc.getElementById("dsg-preview-style");
+    if (!tag) {
+      tag = doc.createElement("style");
+      tag.id = "dsg-preview-style";
+      doc.head.appendChild(tag);
+    }
+    tag.textContent = ":root {" + declarations() + "}";
+  }
 
   function repaint() {
-    var lines = [], changed = 0;
+    var changed = 0;
     rows.forEach(function (row) {
       var field = row.querySelector(".dt-value");
       var revert = row.querySelector(".dt-revert");
       var isChanged = field.value.trim() !== revert.dataset.default;
       row.classList.toggle("is-changed", isChanged);
       revert.hidden = !isChanged;
-      if (isChanged) { changed++; }
-      // Emitted whether or not it differs: a value being previewed is the
-      // point, and :root repeating its own default is harmless.
-      lines.push(row.dataset.token + ": " + field.value + ";");
+      if (isChanged) changed++;
     });
-    preview.textContent = ":root {" + lines.join("") + "}";
+    preview.textContent = ":root {" + declarations() + "}";
+    paintFrame();
     document.getElementById("dt-count").textContent =
       changed === 0 ? "Nothing changed yet"
                     : changed + (changed === 1 ? " token" : " tokens") + " changed";
@@ -129,26 +264,134 @@
     var field = row.querySelector(".dt-value");
     var swatch = row.querySelector(".dt-swatch");
     var revert = row.querySelector(".dt-revert");
-
     field.addEventListener("input", function () {
-      if (swatch && /^#[0-9a-fA-F]{6}$/.test(field.value.trim())) {
-        swatch.value = field.value.trim();
-      }
+      if (swatch && /^#[0-9a-fA-F]{6}$/.test(field.value.trim())) swatch.value = field.value.trim();
       repaint();
     });
-    if (swatch) {
-      swatch.addEventListener("input", function () {
-        field.value = swatch.value;
-        repaint();
-      });
-    }
+    if (swatch) swatch.addEventListener("input", function () {
+      field.value = swatch.value; repaint();
+    });
     revert.addEventListener("click", function () {
       field.value = revert.dataset.default;
-      if (swatch && /^#[0-9a-fA-F]{6}$/.test(field.value)) {
-        swatch.value = field.value;
-      }
+      if (swatch && /^#[0-9a-fA-F]{6}$/.test(field.value)) swatch.value = field.value;
       repaint();
     });
+  });
+
+  // ---- the screen picker -------------------------------------------------
+  var chips = Array.prototype.slice.call(document.querySelectorAll(".dsg-chip"));
+  function show(path, chip) {
+    chips.forEach(function (c) { c.classList.toggle("is-on", c === chip); });
+    document.getElementById("dsg-path").textContent = path;
+    frame.src = path;
+  }
+  chips.forEach(function (chip) {
+    chip.addEventListener("click", function () { show(chip.dataset.path, chip); });
+  });
+  if (chips.length) chips[0].classList.add("is-on");
+
+  // ---- the inspector -----------------------------------------------------
+  //
+  // An element's colours come from CSS rules, not from anything stored on the
+  // element, so "what does this paint with?" cannot be read off it directly.
+  // Each token is resolved once per screen against a probe element, giving a
+  // computed value per token; the clicked element's own computed colours are
+  // then looked up in that map. A colour that matches no token is a literal
+  // in the stylesheet and is reported as such rather than silently ignored.
+  var body = document.getElementById("dsg-inspector-body");
+  var empty = document.getElementById("dsg-inspector-empty");
+  var elLine = document.getElementById("dsg-el");
+  var elTokens = document.getElementById("dsg-el-tokens");
+  var elNone = document.getElementById("dsg-el-none");
+
+  function tokenMap(doc) {
+    var probe = doc.createElement("span");
+    probe.style.display = "none";
+    doc.body.appendChild(probe);
+    var map = {};
+    rows.forEach(function (row) {
+      var name = row.dataset.token;
+      probe.style.color = "";
+      probe.style.color = "var(" + name + ")";
+      var resolved = doc.defaultView.getComputedStyle(probe).color;
+      if (resolved && !map[resolved]) map[resolved] = name;
+    });
+    probe.remove();
+    return map;
+  }
+
+  function describe(el) {
+    var out = el.tagName.toLowerCase();
+    if (el.id) out += "#" + el.id;
+    if (el.className && typeof el.className === "string") {
+      out += "." + el.className.trim().split(/\s+/).join(".");
+    }
+    return out;
+  }
+
+  function inspect(el, doc) {
+    var map = tokenMap(doc);
+    var style = doc.defaultView.getComputedStyle(el);
+    var found = [];
+    [["background", "backgroundColor"],
+     ["text", "color"],
+     ["border", "borderTopColor"]].forEach(function (pair) {
+      var value = style[pair[1]];
+      if (!value || value === "rgba(0, 0, 0, 0)" || value === "transparent") return;
+      found.push([pair[0], map[value] || null, value]);
+    });
+
+    elLine.textContent = describe(el);
+    elTokens.innerHTML = "";
+    var any = false;
+
+    found.forEach(function (item) {
+      var role = item[0], token = item[1], literal = item[2];
+      var line = document.createElement("p");
+      line.className = "hint";
+      line.style.margin = "0 0 0.4rem";
+      if (token) {
+        any = true;
+        var row = rows.filter(function (r) { return r.dataset.token === token; })[0];
+        var label = row.querySelector(".dt-label").firstChild.textContent.trim();
+        var link = document.createElement("button");
+        link.type = "button";
+        link.className = "dsg-chip";
+        link.textContent = role + " — " + label + " (" + token + ")";
+        link.addEventListener("click", function () {
+          rows.forEach(function (r) { r.classList.remove("is-hit"); });
+          row.classList.add("is-hit");
+          row.scrollIntoView({ block: "center", behavior: "smooth" });
+          var swatch = row.querySelector(".dt-swatch");
+          (swatch || row.querySelector(".dt-value")).focus();
+        });
+        line.appendChild(link);
+      } else {
+        line.textContent = role + " — " + literal +
+          ", written straight into the stylesheet rather than as a token.";
+      }
+      elTokens.appendChild(line);
+    });
+
+    elNone.hidden = found.length > 0;
+    empty.hidden = true;
+    body.hidden = false;
+    if (!any && found.length) { /* literals only: the lines above say so */ }
+  }
+
+  frame.addEventListener("load", function () {
+    var doc;
+    try { doc = frame.contentDocument; } catch (e) { return; }
+    if (!doc || !doc.body) return;
+    paintFrame();
+    doc.body.addEventListener("click", function (ev) {
+      // The preview is for looking at, not for using: a click that followed a
+      // link would navigate away from the screen being inspected, and a click
+      // that submitted a form would change real data.
+      ev.preventDefault();
+      ev.stopPropagation();
+      inspect(ev.target, doc);
+    }, true);
   });
 
   repaint();

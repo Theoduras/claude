@@ -506,8 +506,35 @@ the editor — the height curve, the bar height derived from it, and an embedded
 texture. A colour picker has nothing useful to say about any of them and a bad
 value breaks every layout at once.
 
+**The screen picker previews real routes, not reproductions.** `DESIGN_PREVIEW`
+is a list of GET paths that render for a signed-in admin, shown in an iframe;
+the Restyler had to rebuild all 30 screens inside the tool, but here the app
+*is* the preview, so no screen can go quietly out of date. It cost one header:
+`X-Frame-Options` is `SAMEORIGIN` and the CSP's `frame-ancestors` is `'self'`
+rather than `'none'`. The difference between those and `DENY`/`'none'` is only
+whether our own pages may frame our own pages — a cross-origin frame is still
+refused.
+
+**The inspector answers "what does this element paint with?"** — a question an
+element cannot be asked directly, since its colours come from CSS rules rather
+than from anything stored on it. Each token is resolved once per screen against
+a hidden probe element, giving a computed value per token; the clicked
+element's own computed background/text/border are then looked up in that map.
+A colour matching no token is a literal in the stylesheet, and is reported as
+one rather than silently ignored. Clicks in the frame are swallowed
+(`preventDefault`) — the preview is for looking at, and a click that followed a
+link or submitted a form would navigate away or change real data.
+
+**`design_palettes` is the Restyler's saved states.** A palette is the whole
+override set under a name, so a direction can be parked instead of being the
+thing you were too nervous to overwrite. Restoring **replaces** rather than
+merges — a restore that kept whatever happened to be live alongside it would
+land on a design nobody made — and every restored value goes back through
+`design_value_ok()` and the known-token filter, so a palette cannot smuggle in
+what the form would have refused.
+
 `check_design.py` covers it, pairing every "this is applied" with a "this is
-refused".
+refused", and asserting every previewable path actually renders.
 
 ## Languages
 

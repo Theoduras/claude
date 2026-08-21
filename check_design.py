@@ -185,6 +185,82 @@ with app.test_request_context():
     db.execute("DELETE FROM users WHERE username = 'design-probe'")
     db.commit()
 
+# --- saved palettes -------------------------------------------------------
+with app.test_request_context():
+    db = A.get_db()
+    db.execute("DELETE FROM design_palettes WHERE name LIKE 'probe-%'")
+    db.commit()
+
+store("--violet", "#010203")
+client.post("/admin/design",
+            data={"csrf_token": token, "action": "save_as",
+                  "palette_name": "probe-one"})
+with app.test_request_context():
+    saved = A.get_db().execute(
+        "SELECT id, tokens FROM design_palettes WHERE name = 'probe-one'").fetchone()
+check("a palette stores what was live", saved is not None
+      and saved["tokens"].get("--violet") == "#010203", saved and saved["tokens"])
+
+# Changing the live design must not change the saved palette.
+store("--violet", "#0A0B0C")
+client.post("/admin/design",
+            data={"csrf_token": token, "action": "restore",
+                  "palette_id": saved["id"]})
+check("restoring puts the palette's value back",
+      "--violet: #010203;" in sheet()["body"])
+check("and does not keep what was live alongside it",
+      "#0A0B0C" not in sheet()["body"])
+
+client.post("/admin/design",
+            data={"csrf_token": token, "action": "delete",
+                  "palette_id": saved["id"]})
+with app.test_request_context():
+    gone = A.get_db().execute(
+        "SELECT 1 AS hit FROM design_palettes WHERE name = 'probe-one'").fetchone()
+check("a deleted palette is gone", gone is None)
+
+resp = client.post("/admin/design",
+                   data={"csrf_token": token, "action": "restore",
+                         "palette_id": "not-a-number"})
+check("a non-numeric palette id is handled, not a 500",
+      resp.status_code in (302, 303), resp.status_code)
+
+# A palette carrying a value the validator refuses must not restore it.
+with app.test_request_context():
+    db = A.get_db()
+    db.execute(
+        "INSERT INTO design_palettes (name, tokens) VALUES ('probe-bad', ?)",
+        (A.json.dumps({"--violet": "red; } body { display: none",
+                       "--not-a-token": "#123456"}),),
+    )
+    bad = db.execute(
+        "SELECT id FROM design_palettes WHERE name = 'probe-bad'").fetchone()["id"]
+    db.commit()
+client.post("/admin/design",
+            data={"csrf_token": token, "action": "restore", "palette_id": bad})
+sheet_now = sheet()["body"]
+check("a palette cannot smuggle an unsafe value past the validator",
+      "display: none" not in sheet_now)
+check("nor an unknown token", "--not-a-token" not in sheet_now)
+with app.test_request_context():
+    db = A.get_db()
+    db.execute("DELETE FROM design_palettes WHERE name LIKE 'probe-%'")
+    db.commit()
+
+# --- the preview frame can actually frame ---------------------------------
+headers = client.get("/faq").headers
+check("pages may be framed by this origin",
+      headers.get("X-Frame-Options") == "SAMEORIGIN", headers.get("X-Frame-Options"))
+check("and the CSP says the same",
+      "frame-ancestors 'self'" in headers.get("Content-Security-Policy", ""))
+
+# Every previewable path must render for an admin -- a preview that 302s
+# somewhere else is worse than one that is not offered at all.
+for group, pages in A.DESIGN_PREVIEW:
+    for label, path in pages:
+        code = client.get(path).status_code
+        check(f"preview {group}/{label} ({path}) renders", code == 200, code)
+
 clear()
 print()
 if failures:

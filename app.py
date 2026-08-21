@@ -1534,6 +1534,19 @@ CREATE TABLE IF NOT EXISTS design_tokens (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- Named palettes, the Restyler's "saved states". A palette is a whole set of
+-- overrides under a name, so a direction can be parked and come back later
+-- rather than being the thing you were too nervous to overwrite. Restoring
+-- one replaces design_tokens outright: a palette that merged with whatever
+-- happened to be live would restore to something nobody ever designed.
+CREATE TABLE IF NOT EXISTS design_palettes (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    tokens JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by BIGINT REFERENCES users(id) ON DELETE SET NULL
+);
 """
 
 # Arbitrary but fixed keys for Postgres advisory locks. Any instance taking
@@ -2279,7 +2292,10 @@ CSP = (
     "form-action 'self'; "
     "base-uri 'self'; "
     "object-src 'none'; "
-    "frame-ancestors 'none'"
+    # 'self' rather than 'none', so /admin/design can preview a real page in
+    # a frame. A cross-origin frame is still refused; the only thing this
+    # permits is the app framing itself.
+    "frame-ancestors 'self'"
 )
 
 
@@ -2363,7 +2379,14 @@ def security_headers(response):
             "Content-Security-Policy", CSP.format(nonce=getattr(g, "csp_nonce", "")))
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    response.headers.setdefault("X-Frame-Options", "DENY")
+    # SAMEORIGIN rather than DENY, so /admin/design can show a real page in
+    # its preview frame. The difference between the two is only whether our
+    # own pages may frame our own pages -- a cross-origin frame is refused
+    # either way, and `frame-ancestors 'self'` in the CSP says the same thing
+    # to browsers that read CSP in preference to this header. Framing us from
+    # somewhere else would need an attacker to be serving from this origin,
+    # at which point the clickjacking is the smaller problem.
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault(
         "Permissions-Policy", "geolocation=(self), camera=(), microphone=(), payment=()")
     if not SEARCH_INDEXING:
@@ -2424,14 +2447,76 @@ def admin_design():
     is what makes the change reach browsers that cached the old sheet for a
     year.
     """
+    db = get_db()
     if request.method == "POST":
-        db = get_db()
-        if request.form.get("action") == "reset":
+        action = request.form.get("action", "")
+
+        if action == "reset":
             db.execute("DELETE FROM design_tokens")
             db.commit()
             design_overrides(force=True)
             security_event("design", "reset", user_id=current_uid())
             flash(t("msg.design_reset"))
+            return redirect(url_for("admin_design"))
+
+        if action == "save_as":
+            name = request.form.get("palette_name", "").strip()[:60]
+            if not name:
+                flash(t("msg.design_palette_needs_name"))
+                return redirect(url_for("admin_design"))
+            # Snapshots what is live, not what is in the form: "save this
+            # palette" means the design people are looking at, and a form
+            # with unsaved edits in it is not that yet.
+            db.execute(
+                """
+                INSERT INTO design_palettes (name, tokens, created_by)
+                VALUES (?, ?, ?)
+                ON CONFLICT (name) DO UPDATE
+                   SET tokens = EXCLUDED.tokens, created_at = NOW()
+                """,
+                (name, json.dumps(design_overrides(force=True)), current_uid()),
+            )
+            db.commit()
+            security_event("design", "palette_saved", user_id=current_uid(),
+                           detail=name)
+            flash(t("msg.design_palette_saved") % name)
+            return redirect(url_for("admin_design"))
+
+        if action in ("restore", "delete"):
+            # Parsed rather than passed through: Postgres refuses a non-numeric
+            # string against a BIGINT with a 500 rather than a "not found",
+            # and a stale page posting a deleted id is an ordinary event.
+            try:
+                palette_id = int(request.form.get("palette_id", ""))
+            except ValueError:
+                palette_id = 0
+            row = db.execute(
+                "SELECT name, tokens FROM design_palettes WHERE id = ?",
+                (palette_id,),
+            ).fetchone()
+            if row is None:
+                flash(t("msg.design_palette_gone"))
+                return redirect(url_for("admin_design"))
+            if action == "delete":
+                db.execute("DELETE FROM design_palettes WHERE name = ?", (row["name"],))
+                db.commit()
+                flash(t("msg.design_palette_deleted") % row["name"])
+                return redirect(url_for("admin_design"))
+            # Replace, never merge: a restore that kept whatever happened to
+            # be live alongside it would land on a design nobody made.
+            db.execute("DELETE FROM design_tokens")
+            for name, value in (row["tokens"] or {}).items():
+                if name in DESIGN_DEFAULTS and design_value_ok(str(value)):
+                    db.execute(
+                        "INSERT INTO design_tokens (name, value, updated_by)"
+                        " VALUES (?, ?, ?)",
+                        (name, str(value), current_uid()),
+                    )
+            db.commit()
+            design_overrides(force=True)
+            security_event("design", "palette_restored", user_id=current_uid(),
+                           detail=row["name"])
+            flash(t("msg.design_palette_restored") % row["name"])
             return redirect(url_for("admin_design"))
 
         changed, refused = 0, []
@@ -2473,11 +2558,16 @@ def admin_design():
             flash(t("msg.design_saved"))
         return redirect(url_for("admin_design"))
 
+    palettes = db.execute(
+        "SELECT id, name, created_at FROM design_palettes ORDER BY created_at DESC"
+    ).fetchall()
     return render_template(
         "admin_design.html",
         groups=design_editable(),
         overrides=design_overrides(force=True),
         locked=sorted(DESIGN_LOCKED),
+        palettes=palettes,
+        preview=DESIGN_PREVIEW,
     )
 
 
@@ -7775,6 +7865,79 @@ DESIGN_GROUPS = [
 # screen would be a way to break every screen's layout at once with no undo.
 DESIGN_LOCKED = {"--fit", "--fit-tight", "--tabbar-h", "--nap"}
 
+# What each token *paints*, in the Restyler's vocabulary: a name for the job,
+# not for the colour. "--ink-raised" is accurate and tells you nothing; "Card
+# surface" is what you are actually choosing. Anything not named here falls
+# back to its own token name, so a new token in the stylesheet appears in the
+# editor immediately rather than waiting for a label.
+DESIGN_LABELS = {
+    "--ink": "Page background",
+    "--ink-raised": "Card surface",
+    "--ink-hairline": "Hairline",
+    "--violet": "Brand",
+    "--violet-crest": "Brand highlight",
+    "--violet-deep": "Brand shadow",
+    "--teal": "Accent",
+    "--teal-crest": "Accent highlight",
+    "--teal-deep": "Accent shadow",
+    "--champagne": "Delight",
+    "--text": "Headline",
+    "--text-muted": "Body",
+    "--text-faint": "Quiet",
+    "--danger": "Danger",
+    "--danger-deep": "Danger ground",
+    "--serif": "Headline face",
+    "--sans": "Body face",
+    "--mono": "Numbers face",
+    "--measure": "Content width",
+    "--radius": "Corner radius",
+    "--radius-sm": "Corner radius, small",
+    "--card-pad": "Card padding",
+}
+
+# The screens the preview offers, as real routes. The Restyler had to
+# reproduce all 30 in the tool; here the app *is* the preview, so what is on
+# screen is the real page with the real stylesheet -- there is nothing to keep
+# in step with the product and no screen that can quietly go out of date.
+#
+# GET-only, and every one of them renders for a signed-in admin. Screens that
+# need a live match or a waiting search are absent rather than faked: a
+# preview that 302s to somewhere else is worse than one that is not offered.
+DESIGN_PREVIEW = [
+    ("Pre-login", [
+        ("Landing", "/"),
+        ("Sign in", "/login"),
+        ("Register", "/register"),
+        ("Forgot", "/forgot"),
+    ]),
+    ("Search", [
+        ("How it works", "/how-matching-works"),
+        ("Type", "/search"),
+    ]),
+    ("Chats", [
+        ("Chats", "/chats"),
+    ]),
+    ("Profile", [
+        ("Edit profile", "/profile/edit"),
+    ]),
+    ("Account", [
+        ("Settings", "/settings"),
+        ("Notifications", "/notifications"),
+        ("Safety", "/safety"),
+    ]),
+    ("Info", [
+        ("FAQ", "/faq"),
+        ("Terms", "/terms"),
+        ("Privacy", "/privacy"),
+        ("Imprint", "/imprint"),
+    ]),
+    ("Admin", [
+        ("Members", "/admin/members"),
+        ("Reports", "/admin/reports"),
+        ("Announce", "/admin/announce"),
+    ]),
+]
+
 # A value is written into a stylesheet served to every visitor, so it is
 # checked rather than trusted -- admin or not. Anything that could close the
 # declaration and start another rule is refused: that is the whole attack,
@@ -7815,7 +7978,7 @@ def design_editable():
             if name == prefix or name.startswith(prefix + "-"):
                 group = label
                 break
-        label = name[2:].replace("-", " ")
+        label = DESIGN_LABELS.get(name, name[2:].replace("-", " "))
         is_colour = bool(re.fullmatch(r"#[0-9a-fA-F]{6}", default))
         buckets.setdefault(group, []).append((name, label, default, is_colour))
     order = []
