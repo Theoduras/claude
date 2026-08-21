@@ -1541,11 +1541,27 @@ CREATE TABLE IF NOT EXISTS design_tokens (
 -- than declared in the CREATE above because the table shipped without it.
 ALTER TABLE design_tokens ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'dark';
 
--- The primary key has to move with it. Dropping the old one by its generated
--- name is why this is spelled out rather than left to a fresh CREATE: an
--- existing deployment already has rows keyed on name alone.
-ALTER TABLE design_tokens DROP CONSTRAINT IF EXISTS design_tokens_pkey;
-ALTER TABLE design_tokens ADD PRIMARY KEY (mode, name);
+-- The primary key has to move with it, and this runs on every boot -- so it
+-- is guarded rather than dropped and recreated each time. An unguarded
+-- DROP + ADD would rebuild the index on every instance start, which is
+-- harmless on a table this size and exactly the kind of thing that is not
+-- harmless on the day some table is not this size.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+          FROM pg_index i
+          JOIN pg_attribute a
+            ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+         WHERE i.indrelid = 'design_tokens'::regclass
+           AND i.indisprimary
+        GROUP BY i.indexrelid
+        HAVING COUNT(*) = 1
+    ) THEN
+        ALTER TABLE design_tokens DROP CONSTRAINT design_tokens_pkey;
+        ALTER TABLE design_tokens ADD PRIMARY KEY (mode, name);
+    END IF;
+END $$;
 
 -- One row, one column, the app's own switches. A table rather than an
 -- environment variable because the point is that it changes without a deploy.
