@@ -2109,6 +2109,11 @@ def inject_user():
         # renders at all comes up in the profile form, the search wizard and
         # the criteria screen alike.
         "single_city": SINGLE_CITY,
+        # The shell drops back to its signed-out shape while an address is
+        # unconfirmed: every in-app link would bounce off the gate, and a
+        # nav full of links that return you to the page you are on reads as
+        # a broken app rather than as a step you have not finished.
+        "awaiting_verification": awaiting_verification(),
         # The badge in the "More" sheet, on every page. A callable so a page
         # that never renders the sheet -- the landing screen, signed out --
         # does not pay for the query.
@@ -2238,6 +2243,69 @@ def auto_login_admin():
     ).fetchone()
     if admin is not None:
         start_session(admin["id"])
+
+
+# Reachable with an unconfirmed address. Everything else is the app, and the
+# app is what confirming buys you.
+#
+# These are not conveniences. Each one is a way *out* of the gate -- confirm,
+# resend, correct a typo, sign out, read what you agreed to, delete the
+# account -- plus the assets a page needs to render at all. A gate with no
+# exits is not a gate, it is a locked account, and the address someone typed
+# wrong is exactly the address that cannot receive the link telling them so.
+VERIFY_GATE_EXEMPT = frozenset({
+    "verify_pending", "verify_email", "resend_verification", "change_email",
+    "logout", "set_language",
+    "index", "healthz", "stylesheet", "static", "favicon",
+    "terms", "privacy", "imprint", "safety", "faq", "help_page",
+    # Account administration, not the app: no matching, no chat, nobody
+    # else's profile. Deleting and exporting have to stay reachable from
+    # an account that can never be confirmed -- the right to erasure does
+    # not wait on a mail provider.
+    "settings", "request_deletion", "cancel_deletion", "export_data",
+})
+
+
+def awaiting_verification():
+    """True when the signed-in person still has to confirm their address.
+
+    Three conditions, and each one excludes a group that would otherwise be
+    locked out of an account they can never open:
+
+    - `RESEND_API_KEY` unset means no link can be sent, so a gate would be a
+      wall. A deployment with no mail provider -- local development, or a
+      staging box -- keeps working.
+    - No address on file means nothing to confirm. The administrator, the
+      seeded demo members and admin-created profiles are all in this group;
+      none of them was ever mailed a link.
+    - An admin is never held. Locking the one account that can fix a broken
+      mail setup behind that same mail setup is a trap with no floor.
+    """
+    if not RESEND_API_KEY:
+        return False
+    me = current_user()
+    if me is None or me["is_admin"] or not me["email"]:
+        return False
+    return me["email_verified_at"] is None
+
+
+@app.before_request
+def require_verified_email():
+    """Hold an unconfirmed account at the door.
+
+    The address is how someone gets back in after a lost password and how
+    the four notification kinds reach them at all, so an account whose
+    address was never confirmed is an account we cannot contact -- and on a
+    dating app it is also the cheapest thing standing between a throwaway
+    address and a real person's inbox.
+
+    A redirect rather than a 403: this is a step someone is part-way
+    through, not a refusal.
+    """
+    if request.endpoint in VERIFY_GATE_EXEMPT:
+        return
+    if awaiting_verification():
+        return redirect(url_for("verify_pending"))
 
 
 # --- security headers ------------------------------------------------------
@@ -2575,7 +2643,11 @@ def register():
                 send_verification_email(new_id, form["email"])
                 start_session(new_id)
                 flash(t("msg.registered"))
-                return redirect(url_for("edit_profile"))
+                # The gate would bounce them here anyway; saying so
+                # directly beats a redirect to a page they cannot see.
+                return redirect(url_for("verify_pending")
+                                if awaiting_verification()
+                                else url_for("edit_profile"))
 
         flash(error)
 
@@ -2657,7 +2729,79 @@ def resend_verification():
     if user["email"] and user["email_verified_at"] is None:
         send_verification_email(user["id"], user["email"])
     flash(t("msg.verify_sent"))
-    return redirect(request.referrer or url_for("live_search"))
+    # This button exists in two places. Behind the gate it belongs on the
+    # screen that sent them; on /settings, where the gate is not holding,
+    # sending them anywhere else would be losing their place.
+    return redirect(url_for("verify_pending") if awaiting_verification()
+                    else (request.referrer or url_for("settings")))
+
+
+@app.route("/verify/pending")
+@login_required
+def verify_pending():
+    """The one screen an unconfirmed account can see.
+
+    Someone already through it lands back in the app rather than on a
+    dead-end page telling them to do something they have done.
+    """
+    if not awaiting_verification():
+        return redirect(url_for("live_search"))
+    return render_template("verify_pending.html", email=current_user()["email"])
+
+
+@app.route("/verify/email", methods=["POST"])
+@login_required
+@rate_limited("change_email", limit=5, window_seconds=3600, by="user")
+def change_email():
+    """Correct the address, from behind the gate.
+
+    Without this the gate is a trap: the single most likely reason a link
+    never arrives is that the address it went to was mistyped, and every
+    other route to fixing it -- resend, password reset, support mail --
+    runs through that same wrong address.
+
+    Confirmation is what proves the new address is reachable, so nothing
+    here is taken on trust: the row moves to the new address *unconfirmed*,
+    which leaves the account no further in than it already was.
+    """
+    me = current_user()
+    if not awaiting_verification():
+        return redirect(url_for("live_search"))
+
+    address = request.form.get("email", "").strip()
+    if not valid_email(address):
+        flash(t("msg.email_required"))
+        return redirect(url_for("verify_pending"))
+    if address.lower() == (me["email"] or "").lower():
+        # Not an error: pressing "use this address" on the address already
+        # there should send the link, which is what they wanted anyway.
+        send_verification_email(me["id"], address)
+        flash(t("msg.verify_sent"))
+        return redirect(url_for("verify_pending"))
+
+    db = get_db()
+    try:
+        db.execute(
+            "UPDATE users SET email = ?, email_verified_at = NULL WHERE id = ?",
+            (address, me["id"]),
+        )
+        db.commit()
+    except psycopg.errors.UniqueViolation:
+        db.rollback()
+        # Same wording whether or not it exists. Behind a login this leaks
+        # far less than the signed-out forms do, but "already registered"
+        # here would still answer "does this person have an account?" for
+        # any address someone cares to type.
+        flash(t("msg.email_unavailable"))
+        return redirect(url_for("verify_pending"))
+
+    # Any link already in flight names the old address; issue_email_token()
+    # retires it as it mints the new one, since the token is bound to the
+    # account rather than to the address it was sent to.
+    security_event("email", "changed", user_id=me["id"], detail="before confirmation")
+    send_verification_email(me["id"], address)
+    flash(t("msg.verify_sent"))
+    return redirect(url_for("verify_pending"))
 
 
 @app.route("/forgot", methods=["GET", "POST"])
