@@ -53,6 +53,14 @@ jobs:
           fi
 
       # 5. Deploy to Cloud Run (FORCED PROJECT FLAG)
+      #
+      #    --memory is sized against uploads, not against the app, which idles
+      #    far below Cloud Run's 512Mi default. A photo save spools up to
+      #    ~31MB to /tmp -- a tmpfs here, so real memory -- and downscale_photo()
+      #    then decodes it, which costs several times the file size as raw
+      #    bitmap. At --concurrency=80 the default is not enough headroom, and
+      #    the symptom would be an instance OOM-killed mid-upload.
+      #    See docs/deploy-gcp.md.
       - name: Deploy
         run: |
           gcloud run deploy "$SERVICE" \
@@ -66,4 +74,5 @@ jobs:
             --min-instances=0 \
             --max-instances=10 \
             --concurrency=80 \
+            --memory=1Gi \
             --startup-probe=httpGet.path=/healthz,periodSeconds=5,timeoutSeconds=5,failureThreshold=6
