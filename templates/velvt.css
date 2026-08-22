@@ -90,6 +90,12 @@
          through #8A7C0C and reads olive. The artifact's mark is violet
          throughout, so this is the token that lets it be. */
       --brand-sheen: #E8D3A9;
+      /* A ground *behind* violet content, as opposed to --violet-deep, which
+         is also the dark end of the velvet gradient. One token could not be
+         both once there were two worlds: on white the gradient still wants a
+         deep indigo and the ground wants a pale wash. */
+      --violet-wash: #3B0B66;
+
       --gleam:       #FFFFFF;  /* the light side of this mode: inner glows, gleams */
       --shade:       #000000;  /* its dark side: shadows, scrims, wells */
     }
@@ -164,6 +170,8 @@
 
       /* Violet, not gold: the artifact's wordmark is one hue with a lighter
          sweep across it. */
+      --violet-wash:  #EDE4FE;   /* action-wash */
+
       --brand-sheen:  #A78BFA;
 
       --gleam:        #FFFFFF;
@@ -241,6 +249,19 @@
       opacity: 0.42;
       mix-blend-mode: overlay;
     }
+
+    /* ch.01 says velvet, not flat -- and that was written for a near-black
+       ground, where a directional gradient and a grain read as pile. On white
+       the same three layers read as a muddy pastel wash across every screen,
+       and the artifact's light world is flat by design. So the pile, the
+       folds and the nap are dark-world ideas and they stop here.
+
+       Not deleted, and not made conditional on a token: the whole texture is
+       still exactly one media-independent switch away, and dark still gets
+       all of it. */
+    :root[data-mode="light"] body { background-image: none; }
+    :root[data-mode="light"] body::before,
+    :root[data-mode="light"] body::after { display: none; }
 
     /* ---------- typography ------------------------------------------- */
     /* The artifact's ch.03 headline: bold sans, tight, not the serif this
@@ -925,6 +946,28 @@
       font-size: calc(0.85 * var(--fit));
       color: var(--text-muted);
     }
+    /* The artifact's wizard is left-aligned and its progress is five separate
+       segments rather than one filling bar -- "step 1 of 5" said twice, once
+       in words and once in shape. Centring and a continuous bar are the dark
+       design's; both are layout, not colour, so they change in both worlds.
+       The bar keeps its own width animation: the segments are drawn with a
+       repeating gradient over the same element, so nothing in the template
+       has to know how many steps there are. */
+    .wiz-count, .wiz-q, .wiz-hint { text-align: left; }
+    .wiz-progress {
+      background:
+        repeating-linear-gradient(90deg,
+          var(--ink-hairline) 0 calc(20% - 4px),
+          transparent calc(20% - 4px) 20%);
+    }
+    .wiz-progress > span {
+      background:
+        repeating-linear-gradient(90deg,
+          var(--violet) 0 calc(20% - 4px),
+          transparent calc(20% - 4px) 20%);
+      background-size: 500% 100%;
+    }
+
     .wiz-field { margin-bottom: 0.5rem; }
     .wiz-readout {
       margin: 0 0 calc(1.4 * var(--fit));
@@ -1000,7 +1043,7 @@
       transition: border-color 0.16s ease, background 0.16s ease,
                   transform 0.16s ease;
     }
-    .opt:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--violet-deep) 50%, transparent); }
+    .opt:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--violet-wash) 50%, transparent); }
     .opt input:focus-visible ~ .opt-mark {
       outline: 2px solid var(--champagne);
       outline-offset: 3px;
@@ -1469,7 +1512,7 @@
     }
     .sheet-opt:hover {
       transform: translateY(-1px);
-      background: color-mix(in srgb, var(--violet-deep) 50%, transparent);
+      background: color-mix(in srgb, var(--violet-wash) 50%, transparent);
     }
     .sheet-opt:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
     /* the one in effect: lit like a checked .opt, with the crest rail down
