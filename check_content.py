@@ -33,7 +33,11 @@ def clear():
         db.execute("DELETE FROM copy_overrides")
         db.execute("DELETE FROM icon_slots")
         db.commit()
-    A.design_overrides(force=True)
+        # Inside the context: design_overrides() reads through get_db(), which
+        # needs `g`. Called outside one it raises, and the raise is swallowed
+        # by design -- so the refresh silently did nothing and every assertion
+        # after it read the stale snapshot.
+        A.design_overrides(force=True)
 
 
 def store_copy(lang, key, text):
@@ -44,7 +48,11 @@ def store_copy(lang, key, text):
                ON CONFLICT (lang, key) DO UPDATE SET text = EXCLUDED.text""",
             (lang, key, text))
         db.commit()
-    A.design_overrides(force=True)
+        # Inside the context: design_overrides() reads through get_db(), which
+        # needs `g`. Called outside one it raises, and the raise is swallowed
+        # by design -- so the refresh silently did nothing and every assertion
+        # after it read the stale snapshot.
+        A.design_overrides(force=True)
 
 
 def store_icon(slot, glyph):
@@ -55,7 +63,11 @@ def store_icon(slot, glyph):
                ON CONFLICT (slot) DO UPDATE SET glyph = EXCLUDED.glyph""",
             (slot, glyph))
         db.commit()
-    A.design_overrides(force=True)
+        # Inside the context: design_overrides() reads through get_db(), which
+        # needs `g`. Called outside one it raises, and the raise is swallowed
+        # by design -- so the refresh silently did nothing and every assertion
+        # after it read the stale snapshot.
+        A.design_overrides(force=True)
 
 
 clear()

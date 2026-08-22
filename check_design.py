@@ -34,7 +34,7 @@ def clear():
         db.execute("DELETE FROM design_tokens")
         db.execute("DELETE FROM app_settings WHERE key = 'design_mode'")
         db.commit()
-    A.design_overrides(force=True)
+        A.design_overrides(force=True)
 
 
 def sheet():
@@ -52,7 +52,10 @@ def set_mode(mode):
                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""",
             (mode,))
         db.commit()
-    A.design_overrides(force=True)
+        # Inside the context: the refresh reads through get_db(), and outside
+        # one it raises into design_overrides()'s deliberate swallow -- so the
+        # cache silently keeps the old mode.
+        A.design_overrides(force=True)
 
 
 def store(name, value, mode="dark"):
@@ -66,7 +69,7 @@ def store(name, value, mode="dark"):
             (mode, name, value),
         )
         db.commit()
-    A.design_overrides(force=True)
+        A.design_overrides(force=True)
 
 
 clear()
@@ -165,10 +168,21 @@ resp = client.post("/admin/design",
 check("a valid save is accepted", resp.status_code in (302, 303), resp.status_code)
 check("and reaches the stylesheet", "--ink: #0A0A0A;" in sheet()["body"])
 
-resp = client.post("/admin/design",
-                   data={"csrf_token": token, "--text": "red; } body { display: none"})
+# The payload has to be something the shipped stylesheet does not already
+# contain. "display: none" was the first attempt and is worthless: the file
+# has a `::-webkit-details-marker { display: none; }` rule of its own, so
+# that assertion fails against a correct route and would pass against a
+# broken one given a different payload.
+INJECTION = "red; } body { outline: 9px solid #ff00ff"
+assert INJECTION.split("}")[1] not in sheet()["body"], "pick a payload the sheet lacks"
+client.post("/admin/design", data={"csrf_token": token, "--text": INJECTION})
+after = sheet()["body"]
 check("an unsafe value is refused by the route, not only the helper",
-      "display: none" not in sheet()["body"])
+      "#ff00ff" not in after and "outline: 9px" not in after)
+with app.test_request_context():
+    stored = A.get_db().execute(
+        "SELECT value FROM design_tokens WHERE name = '--text'").fetchone()
+check("and nothing was written for that token", stored is None, stored)
 
 resp = client.post("/admin/design",
                    data={"csrf_token": token, "action": "reset"})
@@ -200,10 +214,10 @@ with app.test_request_context():
 # --- saved palettes -------------------------------------------------------
 with app.test_request_context():
     db = A.get_db()
-    db.execute("DELETE FROM design_palettes WHERE name LIKE 'probe-%'")
+    db.execute("DELETE FROM design_palettes WHERE name LIKE ?", ("probe-%",))
     db.commit()
 
-store("--violet", "#010203")
+store("--violet", "#010203", mode="light")
 client.post("/admin/design",
             data={"csrf_token": token, "action": "save_as",
                   "palette_name": "probe-one"})
@@ -212,12 +226,12 @@ with app.test_request_context():
         "SELECT id, tokens FROM design_palettes WHERE name = 'probe-one'").fetchone()
 check("a palette stores what was live, and which world it was for",
       saved is not None
-      and saved["tokens"].get("mode") == "dark"
+      and saved["tokens"].get("mode") == "light"
       and saved["tokens"].get("tokens", {}).get("--violet") == "#010203",
       saved and saved["tokens"])
 
 # Changing the live design must not change the saved palette.
-store("--violet", "#0A0B0C")
+store("--violet", "#0A0B0C", mode="light")
 client.post("/admin/design",
             data={"csrf_token": token, "action": "restore",
                   "palette_id": saved["id"]})
@@ -245,8 +259,8 @@ with app.test_request_context():
     db = A.get_db()
     db.execute(
         "INSERT INTO design_palettes (name, tokens) VALUES ('probe-bad', ?)",
-        (A.json.dumps({"mode": "dark",
-                       "tokens": {"--violet": "red; } body { display: none",
+        (A.json.dumps({"mode": "light",
+                       "tokens": {"--violet": INJECTION,
                                   "--not-a-token": "#123456"}}),),
     )
     bad = db.execute(
@@ -256,11 +270,11 @@ client.post("/admin/design",
             data={"csrf_token": token, "action": "restore", "palette_id": bad})
 sheet_now = sheet()["body"]
 check("a palette cannot smuggle an unsafe value past the validator",
-      "display: none" not in sheet_now)
+      "#ff00ff" not in sheet_now and "outline: 9px" not in sheet_now)
 check("nor an unknown token", "--not-a-token" not in sheet_now)
 with app.test_request_context():
     db = A.get_db()
-    db.execute("DELETE FROM design_palettes WHERE name LIKE 'probe-%'")
+    db.execute("DELETE FROM design_palettes WHERE name LIKE ?", ("probe-%",))
     db.commit()
 
 # --- the two worlds ------------------------------------------------------

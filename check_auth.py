@@ -657,7 +657,14 @@ with app.test_client() as c:
           body.count("<script") == body.count('nonce="%s"' % nonce),
           f'{body.count("<script")} script tags, '
           f'{body.count(chr(34).join(["nonce=", nonce, ""]))} nonced')
-    check("framing is refused", "frame-ancestors 'none'" in csp)
+    # 'self', not 'none', since /admin/design previews real pages in a frame.
+    # The property worth holding is unchanged -- a cross-origin frame is
+    # refused -- so this asserts that rather than the exact keyword, and
+    # asserts the legacy header agrees with it.
+    check("cross-origin framing is refused",
+          "frame-ancestors 'self'" in csp and "frame-ancestors 'none'" not in csp)
+    check("...and the legacy header says the same",
+          h.get("X-Frame-Options") == "SAMEORIGIN", h.get("X-Frame-Options"))
     check("the referrer is trimmed cross-origin",
           h.get("Referrer-Policy") == "strict-origin-when-cross-origin")
     check("sniffing is off", h.get("X-Content-Type-Options") == "nosniff")
@@ -1034,8 +1041,11 @@ try:
           as_is[:4] == b"\xff\xd8\xff\xe0",
           "it already passed the magic-byte check and the size cap")
 except ImportError:                       # pragma: no cover
-    check("Pillow is installed, so photos can be downscaled", False,
-          "pip install -r requirements.txt")
+    # numpy is imported here too and is *not* in requirements.txt -- it is a
+    # test and tools dependency only -- so naming that file as the remedy sent
+    # you to install something that was already installed.
+    check("Pillow and numpy are installed, so photos can be downscaled", False,
+          "pip install pillow numpy")
 
 reply = save_photo(A.PHOTO_MAX_BYTES + MB)
 check("a photo over it is refused by name",

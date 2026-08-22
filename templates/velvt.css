@@ -85,6 +85,11 @@
       /* fiber grain — inline so no external request is needed */
       --nap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
     
+      /* The mid-stop of the wordmark's sheen. It was --champagne, which is
+         gold -- correct on the dark ground, and in light it sweeps the mark
+         through #8A7C0C and reads olive. The artifact's mark is violet
+         throughout, so this is the token that lets it be. */
+      --brand-sheen: #E8D3A9;
       --gleam:       #FFFFFF;  /* the light side of this mode: inner glows, gleams */
       --shade:       #000000;  /* its dark side: shadows, scrims, wells */
     }
@@ -156,6 +161,10 @@
       /* No light answer in the artifact; --danger-deep is a ground behind
          danger text, so it inverts to a pale red the same way. */
       --danger-deep:  #FDE7E7;
+
+      /* Violet, not gold: the artifact's wordmark is one hue with a lighter
+         sweep across it. */
+      --brand-sheen:  #A78BFA;
 
       --gleam:        #FFFFFF;
       --shade:        #242424;   /* on-delight: the artifact's dark neutral */
@@ -234,9 +243,20 @@
     }
 
     /* ---------- typography ------------------------------------------- */
+    /* The artifact's ch.03 headline: bold sans, tight, not the serif this
+       file opened with. It is the single largest visual difference between
+       the two, and a typeface is not a per-mode answer -- so it changes in
+       both worlds rather than only in light. --serif is still the token and
+       still available; nothing here removes the option. */
+    /* ch.03: the first line of a broken headline is the accent, the rest is
+       ink. app.py's `br` filter wraps it -- so which line is coloured follows
+       the copy's own line break and moves with a translation. */
+    .lead-tone { color: var(--violet-crest); }
+    :root[data-mode="light"] .lead-tone { color: var(--violet); }
+
     h1, h2, h3 {
-      font-family: var(--serif);
-      font-weight: 500;
+      font-family: var(--sans);
+      font-weight: 700;
       letter-spacing: -0.015em;
       line-height: 1.12;
       text-wrap: balance;
@@ -324,7 +344,7 @@
       display: block;
       height: 1.6rem;
       aspect-ratio: 753 / 391;
-      background: linear-gradient(115deg, var(--violet-crest), var(--champagne) 95%);
+      background: linear-gradient(115deg, var(--violet-crest), var(--brand-sheen) 95%);
       -webkit-mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") left center / contain no-repeat;
       mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") left center / contain no-repeat;
     }
@@ -659,6 +679,20 @@
     .btn-secondary:hover {
       background-image: linear-gradient(160deg, color-mix(in srgb, var(--teal-crest) 50%, transparent), color-mix(in srgb, var(--teal-deep) 70%, transparent));
       box-shadow: 0 12px 28px -14px color-mix(in srgb, var(--teal) 90%, transparent);
+    }
+    /* On the light ground the teal wash reads as a second, competing action.
+       The artifact's secondary is the card surface with a hairline -- quiet
+       enough that the primary is unambiguous. */
+    :root[data-mode="light"] .btn-secondary {
+      background-image: none;
+      background-color: var(--ink-raised);
+      border-color: var(--ink-hairline);
+    }
+    :root[data-mode="light"] .btn-secondary:hover {
+      background-image: none;
+      background-color: var(--ink-raised);
+      border-color: color-mix(in srgb, var(--violet) 40%, var(--ink-hairline));
+      box-shadow: 0 8px 20px -12px color-mix(in srgb, var(--shade) 30%, transparent);
     }
     .btn-small { padding: 0.4rem 0.9rem; font-size: 0.82rem; }
 
@@ -3587,7 +3621,7 @@
       /* Three stops, not two, and a background wider than the box: sliding it
          sideways sweeps a sheen across the letters. Masking means the gradient
          is the ink, so the sheen needs no extra element on top. */
-      background: linear-gradient(115deg, var(--violet-crest), var(--champagne) 45%, var(--violet-crest) 90%);
+      background: linear-gradient(115deg, var(--violet-crest), var(--brand-sheen) 45%, var(--violet-crest) 90%);
       background-size: 260% 100%;
       -webkit-mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") center / contain no-repeat;
       mask: url("{{ url_for('static', filename='velvt-logo.svg') }}") center / contain no-repeat;

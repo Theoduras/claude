@@ -2153,6 +2153,21 @@ def login_required(view):
     return wrapped
 
 
+def design_previewing():
+    """True when an admin is framing a page from /admin/design.
+
+    The screens carrying the most design are the pre-login ones, and every one
+    of them redirects a signed-in visitor to the search screen -- so the
+    editor's frame showed the redirect target instead of the screen, and its
+    own docstring claimed otherwise until check_design.py asked. This is the
+    narrowest thing that fixes it: admin only, flag only, and the only
+    behaviour it changes is that one redirect. Nothing is rendered that a
+    signed-out visitor could not already see.
+    """
+    user = current_user()
+    return bool(user and user["is_admin"] and request.args.get("preview"))
+
+
 def admin_required(view):
     from functools import wraps
 
@@ -2376,7 +2391,14 @@ def _br(text):
     this turns it into markup. Escapes first, so only the <br> it adds is
     ever treated as HTML.
     """
-    return Markup("<br>".join(escape(line) for line in str(text).split("\n")))
+    lines = [escape(line) for line in str(text).split("\n")]
+    # ch.03's two-tone headline: the first line carries the accent, the rest
+    # is ink. The split is the catalogue's own line break, so a translator
+    # choosing a different first line moves the colour with it -- which is
+    # the point of keeping the break in the copy rather than in the markup.
+    if len(lines) > 1:
+        lines[0] = Markup('<span class="lead-tone">%s</span>') % lines[0]
+    return Markup("<br>").join(lines)
 
 
 @app.context_processor
@@ -2885,7 +2907,7 @@ def landing_pulse():
 
 @app.route("/")
 def index():
-    if current_uid():
+    if current_uid() and not design_previewing():
         return redirect(url_for("live_search"))
     return render_template("landing.html", pulse=landing_pulse())
 
@@ -2907,7 +2929,7 @@ def help_page():
 @app.route("/register", methods=["GET", "POST"])
 @rate_limited("register", limit=20, window_seconds=3600)
 def register():
-    if current_uid():
+    if current_uid() and not design_previewing():
         return redirect(url_for("live_search"))
 
     form = {"username": "", "email": "", "dob": ""}
@@ -3015,7 +3037,7 @@ def register():
 @app.route("/login", methods=["GET", "POST"])
 @rate_limited("login", limit=10, window_seconds=300)
 def login():
-    if current_uid():
+    if current_uid() and not design_previewing():
         return redirect(url_for("live_search"))
 
     if request.method == "POST":
@@ -8164,14 +8186,17 @@ DESIGN_LABELS = {
 # preview that 302s to somewhere else is worse than one that is not offered.
 DESIGN_PREVIEW = [
     ("Pre-login", [
-        ("Landing", "/"),
-        ("Sign in", "/login"),
-        ("Register", "/register"),
+        ("Landing", "/?preview=1"),
+        ("Sign in", "/login?preview=1"),
+        ("Register", "/register?preview=1"),
         ("Forgot", "/forgot"),
     ]),
     ("Search", [
         ("How it works", "/how-matching-works"),
-        ("Type", "/search"),
+        # /search is not here: it bounces to /profile/edit until the admin's
+        # own profile is complete, and to /how-matching-works on a first
+        # visit. What it renders therefore depends on who is looking, which
+        # is the one thing a preview must not do.
     ]),
     ("Chats", [
         ("Chats", "/chats"),

@@ -65,11 +65,11 @@ TRANSLATIONS = {
         "landing.title": "Velvt",
         # Newlines are the typographic choice of each language: the template
         # turns them into <br>, so a language may use fewer or more lines.
-        "landing.headline": "Something\nsofter than\nswiping.",
-        "landing.lede": "Sign in and search — we pair you the moment someone is looking for you too.",
-        "landing.cta_start": "Start searching",
-        "landing.cta_signin": "I already have an account",
-        "landing.fine": "Nobody matches you unless you match them back.",
+        "landing.headline": "Two people,\nfive minutes,\none decision.",
+        "landing.lede": "No endless swiping. Search when you're free, meet whoever is searching too.",
+        "landing.cta_start": "Create an account",
+        "landing.cta_signin": "Sign in",
+        "landing.fine": "18+. Maastricht only, for now.",
         "pulse.live_one": "1 person searching right now",
         "pulse.live_many": "{n} people searching right now",
 
@@ -537,11 +537,11 @@ TRANSLATIONS = {
 
         # --- landing ---
         "landing.title": "Velvt",
-        "landing.headline": "Niet swipen,\nmaar matchen!",
-        "landing.lede": "Meld je aan en zoek — we koppelen je zodra iemand anders ook naar jou zoekt.",
-        "landing.cta_start": "Begin met zoeken",
-        "landing.cta_signin": "Ik heb al een account",
-        "landing.fine": "Niemand matcht met jou tenzij jij ook terugmatcht.",
+        "landing.headline": "Twee mensen,\nvijf minuten,\néén beslissing.",
+        "landing.lede": "Geen eindeloos swipen. Zoek wanneer je vrij bent, ontmoet wie er ook zoekt.",
+        "landing.cta_start": "Maak een account",
+        "landing.cta_signin": "Inloggen",
+        "landing.fine": "18+. Voorlopig alleen Maastricht.",
         "pulse.live_one": "1 persoon zoekt nu",
         "pulse.live_many": "{n} mensen zoeken nu",
 
