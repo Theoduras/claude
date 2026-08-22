@@ -273,13 +273,14 @@ check("dark and light disagree about the page ground",
 check("but agree about anything structural, by falling through",
       A._mode_defaults("light")["--radius"] == A.DESIGN_DEFAULTS["--radius"])
 
-check("the site starts in dark", A.design_mode() == "dark", A.design_mode())
-set_mode("light")
-check("and the switch is honoured", A.design_mode() == "light")
+check("the site starts in light, which is the shipped design",
+      A.design_mode() == "light", A.design_mode())
+set_mode("dark")
+check("and the switch is honoured", A.design_mode() == "dark")
 check("without changing the stylesheet's bytes",
       sheet()["body"] == base["body"],
       "both worlds are always in the sheet; <html> decides which paints")
-set_mode("dark")
+set_mode("light")
 
 # An override in one world must not leak into the other.
 store("--ink", "#111111", mode="dark")

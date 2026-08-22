@@ -8318,7 +8318,7 @@ DESIGN_CACHE_SECONDS = 10
 # would make a cold process treat its empty cache as fresh and serve the
 # shipped palette for the first few seconds after every scale-up.
 _DESIGN_CACHE = {"at": None,
-                 "values": {"values": {"dark": {}, "light": {}}, "mode": "dark",
+                 "values": {"values": {"dark": {}, "light": {}}, "mode": "light",
                             "copy": {}, "icons": {}}}
 
 
@@ -8338,7 +8338,11 @@ def _design_read():
             values[row["mode"]][row["name"]] = row["value"]
     setting = get_db().execute(
         "SELECT value FROM app_settings WHERE key = 'design_mode'").fetchone()
-    mode = setting["value"] if setting and setting["value"] in DESIGN_MODES else "dark"
+    # Light is the shipped default now: it is the design the artifact is
+    # actually showing, and mode is part of that design rather than a
+    # preference laid over it. One click in /admin/design changes it, and the
+    # dark world is still in the stylesheet either way.
+    mode = setting["value"] if setting and setting["value"] in DESIGN_MODES else "light"
 
     # Copy and icons ride along on the same trip and the same TTL. They are
     # read on every render for the same reason the tokens are, and three
@@ -8377,7 +8381,7 @@ def design_overrides(force=False):
 
 def design_mode():
     """Which world the site is painting in right now: "dark" or "light"."""
-    return design_overrides().get("mode", "dark")
+    return design_overrides().get("mode", "light")
 
 
 def say(lang, key, **kwargs):

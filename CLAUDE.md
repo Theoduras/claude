@@ -545,8 +545,21 @@ the same token has a different right answer in each. The editor edits a mode
 independently of the live one: designing light before switching to it is the
 normal order.
 
-The light values are the light column of the Restyler's own palette — the
-design that was already reviewed, not a fresh guess. **Where a name encodes a
+**Light is the shipped default**, because it is the design the artifact is
+actually showing; one click in `/admin/design` changes it, and the dark world
+is in the stylesheet either way.
+
+The light values are the light column of the Restyler's own palette **plus the
+one token edited in the artifact** (`--canvas` → `#FFFFFF`, which makes the
+card surface a shade darker than the page rather than lighter — deliberate, and
+what the artifact renders). Where the app and the artifact do not map 1:1 the
+choice was settled by reading how the token is used, not by taste:
+`--violet-deep` ends the velvet gradient, so it is `velvet-3`; `--champagne` is
+a text and focus-ring colour nearly everywhere it appears, so it is
+`delight-deep` rather than the acid yellow, which is unreadable doing that job
+on white. The artifact's light column has no accent family at all, so
+`--teal-crest` and `--teal-deep` are derived from `live` rather than borrowed
+from `success`, which is a different job. **Where a name encodes a
 dark role, the light answer inverts the role rather than the colour**:
 `--violet-deep` is a ground behind violet content, so on a light page it is a
 pale wash. `--champagne` is the light on the pile, invisible as a pale gold on

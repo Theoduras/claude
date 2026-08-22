@@ -117,29 +117,48 @@
        lift; #242424 at the same alphas is the Restyler's own elevation.
        ================================================================== */
     :root[data-mode="light"] {
-      --ink:          #F4F3F0;
-      --ink-raised:   #FBFAF8;
-      --ink-hairline: #E5E3DE;
+      /* canvas, as edited in the artifact: pure white, not the palette's
+         #F4F3F0. Which makes the card surface a shade *darker* than the page
+         rather than lighter -- the inversion is deliberate on that ground and
+         is what the artifact renders. */
+      --ink:          #FFFFFF;
+      --ink-raised:   #FBFAF8;   /* surface  */
+      --ink-hairline: #E5E3DE;   /* hairline */
 
-      --violet:       #6D28D9;
-      --violet-crest: #8B5CF6;
-      --violet-deep:  #EDE4FE;
+      /* The velvet triple is the artifact's velvet-1 / action / velvet-3.
+         --violet is the button fill, which is `action`; the two either side
+         are the ends of the gradient at .velvet, line ~610. */
+      --violet:       #6D28D9;   /* action   */
+      --violet-crest: #6739FF;   /* velvet-1 */
+      --violet-deep:  #3C2E86;   /* velvet-3 */
 
-      --teal:         #0E9F6E;
+      /* The artifact's light column has no accent family -- its greens are
+         status colours -- so only --teal is quoted (`live`). The other two are
+         derived from it rather than borrowed from `success`, which is a
+         different job. --teal-deep is #D8F5F2, already in this file's own
+         vocabulary as the pale teal it used on dark. */
+      --teal:         #0E9F6E;   /* live */
       --teal-crest:   #12B981;
       --teal-deep:    #D8F5F2;
 
+      /* `delight-deep`, not `delight`. --champagne is a text and focus-ring
+         colour almost everywhere it appears in this file -- link hover, the
+         focus outline, .flash a -- and acid yellow at #FAE83E is unreadable
+         doing that on white. This is the artifact's own answer for gold as
+         text. */
       --champagne:    #8A7C0C;
 
-      --text:         #14121A;
-      --text-muted:   #3D3A45;
-      --text-faint:   #8B8794;
+      --text:         #14121A;   /* ink   */
+      --text-muted:   #3D3A45;   /* body  */
+      --text-faint:   #8B8794;   /* quiet */
 
       --danger:       #EA4545;
+      /* No light answer in the artifact; --danger-deep is a ground behind
+         danger text, so it inverts to a pale red the same way. */
       --danger-deep:  #FDE7E7;
 
       --gleam:        #FFFFFF;
-      --shade:        #242424;
+      --shade:        #242424;   /* on-delight: the artifact's dark neutral */
     }
 
 
