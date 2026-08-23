@@ -114,7 +114,7 @@
      `main` (z-index 1) the layer would sit on top of the weave instead of
      under it, and the characters would look pasted on rather than woven in. #}
   {% block backdrop %}{% endblock %}
-  <div class="app-shell">
+  <div class="app-shell{% block shell_class %}{% endblock %}">
   <nav>
     <a class="brand" href="{{ url_for('index') }}"><span class="brand-logo"></span><span class="brand-word">Velvt</span></a>
     {% if current_user %}

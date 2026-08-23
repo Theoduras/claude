@@ -1,14 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Slow down — Velvt{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <p class="eyebrow">{{ t("login.eyebrow") }}</p>
-  <h1 style="margin-top: 0.5rem;">That's a lot at once.</h1>
-  <p class="subtitle" style="margin-bottom: 1.2rem;">
-    We've had too many requests from you in a short space of time, so we've paused
-    this for a moment.
+<div class="notice">
+  <span class="notice-disc">{{ icon("notice.slow") }}</span>
+  <h1>Slow down a moment</h1>
+  <p>
+    That's a lot of tries in a short space of time, so we've paused this one.
+    Give it a minute or two and it will work again.
   </p>
-  <p class="hint">Try again in a minute or two. If you think this is wrong, get in
-    touch at <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</p>
+  <a class="btn" href="{{ url_for('index') }}">Back to safety</a>
+  <p class="notice-aside">
+    If you think this is wrong, write to
+    <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+  </p>
 </div>
 {% endblock %}

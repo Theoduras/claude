@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Something expired — Velvt{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <p class="eyebrow">{{ t("login.eyebrow") }}</p>
-  <h1 style="margin-top: 0.5rem;">That page had gone stale.</h1>
-  <p class="subtitle" style="margin-bottom: 1.2rem;">
-    We couldn't confirm the request came from your session, so we didn't act on it.
-    This usually means the page sat open for a long time, or you signed in somewhere else.
+{# ch.05: the centred notice. A disc, a headline, the explanation, and one
+   way out -- the same shape as an ended chat and an empty inbox, so an
+   error is not a different kind of screen from the ordinary ones. #}
+<div class="notice">
+  <span class="notice-disc">{{ icon("notice.stale") }}</span>
+  <h1>That form went stale</h1>
+  <p>
+    You were away long enough that we stopped trusting the page. Nothing was
+    sent. Go back and try it again.
   </p>
-  <p class="hint">Go back, reload the page, and try again — nothing was changed.</p>
+  <a class="btn" href="{{ url_for('index') }}">Back to safety</a>
 </div>
 {% endblock %}

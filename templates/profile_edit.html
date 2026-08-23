@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 {% block title %}{{ t("edit.title") }}{% endblock %}
+{#- ch.05: the chevron belongs to the app bar. The screen had its own head
+    row with a back arrow and a title, which under the app bar meant two
+    header rows stacked, one of them naming the screen and the other
+    wearing the mark. -#}
+{% block appbar %}{{ appbar(back=url_for("view_profile", user_id=current_user["id"]),
+                            back_label=t("edit.back")) }}{% endblock %}
 {% block content %}
 {# The wizard's column with a document in the middle: the compact bar is
    the pinned head, the fields scroll under it, and Save sits where Next
    sits on a step so it never scrolls out of reach. #}
 <div class="wiz edit-screen wiz-fit">
-  <div class="edit-head">
-    <a class="chat-back" href="{{ url_for('view_profile', user_id=current_user['id']) }}"
-       aria-label="{{ t('edit.back') }}">&lsaquo;</a>
-    <span class="edit-head-title">{{ t("edit.heading") }}</span>
-  </div>
+  <h1 class="settings-title">{{ t("edit.heading") }}</h1>
 
   <div class="wiz-body wiz-scroll">
     <form id="profile-form" method="post" action="{{ url_for('edit_profile') }}"

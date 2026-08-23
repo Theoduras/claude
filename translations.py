@@ -274,6 +274,9 @@ TRANSLATIONS = {
         "report.block_sub": "You won't appear in each other's searches, and any chat you have ends.",
         "report.danger": "If you're in immediate danger, contact your local emergency services first.",
         "report.send": "Send report",
+        "chat.decide_lede": "Your five minutes are over. If you both continue, the chat stays open and your photos unlock.",
+        "chat.they_decided": "{name} has already decided",
+        "chat.they_havent": "{name} hasn't answered yet",
 
         "chats.empty": "No chats yet. Start a {link} and we'll pair you the moment someone is looking for you too.",
         "chats.empty_head": "No chats yet",
@@ -766,6 +769,9 @@ TRANSLATIONS = {
         "report.block_sub": "Jullie komen niet meer in elkaars zoekopdrachten, en een lopend gesprek stopt.",
         "report.danger": "Verkeer je in direct gevaar, bel dan eerst je lokale hulpdiensten.",
         "report.send": "Melding versturen",
+        "chat.decide_lede": "Jullie vijf minuten zijn voorbij. Als jullie allebei doorgaan blijft het gesprek open en worden je foto's zichtbaar.",
+        "chat.they_decided": "{name} heeft al gekozen",
+        "chat.they_havent": "{name} heeft nog niet gekozen",
 
         "chats.empty": "Nog geen gesprekken. Start een {link} en we koppelen je zodra iemand anders ook naar jou zoekt.",
         "chats.empty_head": "Nog geen gesprekken",

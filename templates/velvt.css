@@ -5418,3 +5418,88 @@
     /* `flex: 1 1 7rem` was a *width* basis in the old row layout; in a
        column the same basis is a 7rem-tall row. */
     .admin-tally-item { flex: none; }
+    .notice-aside { font-size: 0.82rem; color: var(--text-faint); margin-top: 0.4rem; }
+    .notice-aside a { color: var(--violet); }
+
+    /* The landing page is the one screen with nothing to navigate between.
+       Its two buttons are the point, and a tab bar under them offers a
+       fourth thing to press to someone who has not signed up yet. */
+    .app-shell.is-bare .tabbar { display: none; }
+    .app-shell.is-bare main { padding-bottom: clamp(1.5rem, 4vw, 3rem); }
+
+    /* The busyness line is a sentence about people, and it was set as an
+       11px uppercase tracked label -- the treatment this file gives to
+       section headers. The number is the part worth reading, so it is the
+       part that is emphasised, and the whole line sits in ordinary case at
+       a size you can read at arm's length. */
+    .landing-live {
+      justify-content: center;
+      margin-bottom: 0.7rem;
+      font-size: 0.9rem;
+      font-weight: 400;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-muted);
+    }
+    .landing-live strong, .landing-live b { font-weight: 700; color: var(--text); }
+    .landing-fine { text-align: center; }
+
+    /* ---------- the reveal, quieted ----------------------------------
+       The two hidden photos each carried a 40px coloured halo -- one
+       violet, one teal -- which on a near-black ground read as two people
+       lit from behind and on white reads as a smudge under each disc. They
+       are two plain discs that overlap, and the overlap is what says the
+       pair.
+
+       The ring defaulted to --champagne, which is gold on dark and #8A7C0C
+       in light, so a countdown people are watching tick was olive. It is
+       the action colour in both worlds, like every other progress this app
+       draws. */
+    .pair > *, .pair > * + * {
+      border: 3px solid var(--ink);
+      box-shadow: none;
+      background: var(--field);
+    }
+    .pair > * + * { margin-left: -1.7rem; }
+    .ring {
+      background: conic-gradient(
+        var(--ring-color, var(--violet)) 0deg var(--deg, 0deg),
+        var(--ink-hairline) var(--deg, 0deg) 360deg);
+    }
+    .ring::after { background: var(--ink); }
+    .ring-num { color: var(--text); font-weight: 800; }
+    .ring-unit { color: var(--text-faint); }
+
+    /* "Liam is already in the room" is a sentence about a person, and it
+       was set as a 9px uppercase tracked label -- the treatment this file
+       reserves for section headers. Twice on this screen, since the note
+       under the chips uses the same class. */
+    .match-line, .match-note {
+      font-size: 0.85rem;
+      font-weight: 400;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-muted);
+    }
+    .match-note strong, .match-note b, .match-line strong { color: var(--violet); font-weight: 700; }
+    /* A shared interest is the reason you were paired; one you do not share
+       is context. The wash marks the first, and only the first. */
+    .match .pill.is-static { background: var(--violet-wash); color: var(--violet); }
+    .match .pill.is-static.is-faint { background: var(--field); color: var(--text-muted); }
+
+    /* One report is one card. They were separated by a hairline inside a
+       card that wrapped the whole page, which made a list of independent
+       decisions read as one long document. */
+    .admin-item {
+      padding: var(--card-pad);
+      border-radius: var(--radius);
+      background: var(--ink-raised);
+      margin-bottom: 0.85rem;
+    }
+    .admin-item-title {
+      font-size: 1.02rem;
+      font-weight: 700;
+      margin: 0 0 0.4rem;
+    }
+    .admin-item .btn { font-size: 0.86rem; padding: 0.6rem 1rem; }
+    .admin-item form { display: flex; flex-wrap: wrap; gap: 0.5rem; }

@@ -52,6 +52,10 @@
 {#- The landing page carries the wordmark inside its own hero, above the
     headline, so the app bar would draw a second one directly above it. -#}
 {% block appbar %}{% endblock %}
+{#- ...and no tab bar either. The landing page is the one screen with
+    nothing to navigate between: it has two buttons, and both of them are
+    the point. -#}
+{% block shell_class %} is-bare{% endblock %}
 {% block content %}
 {# The same column every other screen uses. The hero is the wizard's body,
    the two buttons are its nav -- and .wiz-fit keeps the pair inside the

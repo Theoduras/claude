@@ -96,10 +96,24 @@
   <div class="wiz match wiz-fit">
     <div class="wiz-body">
       <p class="wiz-count">{{ t("chat.times_up") }}</p>
+
+      {#- The same two hidden discs the reveal opens with. This is the other
+          end of that twenty seconds, and showing the pair again is what
+          says so -- the photos are still locked, and answering here is what
+          unlocks them. No countdown ring beside them, though: the decision
+          window is DECISION_GRACE_SECONDS, a day, and a ring drawn over a
+          day promises seconds. -#}
+      <div class="pair" aria-hidden="true">
+        <span class="ph"></span>
+        <span class="ph"></span>
+      </div>
+
       <h1 class="wiz-q">{{ t("chat.continue_with") }}<br>{{ other['name'] }}?</h1>
-      <p class="wiz-hint">
-        Your five minutes are over.
-        {% if state.their_decision %}{{ other['name'] }} has already decided.{% endif %}
+      <p class="wiz-hint">{{ t("chat.decide_lede") }}</p>
+      <p class="match-line">
+        <span class="live-dot"></span>
+        {% if state.their_decision %}{{ t("chat.they_decided", name=other['name']) }}
+        {% else %}{{ t("chat.they_havent", name=other['name']) }}{% endif %}
       </p>
 
       <div class="chat-log" id="chat-log-static" data-their-read-id="{{ their_read_id or 0 }}">
