@@ -4962,3 +4962,247 @@
     .waiting .waiting-meta { justify-content: flex-start; }
     .waiting .search-anim { margin-inline: auto; }
     .waiting-none { text-align: left; }
+
+    /* ---------- the conversation row ---------------------------------
+       Avatar, then name over preview, then state at the end -- three
+       columns on one centre line. It was a .card with the state inline
+       beside the name, so "Awaiting decision" wrapped to two lines inside
+       its own chip and squeezed the name into an ellipsis. */
+    .chat-row {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      padding: calc(0.85 * var(--fit)) 1rem;
+      border: none;
+      border-radius: 0.95rem;
+      background: var(--ink-raised);
+      background-image: none;
+      box-shadow: none;
+      overflow: visible;
+    }
+    .chat-row::before, .chat-row::after { content: none; }
+    .chat-row:hover { transform: none; background: color-mix(in srgb, var(--violet-wash) 45%, var(--ink-raised)); }
+    .chat-row-main { gap: 0.1rem; }
+    .chat-row-name {
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: calc(0.96 * var(--fit));
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chat-row-preview {
+      font-size: 0.85rem;
+      color: var(--text-faint);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chat-row-end { flex: none; display: flex; align-items: center; }
+    .chat-rows { display: flex; flex-direction: column; gap: 0.6rem; }
+    /* An ended conversation is quiet, not half-erased: 0.55 opacity took the
+       name below the contrast the rest of the app holds itself to. */
+    .chat-row-ended { opacity: 1; }
+    .chat-row-ended .chat-row-name { color: var(--text-muted); }
+    .chat-row-ended:hover { opacity: 1; }
+    .avatar.ph, img.avatar {
+      width: calc(2.6 * var(--fit));
+      height: calc(2.6 * var(--fit));
+      border-radius: 50%;
+      background: var(--field);
+      object-fit: cover;
+      flex: none;
+    }
+    /* The state chip: small, one line, never wrapping. */
+    .tag {
+      display: inline-block;
+      padding: 0.28rem 0.6rem;
+      border-radius: 0.5rem;
+      font-size: 0.63rem;
+      font-weight: 800;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      line-height: 1.25;
+    }
+
+    /* ---------- the conversation --------------------------------------
+       Their bubble was a teal gradient with a literal #D8F5F2 on it, mine a
+       violet gradient with #F6ECFF: two washes competing for a screen whose
+       content is words. The artifact gives one side the page's own surface
+       and the other the action colour, which is the whole distinction --
+       who said it -- and nothing else. */
+    .bubble {
+      padding: 0.6rem 0.85rem;
+      border-radius: 1.05rem;
+      border: none;
+    }
+    .bubble.left {
+      color: var(--text);
+      background-color: var(--ink-raised);
+      background-image: none;
+      border-bottom-left-radius: 0.35rem;
+    }
+    .bubble.right {
+      color: var(--gleam);
+      background-color: var(--violet);
+      background-image: none;
+      border-bottom-right-radius: 0.35rem;
+    }
+    .bubble.right .bubble-meta,
+    .bubble.right .bubble-time { color: color-mix(in srgb, var(--gleam) 72%, transparent); }
+
+    /* The clock is a banner across the top of the room, not a chip beside
+       the name: it is the one fact that governs everything below it. */
+    .chat-clock-strip {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      padding: calc(0.7 * var(--fit)) 0.95rem;
+      border-radius: 0.85rem;
+      background: var(--ink-raised);
+      margin-bottom: calc(0.7 * var(--fit));
+      font-size: 0.85rem;
+      color: var(--text-faint);
+    }
+    .chat-clock-strip strong {
+      font-family: var(--mono);
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* The composer: a filled well and one round violet button, which is the
+       only circular button in the app -- a send action is a direction, not
+       a word, and it is the one place an icon says it better. */
+    .chat-form {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding-top: calc(0.6 * var(--fit));
+    }
+    .chat-form input[type="text"] {
+      margin-bottom: 0;
+      border-radius: 999px;
+      background: var(--field);
+    }
+    .chat-send {
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: calc(2.9 * var(--fit));
+      height: calc(2.9 * var(--fit));
+      padding: 0;
+      border: none;
+      border-radius: 50%;
+      background: var(--violet);
+      color: var(--gleam);
+      cursor: pointer;
+    }
+    .chat-send svg { width: calc(1.2 * var(--fit)); height: calc(1.2 * var(--fit)); }
+    .chat-send:disabled { opacity: 0.45; cursor: default; }
+    .chat-send:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; }
+
+    /* ---------- the reveal, and the decision --------------------------
+       Two hidden photos as two overlapping discs, the ring below them, and
+       a pair of buttons where only one is a button-shape. */
+    .pair .ph {
+      width: 5.2rem;
+      height: 5.2rem;
+      border-radius: 50%;
+      background: var(--field);
+      border: 3px solid var(--ink);
+    }
+    .pair .ph + .ph { margin-left: -1.6rem; }
+    .ring-num { font-variant-numeric: tabular-nums; }
+    .wiz-go {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: calc(1.02 * var(--fit)) 1.5rem;
+      font-size: calc(0.98 * var(--fit));
+      font-weight: 700;
+      color: var(--gleam);
+      background: var(--violet);
+      background-image: none;
+      border: none;
+      border-radius: 0.95rem;
+      box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--violet) 70%, transparent);
+      cursor: pointer;
+    }
+    .wiz-go:hover { background: color-mix(in srgb, var(--violet) 88%, var(--shade)); }
+    .wiz-skip-danger { color: var(--text); font-weight: 700; }
+    .wiz-skip-danger:hover { color: var(--danger); background: none; }
+    .match .wiz-nav { gap: 0.75rem; }
+    .match .wiz-nav-end { flex: 1; display: flex; }
+    .match .wiz-go { width: 100%; }
+    /* The timed room's ring is kept in the DOM for the poll to write to and
+       taken out of the layout -- the strip above it is what a reader sees. */
+    .is-hidden-ring { display: none; }
+
+    /* .bubble.left / .right carry (0,2,0), so the ch.05 reset above them at
+       (0,1,0) never reached their borders -- the teal and violet hairlines
+       survived the repaint and outlined every bubble on a white page. */
+    .bubble.left, .bubble.right { border: none; }
+
+    /* The room's header was a panel: a card with an avatar, a centred name,
+       a live dot, Unmatch and Report inside it. The artifact makes it a
+       line -- who you are talking to, and the two things you might need --
+       so the conversation starts at the top of the screen instead of a
+       third of the way down it. */
+    .chat-head {
+      padding: 0 0 calc(0.7 * var(--fit));
+      background: none;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      gap: 0.7rem;
+    }
+    .chat-head::before, .chat-head::after { content: none; }
+    .chat-head .avatar, .chat-head .avatar.ph {
+      width: calc(2.2 * var(--fit));
+      height: calc(2.2 * var(--fit));
+    }
+    .chat-head-name {
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: calc(1 * var(--fit));
+      color: var(--text);
+      text-decoration: none;
+    }
+    .chat-head-live { font-size: 0.72rem; color: var(--text-faint); margin: 0.05rem 0 0; }
+    .chat-head-report, .room-leave-btn {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-faint);
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .chat-head-report:hover, .room-leave-btn:hover { color: var(--danger); }
+
+    /* The in-room decision was three things on one line: a status note in
+       uppercase, a text button and a pill, each squeezing the others. It
+       becomes a note over a pair of buttons -- the same dock shape the
+       decision screen uses, so the two places you answer the same question
+       look like the same question. */
+    .room-decide {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 0.6rem 0.75rem;
+      margin-top: calc(0.7 * var(--fit));
+    }
+    .room-decide .match-line {
+      grid-column: 1 / -1;
+      justify-content: flex-start;
+      margin: 0;
+      font-size: 0.82rem;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-faint);
+    }
+    .room-decide .wiz-skip-danger { justify-self: start; padding-inline: 0.4rem; }
+    .room-decide .wiz-go { width: 100%; }

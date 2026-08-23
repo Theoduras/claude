@@ -4,14 +4,13 @@
 {# The room's shape one level up: head pinned at the top, the list taking
    the slack and scrolling inside itself. Nothing but the rows moves. #}
 <div class="wiz chats-screen wiz-fit">
-  <p class="wiz-count">{{ t("chats.heading") }}</p>
   <h1 class="wiz-q">{{ t("chats.heading") }}</h1>
 
   <div class="wiz-body wiz-scroll">
     {% if rooms %}
       <div class="chat-rows">
         {% for room in rooms %}
-          <a class="card chat-row {{ 'chat-row-ended' if room['phase'] == 'ended' else '' }}"
+          <a class="chat-row {{ 'chat-row-ended' if room['phase'] == 'ended' else '' }}"
              href="{{ url_for('chat', match_id=room['id']) }}">
             {% if not is_admin and room['other_photo_id'] %}
               <img class="avatar" src="{{ url_for('photo', photo_id=room['other_photo_id']) }}" alt="">
@@ -21,37 +20,46 @@
               <span class="avatar ph"></span>
             {% endif %}
             <div class="chat-row-main">
-              <div class="chat-row-top">
-                <strong>
-                  {% if is_admin %}{{ room['name_a'] }} &amp; {{ room['name_b'] }}
-                  {% else %}{{ room['other_name'] }}{% endif %}
-                </strong>
-                {% if room['phase'] == 'reveal' %}
-                  <span class="tag">{{ t("chats.tag_match") }}</span>
-                {% elif room['phase'] == 'timed' %}
-                  <span class="tag tag-timed">{{ t("chats.tag_timed") }}</span>
-                {% elif room['phase'] == 'deciding' %}
-                  <span class="tag tag-timed">{{ t("chats.tag_deciding") }}</span>
-                {% elif room['phase'] == 'ended' %}
-                  <span class="tag tag-ended">{{ t("chats.tag_ended") }}</span>
-                {% endif %}
-              </div>
-              <div class="chat-row-bottom">
-                <span class="chat-row-preview">
-                  {% if room['last_message'] %}{{ room['last_message'] | truncate(70) }}
-                  {% else %}No messages yet — say hi!{% endif %}
-                </span>
-                {% if room['when'] %}<span class="chat-row-time">{{ room['when'] }}</span>{% endif %}
-              </div>
+              <strong class="chat-row-name">
+                {% if is_admin %}{{ room['name_a'] }} &amp; {{ room['name_b'] }}
+                {% else %}{{ room['other_name'] }}{% endif %}
+              </strong>
+              <span class="chat-row-preview">
+                {% if room['last_message'] %}{{ room['last_message'] | truncate(70) }}
+                {% else %}{{ t("chats.no_messages") }}{% endif %}
+              </span>
             </div>
+            {#- ch.05 §6: the state of a conversation belongs at the end of
+                its row, on the row's own centre line -- it was inline with
+                the name, where a two-word chip wrapped and pushed the name
+                into an ellipsis. A row with no state shows its time there
+                instead, so the column is never empty and never doubled. -#}
+            <span class="chat-row-end">
+              {% if room['phase'] == 'reveal' %}
+                <span class="tag tag-matched">{{ t("chats.tag_match") }}</span>
+              {% elif room['phase'] == 'timed' %}
+                <span class="tag tag-timed">{{ t("chats.tag_timed") }}</span>
+              {% elif room['phase'] == 'deciding' %}
+                <span class="tag tag-timed">{{ t("chats.tag_deciding") }}</span>
+              {% elif room['phase'] == 'ended' %}
+                <span class="tag tag-ended">{{ t("chats.tag_ended") }}</span>
+              {% elif room['when'] %}
+                <span class="chat-row-time">{{ room['when'] }}</span>
+              {% endif %}
+            </span>
           </a>
         {% endfor %}
       </div>
     {% else %}
-      <p class="chats-empty">
-        {%- set search_link %}<a href="{{ url_for('live_search') }}">{{ t("chats.empty_link") }}</a>{% endset -%}
-        {{ t("chats.empty", link=search_link) | safe }}
-      </p>
+      {#- ch.05: the same centred notice the ended chat and the two error
+          screens use. An empty inbox is not a failure, and it read like one
+          as a grey sentence in the middle of a blank page. -#}
+      <div class="notice">
+        <span class="notice-disc">{{ icon("notice.empty") }}</span>
+        <h2>{{ t("chats.empty_head") }}</h2>
+        <p>{{ t("chats.empty_body") }}</p>
+        <a class="btn" href="{{ url_for('live_search') }}">{{ t("chats.empty_link") }}</a>
+      </div>
     {% endif %}
   </div>
 </div>

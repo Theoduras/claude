@@ -205,21 +205,18 @@
       {% if phase == 'timed' %}
         {# The room's clock. It lives here rather than in the header so the
            ring can carry it — one timer on the page, not two. #}
-        <div class="room-timer">
-          <div class="ring ring-sm" id="timed-ring"
-               style="--ring-color: var(--violet-crest);
-                      --deg: {{ (state.seconds_left / timed_seconds * 360) | round | int }}deg;">
-            <div class="ring-inner">
-              <span class="ring-num countdown" id="timed-countdown">{{ (state.seconds_left // 60) }}:{{ '%02d' % (state.seconds_left % 60) }}</span>
-            </div>
-          </div>
-          <div>
-            <div class="room-timer-label">{{ t("chat.time_left") }}</div>
-            <p>
-              {{ t("chat.neither_note") }}
-            </p>
-          </div>
-        </div>
+        {#- ch.05: a banner across the top of the room rather than a ring
+            beside a paragraph. The clock governs everything below it, so it
+            reads as a condition on the conversation, not as a widget in it.
+            The ring stays in the markup, hidden: the poll drives it by id
+            and a countdown with no element to write to is a silent stall. -#}
+        <p class="chat-clock-strip">
+          <strong id="timed-countdown">{{ (state.seconds_left // 60) }}:{{ '%02d' % (state.seconds_left % 60) }}</strong>
+          <span>{{ t("chat.clock_note") }}</span>
+        </p>
+        <div class="ring ring-sm is-hidden-ring" id="timed-ring" aria-hidden="true"
+             style="--ring-color: var(--violet);
+                    --deg: {{ (state.seconds_left / timed_seconds * 360) | round | int }}deg;"></div>
       {% endif %}
     {% else %}
       <div class="chat-head">
@@ -310,7 +307,10 @@
           <input type="text" name="body" id="chat-input" placeholder="{{ t('chat.input_ph') }}"
                  maxlength="{{ message_max_chars }}"
                  autofocus required autocomplete="off">
-          <button class="btn btn-send" type="submit" aria-label="{{ t('chat.send') }}">&#8593;</button>
+          {#- ch.05: a real glyph from the registry rather than an up-arrow
+              character, which rendered at whatever weight the system font
+              happened to draw it and could not be re-pointed from admin. -#}
+          <button class="chat-send" type="submit" aria-label="{{ t('chat.send') }}">{{ icon("chat.send") }}</button>
         </form>
       </div>
     {% else %}

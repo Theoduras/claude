@@ -264,8 +264,12 @@ TRANSLATIONS = {
         "chats.tag_deciding": "Awaiting decision",
         "chats.tag_ended": "Ended",
         "chats.no_messages": "No messages yet — say hi!",
+        "chat.clock_note": "left in this conversation. Photos unlock if you both continue.",
         "chats.empty": "No chats yet. Start a {link} and we'll pair you the moment someone is looking for you too.",
-        "chats.empty_link": "live search",
+        "chats.empty_head": "No chats yet",
+        "chats.empty_body": "Start a search and we'll pair you the moment someone is looking for you too.",
+        "chats.empty_link": "Start a search",
+        "chats.no_messages": "No messages yet — say hi!",
 
         # --- waiting screen ---
         "waiting.title": "Searching… — Velvt",
@@ -742,8 +746,12 @@ TRANSLATIONS = {
         "chats.tag_deciding": "Wacht op beslissing",
         "chats.tag_ended": "Beëindigd",
         "chats.no_messages": "Nog geen berichten — zeg hallo!",
+        "chat.clock_note": "over in dit gesprek. Foto's worden zichtbaar als jullie allebei doorgaan.",
         "chats.empty": "Nog geen gesprekken. Start een {link} en we koppelen je zodra iemand anders ook naar jou zoekt.",
-        "chats.empty_link": "live zoekopdracht",
+        "chats.empty_head": "Nog geen gesprekken",
+        "chats.empty_body": "Start een zoekopdracht en we koppelen je zodra iemand ook naar jou zoekt.",
+        "chats.empty_link": "Start een zoekopdracht",
+        "chats.no_messages": "Nog geen berichten — zeg hallo!",
 
         # --- waiting screen ---
         "waiting.title": "Zoeken… — Velvt",
