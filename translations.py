@@ -84,6 +84,7 @@ TRANSLATIONS = {
 
         # --- auth ---
         "login.title": "Sign in — Velvt",
+        "login.bar": "Sign in",
         "login.eyebrow": "Velvt",
         "login.heading": "Something softer\nthan swiping.",
         "login.subtitle": "Sign in and search — we pair you the moment someone is looking for you too.",
@@ -93,6 +94,7 @@ TRANSLATIONS = {
         "login.no_account": "New to Velvt?",
         "login.create": "Create an account",
         "register.title": "Create account — Velvt",
+        "register.bar": "Register",
         "register.eyebrow": "Join Velvt",
         "register.heading": "Make your entrance.",
         "register.subtitle": "A few details and a password. Your profile comes next.",
@@ -556,6 +558,7 @@ TRANSLATIONS = {
 
         # --- auth ---
         "login.title": "Inloggen — Velvt",
+        "login.bar": "Inloggen",
         "login.eyebrow": "Velvt",
         "login.heading": "Iets zachters\ndan swipen.",
         "login.subtitle": "Meld je aan en zoek — we koppelen je zodra iemand anders ook naar jou zoekt.",
@@ -565,6 +568,7 @@ TRANSLATIONS = {
         "login.no_account": "Nieuw bij Velvt?",
         "login.create": "Maak een account",
         "register.title": "Account aanmaken — Velvt",
+        "register.bar": "Registreren",
         "register.eyebrow": "Word lid van Velvt",
         "register.heading": "Maak je entree.",
         "register.subtitle": "Een paar gegevens en een wachtwoord. Je profiel komt daarna.",

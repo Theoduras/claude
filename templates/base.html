@@ -1,4 +1,5 @@
 {% from "_icons.html" import icon %}
+{% from "_shell.html" import appbar %}
 <!doctype html>
 <html lang="en" data-mode="{{ design_mode() }}">
 <head>
@@ -142,6 +143,12 @@
     {% endif %}
   </nav>
   <main>
+    {#- ch.05: the app bar. One wordmark, centred, on every screen but the
+        landing page -- which overrides this block with nothing because its
+        own hero carries the mark. A screen that is a step inside a flow
+        overrides it with a chevron, and one that names itself instead of
+        wearing the mark overrides it with a title. -#}
+    {% block appbar %}{{ appbar() }}{% endblock %}
     {% with messages = get_flashed_messages() %}
       {% for message in messages %}
         <div class="flash" role="alert">{{ message }}</div>
@@ -361,6 +368,24 @@
       });
       document.addEventListener("keydown", function (ev) {
         if (ev.key === "Escape" && !sheet.hidden) close();
+      });
+    })();
+  </script>
+
+  {#- ch.05 §1: a top bar's chevron with no URL of its own steps the history
+      back. It is a <button> rather than a link because there is no href that
+      is true -- and a home-screen web app has no browser chrome to offer the
+      gesture instead. If there is nothing to go back to (the screen was
+      opened directly), the button has nothing useful to do, so it hides
+      rather than sitting there inert. -#}
+  <script nonce="{{ csp_nonce() }}">
+    (function () {
+      var buttons = document.querySelectorAll(".topbar-btn[data-back]");
+      if (!buttons.length) return;
+      var canGoBack = window.history.length > 1;
+      buttons.forEach(function (b) {
+        if (!canGoBack) { b.style.visibility = "hidden"; return; }
+        b.addEventListener("click", function () { window.history.back(); });
       });
     })();
   </script>

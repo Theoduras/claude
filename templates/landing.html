@@ -49,6 +49,9 @@
 </script>
 {% endblock %}
 
+{#- The landing page carries the wordmark inside its own hero, above the
+    headline, so the app bar would draw a second one directly above it. -#}
+{% block appbar %}{% endblock %}
 {% block content %}
 {# The same column every other screen uses. The hero is the wizard's body,
    the two buttons are its nav -- and .wiz-fit keeps the pair inside the

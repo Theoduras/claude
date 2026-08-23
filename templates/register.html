@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ t("register.title") }}{% endblock %}
+{% block appbar %}{{ appbar(back=url_for("index")) }}{% endblock %}
 {% block content %}
 {# Sign-in's twin -- same column, same slots -- so the pair reads as two
    steps of one flow rather than two different pages. #}
 <form method="post" action="{{ url_for('register') }}" class="wiz auth-screen wiz-fit">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="wiz-body wiz-scroll">
-    <p class="wiz-count">{{ t("register.eyebrow") }}</p>
     <h1 class="wiz-q">{{ t("register.heading") | br }}</h1>
     <p class="wiz-hint">{{ t("register.subtitle") }}</p>
 

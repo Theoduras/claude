@@ -73,7 +73,12 @@
          the 21px icon, the gap, the label and the border come to at --fit
          = 1rem. Reserve it plus a small gap and the step's last row sits
          just above the bar at every height, with no fixed pull-up. */
-      --tabbar-h: calc(4.875 * var(--fit) + env(safe-area-inset-bottom, 0px));
+      /* ch.05 floats the bar as a pill inset from the bottom rather than
+         sitting it on the edge, so the reserve is the bar's own height plus
+         the gap underneath it. 5.6 is 4.875 measured as before, plus the
+         0.6 the pill is lifted and a little breathing room -- one number
+         still, and still derived rather than remembered. */
+      --tabbar-h: calc(5.6 * var(--fit) + env(safe-area-inset-bottom, 0px));
 
       --measure: 62rem;
       --radius: 18px;
@@ -95,6 +100,25 @@
          both once there were two worlds: on white the gradient still wants a
          deep indigo and the ground wants a pale wash. */
       --violet-wash: #3B0B66;
+
+      /* ---------- ch.05: surfaces the two worlds disagree about --------
+         Three grounds that were literals until now, which is exactly why
+         light mode painted dark inputs on a white page and a near-black
+         bar under a near-white one. A literal cannot have a second answer;
+         a token can. */
+
+      /* the filled well of an input, and of any row that reads as one */
+      --field:       #120B1D;
+      /* the tab bar's own ground. It is the one surface that stays dark in
+         both worlds -- see the floating pill in ch.05 -- so it carries its
+         own type colours rather than borrowing --text, which inverts. */
+      --bar:         #0A0611;
+      --bar-ink:     #F7F1FB;
+      --bar-quiet:   #7C6B92;
+      /* the acid yellow the artifact uses for a state that is *running*:
+         the TIMED chip, and nothing else. Reads on both grounds. */
+      --delight:     #FAE83E;
+      --on-delight:  #241F04;
 
       --gleam:       #FFFFFF;  /* the light side of this mode: inner glows, gleams */
       --shade:       #000000;  /* its dark side: shadows, scrims, wells */
@@ -173,6 +197,13 @@
       --violet-wash:  #EDE4FE;   /* action-wash */
 
       --brand-sheen:  #A78BFA;
+
+      --field:        #EFEEEA;
+      --bar:          #1B1B1B;
+      --bar-ink:      #FFFFFF;
+      --bar-quiet:    #9A9A9A;
+      --delight:      #FAE83E;
+      --on-delight:   #241F04;
 
       --gleam:        #FFFFFF;
       --shade:        #242424;   /* on-delight: the artifact's dark neutral */
@@ -481,7 +512,7 @@
       font-family: inherit;
       font-size: 1rem;
       color: var(--text);
-      background: rgba(8, 5, 14, 0.7);
+      background: var(--field);
       border: 1px solid var(--ink-hairline);
       border-radius: var(--radius-sm);
       transition: border-color 0.18s ease, box-shadow 0.18s ease;
@@ -1811,7 +1842,7 @@
       padding: 0.7rem 0.85rem;
       border-radius: var(--radius-sm);
       border: 1px solid var(--ink-hairline);
-      background: rgba(8, 5, 14, 0.6);
+      background: var(--field);
       color: var(--text-muted);
       font-size: 0.84rem;
       line-height: 1.5;
@@ -2244,7 +2275,7 @@
     .tag-ended {
       color: var(--text-faint);
       border-color: var(--ink-hairline);
-      background: rgba(8, 5, 14, 0.6);
+      background: var(--field);
     }
     .tag-timed { color: var(--champagne); border-color: color-mix(in srgb, var(--champagne) 40%, transparent);
       background: linear-gradient(150deg, color-mix(in srgb, var(--champagne) 22%, transparent), color-mix(in srgb, var(--violet-deep) 40%, transparent)); }
@@ -3828,7 +3859,7 @@
       padding: calc(0.7 * var(--fit)) 0.9rem
                calc(1 * var(--fit) + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid var(--ink-hairline);
-      background: rgba(8, 5, 14, 0.86);
+      background: var(--bar);
       backdrop-filter: blur(14px);
     }
     nav.tabbar a {
@@ -3876,7 +3907,7 @@
       height: calc(0.95 * var(--fit));
       padding: 0 calc(0.22 * var(--fit));
       font-size: calc(0.52 * var(--fit));
-      box-shadow: 0 0 0 2px rgba(8, 5, 14, 0.86);
+      box-shadow: 0 0 0 2px var(--bar);
       pointer-events: none;
     }
     .more-sheet-links {
@@ -4142,3 +4173,604 @@
        the landing page spilled onto the tab bar. Removing it from flow
        here removes the coupling entirely, not just today's overflow. */
     html:not([data-viewport="desktop"]) .site-footer { display: none; }
+
+    /* ==================================================================
+       ch.05 — THE SHELL
+
+       Thirty screens were redrawn in the light world, and the redraw turned
+       out to be eight components rather than thirty layouts: a top bar, a
+       docked primary button, a filled field, a flat option row, a switch, a
+       state chip, a labelled card and a floating tab pill. Everything below
+       is one of those eight, or the light world declining a piece of velvet
+       that only ever worked on a near-black ground.
+
+       It sits at the end of the file on purpose. Same specificity as the
+       rules above it, later wins -- so the shape each component *used* to
+       have is still readable in place rather than deleted, which is the
+       same bargain the admin's design overrides make.
+       ================================================================== */
+
+    /* ---------- the light world declines the velvet ------------------
+       body already stops its pile, folds and nap in light (ch.02). These
+       are the four panels that carried the same three layers privately:
+       a violet-to-ink gradient, a blurred sheen on the top-left crest, and
+       the nap over the top. On white the gradient is a lilac wash, the
+       sheen a grey smudge and the nap a grain nobody asked for -- and it
+       is why /settings and /chats read as purple pages.
+
+       The dark world keeps all of it, untouched, above. */
+    :root[data-mode="light"] .card,
+    :root[data-mode="light"] .profile-card,
+    :root[data-mode="light"] .sheet-outer .sheet-panel,
+    :root[data-mode="light"] .veil-card {
+      background-image: none;
+      background-color: var(--ink-raised);
+      border-color: var(--ink-hairline);
+      box-shadow: 0 1px 2px color-mix(in srgb, var(--shade) 5%, transparent);
+    }
+    :root[data-mode="light"] .card::before,
+    :root[data-mode="light"] .card::after,
+    :root[data-mode="light"] .profile-card::before,
+    :root[data-mode="light"] .profile-card::after,
+    :root[data-mode="light"] .veil-card::before,
+    :root[data-mode="light"] .veil-card::after { display: none; }
+
+    /* ---------- 1. the top bar ---------------------------------------
+       A screen you arrived at from somewhere else names itself and offers
+       the way back; a screen you land on from the tab bar wears the
+       wordmark instead. Never both -- which is the rule that decides, for
+       every one of the thirty, which of these two headers it gets.
+
+       The title is centred against the *frame*, not against what is left
+       after the chevron, so it stays centred whether or not there is an
+       action on the right. That is what the two equal-width flanks buy. */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0 calc(-1 * clamp(1rem, 4vw, 2rem));
+      padding: 0.55rem clamp(0.5rem, 2vw, 1rem) 0.9rem;
+    }
+    .topbar-side {
+      flex: 1 1 0;
+      display: flex;
+      align-items: center;
+      min-width: calc(2.6 * var(--fit));
+    }
+    .topbar-side.is-end { justify-content: flex-end; }
+    .topbar-title {
+      flex: 0 1 auto;
+      font-size: calc(1.02 * var(--fit));
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .topbar-btn {
+      display: grid;
+      place-items: center;
+      width: calc(2.4 * var(--fit));
+      height: calc(2.4 * var(--fit));
+      margin: 0;
+      padding: 0;
+      color: var(--text);
+      background: none;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+    .topbar-btn:hover { background: var(--ink-raised); }
+    .topbar-btn:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+    .topbar-btn svg { width: calc(1.15 * var(--fit)); height: calc(1.15 * var(--fit)); }
+
+    /* ---------- 2. the docked primary --------------------------------
+       The one button that finishes the screen sits at the foot of the
+       frame, full width, whatever the content above it is doing. It is a
+       dock rather than a fixed bar: `margin-top: auto` inside main's flex
+       column pushes it down when the content is short and lets it follow
+       when the content is long, so a two-field form and a twelve-row list
+       put their button in the same place without either scrolling to find
+       it. A fixed bar would have needed its own reserve on every screen. */
+    .dock {
+      margin-top: auto;
+      padding-top: calc(1.1 * var(--fit));
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: calc(0.55 * var(--fit));
+    }
+    .dock-note {
+      text-align: center;
+      font-size: 0.82rem;
+      color: var(--text-faint);
+      margin: 0;
+    }
+    .btn-block {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: calc(1.02 * var(--fit)) 1.2rem;
+      font-size: calc(0.98 * var(--fit));
+      font-weight: 700;
+      border-radius: 1.05rem;
+    }
+    /* Two buttons on one line: a quiet one that declines, and the pill
+       that proceeds. The decline is text so it cannot be mistaken for the
+       thing to press -- the reveal and the decision screen both rest on
+       that distinction. */
+    .dock-pair {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .dock-pair .btn-block { flex: 1 1 auto; }
+    .dock-pair .btn-quiet {
+      flex: 0 0 auto;
+      padding: calc(1.02 * var(--fit)) 0.4rem;
+      font-size: calc(0.94 * var(--fit));
+      font-weight: 700;
+      color: var(--text);
+      background: none;
+      border: none;
+      border-radius: 0.8rem;
+      cursor: pointer;
+    }
+    .dock-pair .btn-quiet:hover { color: var(--violet); }
+    .dock-pair .btn-quiet:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+
+    /* ---------- 3. the filled field ----------------------------------
+       A well rather than an outline. The label above it is a quiet
+       sentence-case word, not the uppercase tracking this file used --
+       that treatment survives, but as a *section* label (ch.05 §7), which
+       is a different job and now looks like a different thing. */
+    .field-label,
+    form label:not(.opt):not(.switch-row):not(.chip-opt):not(.lang-opt) {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--text-faint);
+      margin-bottom: 0.3rem;
+    }
+    input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+    textarea,
+    select {
+      background: var(--field);
+      border: 1px solid transparent;
+      border-radius: 0.85rem;
+      padding: calc(0.85 * var(--fit)) 0.9rem;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--violet);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 18%, transparent);
+    }
+
+    /* ---------- 4. the flat option row -------------------------------
+       The row used to carry a coloured icon disc, a hue per position, and
+       a checkbox square. Three signals for one bit of state. The artifact
+       keeps one: the row fills with the action wash and a violet check
+       appears at the end. The disc goes -- not because it was ugly, but
+       because `.opt-2`..`.opt-6` assigned meaning by *ordinal*, so
+       reordering the options silently reassigned every colour. */
+    .opt {
+      gap: 0.75rem;
+      padding: calc(0.95 * var(--fit)) 1.05rem;
+      border: 1.5px solid transparent;
+      border-radius: 0.95rem;
+      background: var(--ink-raised);
+    }
+    .opt .opt-icon { display: none; }
+    .opt:hover { transform: none; background: color-mix(in srgb, var(--violet-wash) 55%, var(--ink-raised)); }
+    .opt-label { font-size: calc(0.98 * var(--fit)); font-weight: 600; }
+    /* The mark is the check itself, drawn in the row's own colour, so an
+       unchosen row has nothing at the end at all. currentColor is what
+       lets one glyph serve both worlds without a second data URI. */
+    .opt-mark,
+    .opt-mark-box {
+      width: calc(1.15 * var(--fit));
+      height: calc(1.15 * var(--fit));
+      border: none;
+      border-radius: 0;
+      background: none;
+      color: var(--violet);
+      opacity: 0;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4.5 12.6 9.4 17.5 19.5 6.8' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4.5 12.6 9.4 17.5 19.5 6.8' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+      transition: opacity 0.16s ease;
+    }
+    .opt input:checked ~ .opt-mark,
+    .opt input:checked ~ .opt-mark-box {
+      background: currentColor;
+      opacity: 1;
+    }
+    .opt input:checked ~ .opt-label { color: var(--violet); font-weight: 700; }
+    .opt:has(input:checked) {
+      border-color: transparent;
+      background: var(--violet-wash);
+    }
+    .opt input:focus-visible ~ .opt-mark,
+    .opt input:focus-visible ~ .opt-mark-box { outline: none; }
+    .opt:focus-within { outline: 2px solid var(--violet); outline-offset: 2px; }
+
+    /* ---------- 5. the switch ----------------------------------------
+       Filled violet when on, hairline grey when off, and the knob is the
+       page's own ground so it reads as a hole rather than a dot. */
+    .sw {
+      flex: none;
+      position: relative;
+      width: calc(2.65 * var(--fit));
+      height: calc(1.5 * var(--fit));
+      border-radius: 999px;
+      background: var(--ink-hairline);
+      transition: background 0.18s ease;
+    }
+    .sw::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: calc(0.16 * var(--fit));
+      width: calc(1.18 * var(--fit));
+      height: calc(1.18 * var(--fit));
+      border-radius: 50%;
+      background: var(--gleam);
+      transform: translateY(-50%);
+      transition: transform 0.18s ease;
+      box-shadow: 0 1px 3px color-mix(in srgb, var(--shade) 22%, transparent);
+    }
+    input:checked ~ .sw,
+    .is-on > .sw { background: var(--violet); }
+    input:checked ~ .sw::after,
+    .is-on > .sw::after { transform: translateY(-50%) translateX(calc(1.15 * var(--fit))); }
+    input:focus-visible ~ .sw { outline: 2px solid var(--violet); outline-offset: 3px; }
+
+    /* ---------- 6. state chips ---------------------------------------
+       A conversation is running, matched, or over. Yellow is the only
+       colour here that means "now" -- it is the artifact's `delight`, and
+       it is deliberately the one loud thing on a quiet list. */
+    .tag-timed {
+      color: var(--on-delight);
+      background: var(--delight);
+      border-color: var(--delight);
+      font-weight: 800;
+    }
+    .tag-matched {
+      color: var(--violet);
+      background: var(--violet-wash);
+      border-color: var(--violet-wash);
+      font-weight: 800;
+    }
+    .tag-ended {
+      color: var(--text-faint);
+      background: var(--field);
+      border-color: var(--field);
+    }
+
+    /* ---------- 7. the labelled card ---------------------------------
+       Every stack on every screen -- profile sections, settings groups,
+       the waiting recap, an admin block -- is a small uppercase word over
+       its content. This is where the tracking that used to sit on form
+       labels went. */
+    .stack-label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      color: var(--text-faint);
+      margin: 0 0 0.55rem;
+    }
+    .stack-group { display: flex; flex-direction: column; gap: 0.7rem; }
+    .stack-group + .stack-label { margin-top: 1.4rem; }
+    /* A row inside a group: a name, an optional value beneath it, and
+       either a chevron or a switch at the end. */
+    .stack-row {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      padding: calc(0.95 * var(--fit)) 1.05rem;
+      border-radius: 0.95rem;
+      background: var(--ink-raised);
+      color: inherit;
+      text-decoration: none;
+    }
+    .stack-row:hover { background: color-mix(in srgb, var(--violet-wash) 45%, var(--ink-raised)); }
+    .stack-row-main { flex: 1; min-width: 0; }
+    .stack-row-title { font-weight: 700; font-size: calc(0.96 * var(--fit)); }
+    .stack-row-sub {
+      font-size: 0.82rem;
+      color: var(--text-faint);
+      margin: 0.1rem 0 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .stack-row-go { flex: none; color: var(--text-faint); display: grid; place-items: center; }
+    .stack-row-go svg { width: 1rem; height: 1rem; }
+
+    /* ---------- 8. the tab bar, floating ------------------------------
+       A dark rounded pill inset from the edges, over a white page. It is
+       the only dark surface in the light world and it is doing real work:
+       without it the bottom of every screen reads as unfinished paper.
+
+       It carries its own ink because --text inverts between the worlds and
+       this ground does not -- a bar that follows --text goes near-black on
+       near-black the moment the mode flips. */
+    .tabbar {
+      left: clamp(0.6rem, 3vw, 1.1rem);
+      right: clamp(0.6rem, 3vw, 1.1rem);
+      bottom: calc(0.6 * var(--fit) + env(safe-area-inset-bottom, 0px));
+      padding: calc(0.62 * var(--fit)) 0.5rem;
+      border: none;
+      border-radius: 1.6rem;
+      background: var(--bar);
+      box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--shade) 45%, transparent);
+    }
+    nav.tabbar a,
+    .tabbar-more { color: var(--bar-quiet); }
+    nav.tabbar a:hover,
+    .tabbar-more:hover { color: var(--bar-ink); }
+    nav.tabbar a.is-active,
+    nav.tabbar a[aria-current="page"] { color: var(--bar-ink); }
+
+    /* ---------- the centred notice -----------------------------------
+       Five screens are one shape: a disc, a headline, two lines, and a
+       button. An ended chat, an empty inbox, a stale form, a rate limit,
+       the age gate. Making it a component is what keeps the age gate from
+       looking like an error page and the empty inbox from looking like a
+       failure. */
+    .notice {
+      flex: 1 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      text-align: center;
+      padding: 2rem 0;
+    }
+    .notice-disc {
+      display: grid;
+      place-items: center;
+      width: 4.4rem;
+      height: 4.4rem;
+      border-radius: 50%;
+      background: var(--field);
+      color: var(--text-muted);
+      margin-bottom: 0.35rem;
+    }
+    .notice-disc svg { width: 1.7rem; height: 1.7rem; }
+    .notice h1, .notice h2 { font-size: 1.5rem; }
+    .notice p { color: var(--text-muted); margin: 0; max-width: 24rem; }
+    .notice .btn { margin-top: 0.65rem; }
+
+    /* ---------- numbered steps ---------------------------------------
+       /how-matching-works is the one list in the app where the order is
+       the content: twenty seconds, then five minutes, then the decision.
+       Numbering anything else would be decoration. */
+    .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1.15rem; }
+    .steps li { display: flex; gap: 0.9rem; align-items: flex-start; }
+    .steps-n {
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: 50%;
+      background: var(--violet-wash);
+      color: var(--violet);
+      font-size: 0.85rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .steps h3 { font-size: 1.02rem; margin-bottom: 0.15rem; }
+    .steps p { margin: 0; color: var(--text-muted); font-size: 0.92rem; }
+
+    /* ---------- the primary, flattened -------------------------------
+       The button carried a three-stop gradient, an inner gleam, a violet
+       glow and a sheen that swept across it on hover. Four effects to say
+       "press this", on a design whose whole argument is that one flat
+       violet is enough. The glow stays, at a quarter of its old spread,
+       because a button docked at the foot of a white screen does need to
+       lift off the paper.
+
+       The radius changes with it: a full pill is right for a chip and
+       wrong for a full-width button, which at 999px bows visibly at the
+       ends. Both worlds, because a shape is not a per-mode answer. */
+    .btn {
+      background-image: none;
+      background-color: var(--violet);
+      border-radius: 0.95rem;
+      letter-spacing: 0;
+      font-weight: 700;
+      overflow: visible;
+      box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--violet) 70%, transparent);
+    }
+    .btn::before { content: none; }
+    .btn:hover {
+      transform: none;
+      background-color: color-mix(in srgb, var(--violet) 88%, var(--shade));
+      box-shadow: 0 10px 24px -10px color-mix(in srgb, var(--violet) 80%, transparent);
+    }
+    .btn:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; }
+    .btn-secondary { box-shadow: none; }
+    .btn-secondary:hover { box-shadow: none; }
+    /* Reports and suspensions. The only red the app presses. */
+    .btn-danger {
+      background-color: var(--danger);
+      color: var(--gleam);
+      box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--danger) 70%, transparent);
+    }
+    .btn-danger:hover { background-color: color-mix(in srgb, var(--danger) 88%, var(--shade)); }
+
+    /* A tab label is a word, not a caption. The uppercase tracking made
+       four short words into four grey smears at 9px; sentence case at the
+       same size is legible, and matches the artifact's bar. */
+    .tabbar .tab-label {
+      font-size: calc(0.62 * var(--fit));
+      letter-spacing: 0;
+      text-transform: none;
+      font-weight: 600;
+    }
+    nav.tabbar a.is-active .tab-label,
+    nav.tabbar a[aria-current="page"] .tab-label { font-weight: 800; }
+
+    /* ---------- the switch, without new markup ------------------------
+       Every consent, preference and filter in the app is already a
+       `.switch-row` -- a checkbox and a sentence. The artifact draws that
+       as a violet toggle, and the honest way to get one is to draw the
+       checkbox *as* the toggle rather than hide it behind a span the
+       markup would have to grow. `appearance: none` on the input keeps it
+       a real checkbox to the keyboard, the screen reader and the form.
+
+       The knob is --gleam, which is white in both worlds: a knob that
+       followed the page ground would vanish into the violet track the
+       moment the mode flipped. */
+    .switch-row {
+      align-items: center;
+      gap: 0.85rem;
+      padding: calc(0.9 * var(--fit)) 1.05rem;
+      border-radius: 0.95rem;
+      background: var(--ink-raised);
+      color: var(--text);
+      font-size: 0.92rem;
+    }
+    .switch-row > span { flex: 1; }
+    .switch-row a { color: var(--violet); font-weight: 700; text-decoration: none; }
+    .switch-row a:hover { text-decoration: underline; }
+    .switch-row input[type="checkbox"],
+    .switch-row input[type="radio"] {
+      appearance: none;
+      -webkit-appearance: none;
+      position: relative;
+      order: -1;
+      flex: none;
+      width: calc(2.65 * var(--fit));
+      height: calc(1.5 * var(--fit));
+      margin: 0;
+      border: none;
+      border-radius: 999px;
+      background: var(--ink-hairline);
+      box-shadow: none;
+      transition: background 0.18s ease;
+    }
+    .switch-row input[type="checkbox"]::after,
+    .switch-row input[type="radio"]::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: calc(0.16 * var(--fit));
+      width: calc(1.18 * var(--fit));
+      height: calc(1.18 * var(--fit));
+      border-radius: 50%;
+      background: var(--gleam);
+      transform: translateY(-50%);
+      transition: transform 0.18s ease;
+      box-shadow: 0 1px 3px color-mix(in srgb, var(--shade) 25%, transparent);
+    }
+    .switch-row input:checked { background: var(--violet); }
+    .switch-row input:checked::after { transform: translateY(-50%) translateX(calc(1.15 * var(--fit))); }
+    .switch-row input:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; }
+    /* A switch that is off leaves its panel's inputs disabled; the row
+       should say so rather than only the panel below it. */
+    .switch-row input:disabled { opacity: 0.45; }
+
+    /* The toggle reads left-to-right as "this thing, on or off", so on the
+       screens where the sentence is the subject and the switch the answer
+       -- settings, the criteria list -- the switch belongs at the end. */
+    .switch-row.is-trailing input[type="checkbox"],
+    .switch-row.is-trailing input[type="radio"] { order: 1; }
+
+    /* A quiet link that belongs to the field above it rather than to the
+       page -- "Forgot your password?" under the password box. It reclaims
+       the input's own bottom margin so it sits against the field, not
+       adrift between two of them. */
+    .field-aside {
+      margin: -0.85rem 0 1.15rem;
+      font-size: 0.85rem;
+    }
+    .field-aside a { color: var(--text-faint); font-weight: 600; text-decoration: none; }
+    .field-aside a:hover { color: var(--violet); text-decoration: underline; }
+
+    /* The dock, as the wizard already spells it. .wiz-nav-block is the
+       full-width variant -- register, login, the two password screens --
+       and ch.05 gives it the dock's spacing so a form and a step foot
+       identically. */
+    .wiz-nav-block {
+      flex-direction: column;
+      align-items: stretch;
+      gap: calc(0.55 * var(--fit));
+      padding-top: calc(1.1 * var(--fit));
+    }
+    .auth-alt { text-align: center; font-size: 0.85rem; color: var(--text-faint); margin: 0; }
+    .auth-alt a { color: var(--text); font-weight: 700; text-decoration: none; }
+    .auth-alt a:hover { color: var(--violet); }
+
+    /* ---------- the app bar replaces the phone header -----------------
+       On a phone the top <nav> was a horizontally scrolling strip of
+       links: the wordmark, then Search, Chats, Profile, Notifications and
+       -- for an admin -- seven more, running off the right edge of every
+       screen. Every one of those already has a home in the tab bar or its
+       Info sheet, so the strip was a second navigation nobody could see
+       the end of.
+
+       It goes on a phone, and the app bar takes its place. Desktop keeps
+       the full nav, where the links fit and the tab bar does not exist. */
+    @media (max-width: 720px) {
+      html:not([data-viewport="desktop"]) .app-shell > nav:not(.tabbar) { display: none; }
+    }
+    html[data-viewport="mobile"] .app-shell > nav:not(.tabbar) { display: none; }
+    /* Above the phone breakpoint the page has the nav's wordmark already,
+       so a second one in the app bar is one too many. The chevron and the
+       title still have work to do, which is why the bar itself stays. */
+    @media (min-width: 721px) {
+      html:not([data-viewport="mobile"]) .topbar-brand { display: none; }
+    }
+    html[data-viewport="desktop"] .topbar-brand { display: none; }
+
+    .topbar-brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .topbar-brand .brand-logo { height: calc(2.25 * var(--fit)); }
+    /* The mark is one hue with a lighter sweep across it, not a gradient
+       into gold -- ch.02 already moved --brand-sheen for this; the app bar
+       is where it is most visible. */
+
+    /* ---------- the reading page --------------------------------------
+       Safety, the FAQ and the three legal pages were each a .card holding
+       a page of prose, which on a phone is a panel the width of the screen
+       with a hairline around it -- a box drawn around the only thing on
+       the page. The artifact sets them as plain reading columns, and the
+       one thing that *is* set apart (the emergency note) keeps its card
+       and therefore means something again.
+
+       These pages are the app's only long-form text, so this is also the
+       only place a measure and a paragraph rhythm are worth stating. */
+    .prose { display: block; }
+    .prose > h1 { font-size: 1.7rem; margin-bottom: 0.4rem; }
+    .prose h2 {
+      font-size: 1.06rem;
+      font-weight: 700;
+      margin: 1.9rem 0 0.5rem;
+    }
+    .prose h3 { font-size: 0.98rem; margin: 1.4rem 0 0.35rem; }
+    .prose p { color: var(--text-muted); margin: 0 0 0.9rem; max-width: 34rem; }
+    .prose ul, .prose ol { color: var(--text-muted); margin: 0 0 1rem; padding-left: 1.15rem; }
+    .prose li { margin-bottom: 0.4rem; }
+    .prose a { color: var(--violet); }
+    .prose .eyebrow { margin-bottom: 0.5rem; }
+    /* A note that is genuinely an aside -- "in immediate danger, call 112" --
+       is the one thing on these pages that still earns a panel. */
+    .prose-note {
+      padding: 1rem 1.1rem;
+      border-radius: 0.95rem;
+      background: var(--ink-raised);
+      margin: 1.4rem 0;
+    }
+    .prose-note p { margin: 0; }
