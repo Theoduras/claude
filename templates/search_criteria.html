@@ -1,9 +1,15 @@
 {% extends "base.html" %}
 {% block title %}{{ t("crit.title") }}{% endblock %}
+{% block appbar %}{{ appbar(back=url_for("live_search"), back_label=t("crit.back")) }}{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <h1 class="page-title--sm">{{ t("crit.heading") }}</h1>
-  <p class="subtitle">{{ t("crit.subtitle_six") }}</p>
+{#- ch.05: step two of the same wizard, so it wears the wizard's own
+    furniture -- the progress rail, the step count, the question -- rather
+    than being a panel that happens to follow one. -#}
+<div class="crit">
+  <div class="wiz-progress" aria-hidden="true"><span style="width: 40%"></span></div>
+  <p class="wiz-count">{{ t("wiz.step", n=2, total=5) }}</p>
+  <h1 class="wiz-q">{{ t("crit.heading") }}</h1>
+  <p class="wiz-hint">{{ t("crit.subtitle_six") }}</p>
 
   <p class="recap">
     {# wanted is a CSV now -- relationship_type can hold more than one type. #}
@@ -202,9 +208,10 @@
     </div>
     <div id="pool-suggestions"></div>
 
-    <div class="criteria-nav">
-      <a class="btn btn-secondary" href="{{ url_for('live_search') }}">{{ t("crit.back") }}</a>
-      <button class="btn" type="submit">&#128269; {{ t("crit.start") }}</button>
+    {#- Back is the app bar's chevron now, so the foot is one button --
+        the same dock every other screen ends with. -#}
+    <div class="wiz-nav wiz-nav-block">
+      <button class="btn btn-block" type="submit">{{ t("crit.start") }}</button>
     </div>
   </form>
 

@@ -42,11 +42,17 @@
        once the search is running, so it earns a line, not a third of the
        screen. A real <details> so it works without JS and keyboard and
        screen readers get the disclosure semantics for free. #}
-    <details class="filters-fold" id="filters-fold">
+    {#- Open, not folded. The chips *are* this screen -- the one thing there
+        is to do while waiting is change one -- and they were behind a
+        summary that had to be tapped first. The <details> stays (the script
+        and #chip-count still address it) but it is always open and its
+        summary is not drawn. -#}
+    <details class="filters-fold" id="filters-fold" open>
       <summary>
         <span class="filters-fold-label">{{ t("waiting.filters_label") }}</span>
         <span class="filters-fold-count" id="chip-count">{{ state.chips | length }}</span>
       </summary>
+      <span class="waiting-recap-label">{{ t("waiting.filters_label") }}</span>
       <div class="pillset" id="chip-row">
         {% for chip in state.chips %}
           <button type="button" class="pill pill-chip{% if chip.off %} is-off{% endif %}"
@@ -54,6 +60,7 @@
                   title="{{ chip.label }}">{{ chip.label }}</button>
         {% endfor %}
       </div>
+      <p class="waiting-recap-hint">{{ t("waiting.tap_chip") }}</p>
     </details>
 
     {# One slot for both, not two. They are mutually correlated -- the wider

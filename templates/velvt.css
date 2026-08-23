@@ -4774,3 +4774,191 @@
       margin: 1.4rem 0;
     }
     .prose-note p { margin: 0; }
+
+    /* ---------- the wizard's foot -------------------------------------
+       Next was a circular chevron button that grew into a pill on the last
+       step, with the words "Start searching" printed by an ::after in this
+       stylesheet -- in English, whatever language the page around it was
+       set in. It is a real button with a real label now, and the label
+       comes from the element, so the two texts are translated like every
+       other string in the app.
+
+       Back went to the app bar (ch.05 §1). Skip stays, as the quiet line
+       under the button it is an alternative to. */
+    .wiz-next {
+      width: 100%;
+      height: auto;
+      border-radius: 0.95rem;
+    }
+    .wiz-next svg,
+    .wiz-next.is-final svg { display: none; }
+    .wiz-next:hover { transform: none; }
+    .wiz-next.is-final::after { content: none; }
+    .wiz-skip {
+      align-self: center;
+      font-size: 0.86rem;
+      font-weight: 600;
+      color: var(--text-faint);
+      background: none;
+    }
+    .wiz-skip:hover { color: var(--violet); background: none; }
+    /* The step's own pin line: one city, said once, under the choices it
+       does not change. */
+    .pin-line {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin: calc(0.9 * var(--fit)) 0 0;
+      font-size: 0.82rem;
+      color: var(--text-faint);
+    }
+    .pin-line svg { width: 0.95rem; height: 0.95rem; flex: none; }
+
+    /* ---------- the criteria screen's switch --------------------------
+       `.switch` wraps a checkbox and an empty `.switch-track` span, and
+       nothing in this file ever drew the track -- so every filter on
+       /search/criteria rendered as a naked browser checkbox next to an
+       empty box. It is the same toggle ch.05 §5 states for `.switch-row`;
+       the only difference is that here the markup already has a span to
+       paint, so the input can stay hidden behind it. */
+    .switch {
+      position: relative;
+      display: inline-flex;
+      flex: none;
+      margin: 0;
+      cursor: pointer;
+    }
+    .switch input {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .switch-track {
+      position: relative;
+      display: block;
+      width: calc(2.65 * var(--fit));
+      height: calc(1.5 * var(--fit));
+      border-radius: 999px;
+      background: var(--ink-hairline);
+      transition: background 0.18s ease;
+    }
+    .switch-track::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: calc(0.16 * var(--fit));
+      width: calc(1.18 * var(--fit));
+      height: calc(1.18 * var(--fit));
+      border-radius: 50%;
+      background: var(--gleam);
+      transform: translateY(-50%);
+      transition: transform 0.18s ease;
+      box-shadow: 0 1px 3px color-mix(in srgb, var(--shade) 25%, transparent);
+    }
+    .switch input:checked ~ .switch-track { background: var(--violet); }
+    .switch input:checked ~ .switch-track::after {
+      transform: translateY(-50%) translateX(calc(1.15 * var(--fit)));
+    }
+    .switch input:focus-visible ~ .switch-track { outline: 2px solid var(--violet); outline-offset: 3px; }
+
+    /* ---------- the criteria filter, as a card ------------------------
+       Each filter was a row separated from the next by a hairline, with
+       the switch first and the name second. The artifact makes each one a
+       card -- name and current value on the left, switch on the right --
+       which is the same shape settings uses, and reading order that puts
+       the subject before the answer. */
+    .toggle-row {
+      border-top: 0;
+      padding: calc(0.95 * var(--fit)) 1.05rem;
+      border-radius: 0.95rem;
+      background: var(--ink-raised);
+      margin-bottom: 0.7rem;
+    }
+    .toggle-row:first-of-type { padding-top: calc(0.95 * var(--fit)); }
+    .toggle-head { grid-template-columns: 1fr auto auto; }
+    .toggle-head > .switch { order: 3; }
+    .toggle-head > .help-dot { order: 2; }
+    .toggle-label strong {
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: calc(0.96 * var(--fit));
+      color: var(--text);
+    }
+    .toggle-row:not(:has(.switch input:checked)) .toggle-label strong { color: var(--text-faint); }
+    .toggle-panel { margin-left: 0; }
+
+    /* The live count under the filters. The number is the one violet thing
+       on the screen that is not a control, because it is the only thing
+       that changes on its own. */
+    .pool-live { margin: 1.1rem 0 0; font-size: 0.95rem; color: var(--text-muted); }
+    .pool-live strong, .pool-live b { color: var(--violet); font-weight: 800; }
+
+    /* ---------- the waiting screen, quieted ---------------------------
+       Three rings and a glowing violet ball read as "loading" on a white
+       page -- and there is nothing loading. The artifact draws one thin
+       ring, breathing, which says listening. The core becomes the ring's
+       own outline rather than a filled sphere with a 78px halo: on a dark
+       ground that halo was the light in the room, and on white it is a
+       lilac smudge.
+
+       The teal ring goes with it. Teal is the accent family, and on this
+       screen it was the only place it appeared, which made one ring look
+       like it meant something the other two did not. */
+    .search-anim { margin-bottom: calc(0.9 * var(--fit)); }
+    .search-ping { border-width: 1px; border-color: var(--violet); opacity: 0; }
+    .search-ping:nth-of-type(2) { border-color: var(--violet); }
+    .pulse-heart {
+      width: 3.1rem;
+      height: 3.1rem;
+      background: none;
+      border: 1.5px solid var(--violet);
+      box-shadow: none;
+      animation: breathe-quiet 2.8s ease-in-out infinite;
+    }
+    @keyframes breathe-quiet {
+      0%, 100% { transform: scale(1); opacity: 0.85; }
+      50%      { transform: scale(1.06); opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .pulse-heart { animation: none; }
+    }
+
+    /* The recap is the point of this screen, not a fold to open. It said
+       "YOUR FILTERS (4) v" with the chips hidden behind it -- on the one
+       screen where the only thing you can *do* is change a filter. */
+    .filters-fold > summary { display: none; }
+    .filters-fold[open] > summary { display: none; }
+    .waiting .pillset { justify-content: flex-start; }
+    .waiting-recap-label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      color: var(--text-faint);
+      margin: calc(1.1 * var(--fit)) 0 0.55rem;
+    }
+    .waiting-recap-hint { font-size: 0.82rem; color: var(--text-faint); margin: 0.6rem 0 0; }
+    /* Stop is the quiet answer to a screen that is doing what you asked, so
+       it is the secondary; Change lives in the chips above it now. */
+    .waiting .wiz-nav { flex-direction: column; align-items: stretch; gap: calc(0.55 * var(--fit)); }
+    .waiting .wiz-nav-end { display: flex; }
+    .waiting .wiz-stop { width: 100%; }
+    .waiting .wiz-nav > .wiz-skip { order: 2; align-self: center; }
+
+    /* The waiting screen reads as a column, left-aligned like every other
+       step -- the ring is the only thing on it that is centred, and it is
+       the only thing on it that is not language. */
+    .waiting .wiz-count,
+    .waiting .wiz-q,
+    .waiting .wiz-hint,
+    .waiting .waiting-meta,
+    .waiting-recap-label,
+    .waiting-recap-hint { text-align: left; }
+    .waiting .waiting-meta { justify-content: flex-start; }
+    .waiting .search-anim { margin-inline: auto; }
+    .waiting-none { text-align: left; }

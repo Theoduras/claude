@@ -142,7 +142,7 @@ TRANSLATIONS = {
         "register.privacy_link": "privacy policy",
         "register.sensitive": "Velvt may use my gender and who I'm looking for to find me matches.",
         "register.sensitive_hint": "These can reveal your sexual orientation, so we ask separately. You can withdraw this at any time in settings.",
-        "wiz.hint_multi": "Pick as many as apply.",
+        "wiz.hint_multi": "Pick as many as you mean. We'll only pair you with someone who wants one of the same.",
         "waiting.filters_label": "Your filters",
         "waiting.none_open": "Nobody searching right now fits all of this. You'll be paired the moment someone does \u2014 or open your filters above to change one.",
         "waiting.change_what": "Change what you're after",
@@ -270,8 +270,8 @@ TRANSLATIONS = {
         # --- waiting screen ---
         "waiting.title": "Searching… — Velvt",
         "waiting.eyebrow": "Searching",
-        "waiting.heading_1": "Feeling for",
-        "waiting.heading_2": "a match",
+        "waiting.heading_1": "Looking for someone",
+        "waiting.heading_2": "looking for you",
         "waiting.searching_n": "{n} searching",
         "waiting.fits_n": "{n} fit",
         "waiting.recap_label": "Looking for",
@@ -281,7 +281,7 @@ TRANSLATIONS = {
         ),
         "waiting.change": "Change",
         "waiting.stop": "Stop searching",
-        "waiting.phrase_1": "Looking for someone who fits — and who's looking for you.",
+        "waiting.phrase_1": "We'll pair you the moment it's mutual. You can close this — we'll hold your place while the tab is open.",
         "waiting.phrase_2": "Checking who's searching right now…",
         "waiting.phrase_3": "Matching your filters against theirs…",
         "waiting.phrase_4": "Both sides have to fit — holding out for that…",
@@ -348,6 +348,10 @@ TRANSLATIONS = {
         "wiz.skip": "Skip",
         "wiz.back_aria": "Previous step",
         "wiz.next_aria": "Next step",
+        "wiz.next": "Next",
+        "wiz.pin": "{city} — everyone on Velvt is here.",
+        "waiting.tap_chip": "Tap a chip to change it.",
+        "wiz.start": "Start searching",
         "wiz.start_aria": "Start searching",
         "wiz.sheet_title": "All interests",
         "wiz.sheet_close": "Close",
@@ -616,7 +620,7 @@ TRANSLATIONS = {
         "register.privacy_link": "privacybeleid",
         "register.sensitive": "Velvt mag mijn gender en wie ik zoek gebruiken om matches voor me te vinden.",
         "register.sensitive_hint": "Die kunnen je seksuele voorkeur prijsgeven, dus vragen we het apart. Je kunt dit op elk moment intrekken bij instellingen.",
-        "wiz.hint_multi": "Kies er zoveel als van toepassing zijn.",
+        "wiz.hint_multi": "Kies er zoveel als je meent. We koppelen je alleen aan iemand die er ook een van wil.",
         "waiting.filters_label": "Jouw filters",
         "waiting.none_open": "Niemand die nu zoekt past bij dit alles. Je wordt gekoppeld zodra iemand dat wel doet \u2014 of open je filters hierboven om er een aan te passen.",
         "waiting.change_what": "Verander waar je naar zoekt",
@@ -744,8 +748,8 @@ TRANSLATIONS = {
         # --- waiting screen ---
         "waiting.title": "Zoeken… — Velvt",
         "waiting.eyebrow": "Zoeken",
-        "waiting.heading_1": "Op zoek naar",
-        "waiting.heading_2": "een match",
+        "waiting.heading_1": "Op zoek naar iemand",
+        "waiting.heading_2": "die jou zoekt",
         "waiting.searching_n": "{n} aan het zoeken",
         "waiting.fits_n": "{n} passend",
         "waiting.recap_label": "Op zoek naar",
@@ -755,7 +759,7 @@ TRANSLATIONS = {
         ),
         "waiting.change": "Aanpassen",
         "waiting.stop": "Stop met zoeken",
-        "waiting.phrase_1": "Op zoek naar iemand die past — en die naar jou zoekt.",
+        "waiting.phrase_1": "We koppelen je zodra het wederzijds is. Je kunt dit sluiten — we houden je plek vast zolang het tabblad open is.",
         "waiting.phrase_2": "Kijken wie er nu aan het zoeken is…",
         "waiting.phrase_3": "Jouw filters vergelijken met die van anderen…",
         "waiting.phrase_4": "Het moet van twee kanten passen — daar wachten we op…",
@@ -822,6 +826,10 @@ TRANSLATIONS = {
         "wiz.skip": "Overslaan",
         "wiz.back_aria": "Vorige stap",
         "wiz.next_aria": "Volgende stap",
+        "wiz.next": "Volgende",
+        "wiz.pin": "{city} — iedereen op Velvt zit hier.",
+        "waiting.tap_chip": "Tik op een chip om die te wijzigen.",
+        "wiz.start": "Begin met zoeken",
         "wiz.start_aria": "Begin met zoeken",
         "wiz.sheet_title": "Alle interesses",
         "wiz.sheet_close": "Sluiten",
@@ -1002,6 +1010,15 @@ TRANSLATIONS = {
 # see the module docstring. A value with no entry here renders as-is, so a
 # language can translate some and leave the rest.
 OPTION_LABELS = {
+    # English has entries too now. The stored values are still the canonical
+    # ones searches_compatible() compares -- "Short-term relationship" is
+    # what is in the column -- but "Something casual" is what the design
+    # says on screen, and a label is exactly the thing that is allowed to
+    # differ from the value behind it.
+    "en": {
+        "Short-term relationship": "Something casual",
+        "Friendship": "New friends",
+    },
     "nl": {
         # genders (profiles.gender)
         "Woman": "Vrouw",
@@ -1014,8 +1031,8 @@ OPTION_LABELS = {
         "Everyone": "Iedereen",
         # relationship types
         "Long-term relationship": "Langdurige relatie",
-        "Short-term relationship": "Kortdurende relatie",
-        "Friendship": "Vriendschap",
+        "Short-term relationship": "Iets luchtigs",
+        "Friendship": "Nieuwe vrienden",
         "Not sure yet": "Weet ik nog niet",
         # relationship preferences
         "Monogamous": "Monogaam",

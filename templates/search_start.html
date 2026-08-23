@@ -1,6 +1,23 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% block title %}{{ t("wiz.title") }}{% endblock %}
+{% block appbar %}
+  {#- ch.05: the wizard's Back *is* the app bar's chevron. It was a second
+      chevron at the foot of the step, beside Next, which put the two
+      directions of one flow at opposite weights in the same row. The
+      button stays a <button> and keeps its id, so the stepper below still
+      drives it; only where it is drawn has changed. -#}
+  <div class="topbar">
+    <div class="topbar-side">
+      <button type="button" class="topbar-btn is-hidden" id="wiz-back"
+              aria-label="{{ t('wiz.back_aria') }}">{{ icon("nav.back") }}</button>
+    </div>
+    <a class="topbar-brand" href="{{ url_for('index') }}">
+      <span class="brand-logo"></span><span class="brand-word">Velvt</span>
+    </a>
+    <div class="topbar-side is-end"></div>
+  </div>
+{% endblock %}
 {% block content %}
 {# Six questions, one visible at a time. Every step is in this one form and
    the stepping happens in the browser, so answering a question never costs a
@@ -12,7 +29,7 @@
 
   <div class="wiz-progress" aria-hidden="true"><span id="wiz-bar"></span></div>
 
-  <p class="wiz-count" id="wiz-count">{{ t("wiz.step", n=1, total=6) }}</p>
+  <p class="wiz-count" id="wiz-count" data-step-template="{{ t('wiz.step', n='{n}', total='{total}') }}">{{ t("wiz.step", n=1, total=5) }}</p>
 
   <div class="wiz-body">
   {# ---- 1. connection type ---------------------------------------------
@@ -39,6 +56,12 @@
         </label>
       {% endfor %}
     </div>
+    {#- Everyone is in the one city by construction (pinned_place()), so this
+        is a statement, not a filter -- and saying it here is what stops the
+        first question reading as though location were still to come. -#}
+    {% if single_city %}
+      <p class="pin-line">{{ icon("pill.location") }}{{ t("wiz.pin", city=single_city) }}</p>
+    {% endif %}
   </section>
 
   {# ---- 2. gender ---------------------------------------------------- #}
@@ -156,16 +179,16 @@
 
   </div>
 
-  <div class="wiz-nav">
-    <button type="button" class="wiz-back" id="wiz-back" aria-label="{{ t('wiz.back_aria') }}">
-      {{ icon("wiz.back") }}
-    </button>
-    <div class="wiz-nav-end">
-      <button type="button" class="wiz-skip" id="wiz-skip">{{ t("wiz.skip") }}</button>
-      <button type="submit" class="wiz-next" id="wiz-next" aria-label="{{ t('wiz.next_aria') }}">
-        {{ icon("wiz.next") }}
-      </button>
-    </div>
+  {#- One button, full width, which is the whole foot of the step. The
+      label is carried on the element rather than in the script so the last
+      step can say "Start searching" in the reader's own language -- it used
+      to be an ::after in the stylesheet, in English, whatever the page
+      around it was set in. -#}
+  <div class="wiz-nav wiz-nav-block">
+    <button type="submit" class="btn btn-block wiz-next" id="wiz-next"
+            data-label-next="{{ t('wiz.next') }}"
+            data-label-final="{{ t('wiz.start') }}">{{ t("wiz.next") }}</button>
+    <button type="button" class="wiz-skip" id="wiz-skip">{{ t("wiz.skip") }}</button>
   </div>
   {# The full list, one tap from the step. A dialog rather than an expanding
      panel so the step underneath keeps its promise of never scrolling. #}
@@ -207,6 +230,7 @@
   var steps = Array.prototype.slice.call(form.querySelectorAll(".wiz-step"));
   var bar = document.getElementById("wiz-bar");
   var count = document.getElementById("wiz-count");
+  var stepWord = count.getAttribute("data-step-template") || "Step {n} of {total}";
   var back = document.getElementById("wiz-back");
   var next = document.getElementById("wiz-next");
   var skip = document.getElementById("wiz-skip");
@@ -232,7 +256,7 @@
   function render() {
     steps.forEach(function (s, i) { s.classList.toggle("is-on", i === at); });
     bar.style.width = ((at + 1) / steps.length * 100) + "%";
-    count.textContent = "Step " + (at + 1) + " of " + steps.length;
+    count.textContent = stepWord.replace("{n}", at + 1).replace("{total}", steps.length);
     // visibility, not display: Back and Skip keep their space when hidden so
     // Next never shifts by a pixel between steps.
     back.classList.toggle("is-hidden", at === 0);
@@ -240,7 +264,9 @@
     // ones offer Skip instead, so the button never looks enabled-but-dead.
     skip.classList.toggle("is-hidden", !!required(at) || at === last);
     next.classList.toggle("is-final", at === last);
-    next.setAttribute("aria-label", at === last ? "Start searching" : "Next step");
+    next.textContent = at === last
+      ? next.getAttribute("data-label-final")
+      : next.getAttribute("data-label-next");
     // The submit only ever belongs to the last step. Everywhere else the
     // click is intercepted below, but typing Enter in a text field would
     // otherwise post a half-finished form.
