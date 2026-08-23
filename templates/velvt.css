@@ -5503,3 +5503,45 @@
     }
     .admin-item .btn { font-size: 0.86rem; padding: 0.6rem 1rem; }
     .admin-item form { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    /* What you chose on step one, restated. It was --champagne, which in
+       light is #8A7C0C -- gold as text, which this file uses for links and
+       focus rings, so a plain recap looked like something to press. */
+    .recap > span:first-child { color: var(--text); font-weight: 700; }
+    .recap a { color: var(--violet); font-weight: 600; }
+
+    /* ---------- gold was the light on the pile -------------------------
+       --champagne is the highlight a velvet ground needs: on near-black it
+       is the brightest thing in the room, so this file reached for it
+       twice over -- once for emphasis (a count, a readout, a countdown)
+       and once for the focus ring.
+
+       In light it resolves to #8A7C0C, gold as *text*, which is right for
+       a link and wrong for everything else it was doing: a focus ring that
+       reads olive against a violet button, and every emphasised number on
+       the app painted the colour of a link you cannot click.
+
+       So both jobs move to the colour that already means "this one":
+       --violet for focus and for emphasis, --text where the emphasis is
+       simply a figure worth reading. --champagne stays a token and stays
+       the link hover, which is the one job it was always right for. */
+    :focus-visible { outline-color: var(--violet); }
+    .btn:focus-visible,
+    .wiz-go:focus-visible,
+    .sheet-opt:focus-visible,
+    .pill:focus-visible,
+    .opt input:focus-visible ~ .opt-mark,
+    .veil-check input:focus-visible ~ .opt-mark,
+    .filters-fold > summary:focus-visible,
+    .help-dot:focus-visible,
+    input[type="range"]:focus-visible::-webkit-slider-thumb,
+    input[type="range"]:focus-visible::-moz-range-thumb { outline-color: var(--violet); }
+
+    .wiz-readout,
+    .slider-value,
+    .countdown,
+    .strength-value,
+    .sheet-count.is-full,
+    .sheet-opt.is-current .sheet-opt-count,
+    .section-note strong { color: var(--violet); }
+    .matchpop-ring-2 { border-color: var(--violet); }
+    .photo-tile-label { background: var(--violet); color: var(--gleam); }

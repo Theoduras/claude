@@ -472,6 +472,79 @@ asks whether something was sent. It also decrypts a real payload the way a brows
 would, because if `encrypt()` and the browser ever disagree every push in production is
 an undecryptable blob and nothing else would say so.
 
+## The shell (ch.05 of `velvt.css`)
+
+Thirty screens were redrawn against the Velvt Light artifact, and the redraw
+turned out to be **eight components rather than thirty layouts**: an app bar, a
+docked primary button, a filled field, a flat option row, a switch, a state chip,
+a labelled card, and a floating tab pill. ch.05 states them once, at the end of
+the file — same specificity, later wins — so the shape each component *used* to
+have is still readable in place rather than deleted. It is the same bargain the
+admin's design overrides make.
+
+**One app bar, on every screen but the landing page.** The wordmark, centred on
+the frame, with an optional chevron in the left flank where a screen is a step
+inside a flow. `_shell.html`'s `appbar()` renders it and `base.html` puts it in a
+`{% block appbar %}`, so a template overrides it with a chevron, with a title, or
+with nothing. The landing page overrides it away — its hero carries the mark
+itself — and also sets `{% block shell_class %} is-bare{% endblock %}`, which
+drops the tab bar: it is the one screen with nothing to navigate between.
+
+**The phone's top nav is gone.** It was a horizontally scrolling strip of links
+running off the right edge of every screen — Search, Chats, Profile,
+Notifications and, for an admin, seven more. Every one of them already lives in
+the tab bar or its Info sheet. Desktop keeps the full nav, where the links fit
+and the tab bar does not exist.
+
+**Three grounds became tokens**, which is exactly why light mode had been
+painting dark inputs on a white page: `--field` (the filled well of an input or
+a row that reads as one), `--bar` (the tab pill's ground — the one surface that
+stays dark in both worlds, so it carries its own `--bar-ink`/`--bar-quiet`), and
+`--delight` (the acid yellow of a state that is *running*: the TIMED chip, and
+nothing else). A literal cannot have a second answer.
+
+**The velvet stops at four panels in light.** `body`'s pile, folds and nap
+already stopped (ch.02); `.card`, `.profile-card`, `.sheet-panel` and
+`.veil-card` each carried the same three layers privately, which is why
+`/settings` and `/chats` read as purple pages. The dark world keeps all of it.
+
+**`--champagne` is the link hover, and nothing else now.** It is the highlight a
+velvet ground needs, so the file had reached for it twice — for emphasis (a
+count, a readout, a countdown) and for the focus ring. In light it resolves to
+`#8A7C0C`: gold as *text*, right for a link and wrong for a focus ring on a
+violet button or for every emphasised number in the app. Both jobs moved to
+`--violet`.
+
+**A radio is not a switch.** `.switch-row` draws checkboxes as toggles by styling
+the input itself (`appearance: none`), so it stays a real checkbox to the
+keyboard, the screen reader and the form — no extra markup. Radios in the same
+class get the option row's check instead, because "one answer out of several"
+and "on or off" are different questions and the report screen was asking the
+wrong one six times.
+
+**`.switch-track` had no rule at all** before this, so every filter on
+`/search/criteria` rendered as a naked browser checkbox beside an empty span.
+
+**`--serif` is still a token and nothing is set in it.** ch.02 moved the headline
+off it; ten smaller places kept it (a profile's About text, the sheet title, a
+chat name, the edit heading), which meant the app read in two typefaces with no
+rule about which said what.
+
+**Two labels differ from their values on purpose.** `OPTION_LABELS` has an `"en"`
+block now: "Short-term relationship" and "Friendship" are still the stored values
+`searches_compatible()` compares, and "Something casual" and "New friends" are
+what the design says on screen. A label is exactly the thing that is allowed to
+differ from the value behind it.
+
+**Two English strings were hard-coded in the wizard** and are not any more: the
+step counter was assembled in the script, and "Start searching" was printed by
+`.wiz-next.is-final::after` in the stylesheet. Both are real strings carried on
+the element.
+
+Known and not fixable in CSS: the landing hero footage crops its own subject, and
+the Safari `.mp4` is pre-composited on `--ink`, so on a white page Safari shows a
+dark ground behind the characters until that file is remade on a Mac.
+
 ## Design tokens, editable without a deploy
 
 `/admin/design` edits the stylesheet's `:root` live. The names and their
