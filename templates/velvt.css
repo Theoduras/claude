@@ -5206,3 +5206,215 @@
     }
     .room-decide .wiz-skip-danger { justify-self: start; padding-inline: 0.4rem; }
     .room-decide .wiz-go { width: 100%; }
+
+    /* ---------- the explainer's numbers -------------------------------
+       /how-matching-works is the one list in the app where order is the
+       content -- twenty seconds, then five minutes, then the decision --
+       so a numbered disc is information rather than decoration. It was
+       painted with var(--velvet-glow, ...) and var(--text-dim), neither of
+       which is a token in this file: both fell through to their literal
+       fallbacks and neither followed the mode. */
+    .intro-step-n {
+      width: 1.75rem;
+      height: 1.75rem;
+      background: var(--violet-wash);
+      color: var(--violet);
+      font-weight: 800;
+    }
+    .intro-steps { display: flex; flex-direction: column; gap: 1.15rem; }
+    .intro-steps li { display: flex; gap: 0.9rem; align-items: flex-start; }
+    .intro-steps h2 { font-size: 1.02rem; font-weight: 700; }
+    .intro-steps p { color: var(--text-muted); }
+    /* .wiz-go is not a .btn, so .btn-block's width never applied to it. */
+    .wiz-go.btn-block, .wiz-go-violet.btn-block { width: 100%; }
+    /* The steps are the page, not three panels on it: a card around each one
+       drew a box per sentence and made the sequence read as three unrelated
+       notices rather than one order. */
+    .intro-steps li {
+      background: none;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    /* ---------- settings, as groups ----------------------------------
+       One card holding nine sections separated by inline-styled hairlines,
+       each with its own font-size written on the element. The artifact
+       groups them instead: a small uppercase label over a panel, which is
+       the same shape the profile's sections and the admin's blocks use --
+       so "a labelled block" is one thing in this app rather than four.
+
+       The hairlines and the per-element sizes go with it; a border between
+       two panels that are already separated by a gap is a second answer to
+       a question the gap has already answered. */
+    .settings { display: flex; flex-direction: column; gap: 0; }
+    .settings-title { font-size: 1.7rem; margin-bottom: 1.2rem; }
+    .set-group {
+      padding: var(--card-pad);
+      border-radius: var(--radius);
+      background: var(--ink-raised);
+      margin-bottom: 0.85rem;
+    }
+    .set-group > h2.stack-label { margin-bottom: 0.8rem; }
+    .set-group > :last-child { margin-bottom: 0; }
+    /* The danger group is the one place the app says something is
+       irreversible, so it says it in the one colour it reserves for that
+       rather than looking like the eight groups above it. */
+    .set-group.is-danger { background: var(--danger-deep); }
+    .set-group.is-danger .stack-label { color: var(--danger); }
+
+    /* ---------- the profile ------------------------------------------
+       The empty photo frame was a violet-and-teal wash over #12081F -- a
+       literal, so light mode painted a dark aubergine block with a teal
+       corner in the middle of a white page. It is the same neutral well
+       every other empty surface uses.
+
+       The gradient made sense on dark, where an empty frame had to be
+       *something*; on white, nothing is already something. */
+    .pro-frame {
+      background-color: var(--field);
+      background-image: none;
+      border-color: transparent;
+      border-radius: 1.1rem;
+    }
+    .pro-bars > span.is-seen { background-image: none; background-color: var(--violet); }
+    .pro-arrow {
+      color: var(--text);
+      background: color-mix(in srgb, var(--gleam) 78%, transparent);
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--shade) 18%, transparent);
+    }
+    .pro-arrow:hover { background: var(--gleam); }
+    /* Each section is a labelled panel, the same one settings and the admin
+       screens use. It had a fixed height on a screen whose content is
+       whatever a person wrote about themselves. */
+    .pro-card {
+      padding: var(--card-pad);
+      border-radius: var(--radius);
+      background: var(--ink-raised);
+      background-image: none;
+      border: none;
+      box-shadow: none;
+      overflow: visible;
+      height: auto;
+      min-height: 0;
+    }
+    .pro-card::before, .pro-card::after { content: none; }
+    .pro-card .section-label { margin-bottom: 0.7rem; }
+    .pillset .pill,
+    .pro-card .pill {
+      font-family: var(--sans);
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    /* ---------- one voice ---------------------------------------------
+       ch.02 moved the headline off --serif because a bold sans is the
+       single largest difference between this app and the artifact. Ten
+       smaller places kept it -- a profile's About text, the sheet's title,
+       a chat name, the edit screen's heading -- so the app read in two
+       typefaces with no rule about which said what.
+
+       --serif stays a token, and nothing here removes the option; it is
+       simply not what anything is set in any more. */
+    .profile-quote,
+    .pro-lead > span:last-child,
+    .pro-prompt,
+    .edit-head-title,
+    .chat-head-name,
+    .sheet-outer .sheet-head h2,
+    .help-page h2,
+    .toggle-label strong,
+    .chat-row-top strong { font-family: var(--sans); }
+    .profile-quote, .pro-prompt { font-weight: 400; }
+    .pro-card p, .pro-card li { font-family: var(--sans); color: var(--text-muted); }
+
+    /* A pill on a profile is a fact about a person, not a control: it takes
+       the page's own surface. The violet wash is reserved for a *chosen*
+       thing -- a selected option, an active filter chip -- and using it for
+       both made a profile look like a form with everything ticked. */
+    .pill.is-static {
+      background: var(--field);
+      border-color: transparent;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .pro-card .pill {
+      background: var(--field);
+      border-color: transparent;
+      color: var(--text);
+    }
+    .pro-card .pill svg { color: var(--text-faint); }
+
+    /* A radio is one answer out of several and a checkbox is a thing that
+       is on or off; drawing both as a toggle said the wrong thing about
+       the first. The switch treatment is checkboxes only, and a radio in a
+       `.switch-row` gets the option row's check. */
+    .switch-row input[type="radio"] {
+      width: calc(1.15 * var(--fit));
+      height: calc(1.15 * var(--fit));
+      border-radius: 50%;
+      border: 2px solid var(--text-faint);
+      background: none;
+    }
+    .switch-row input[type="radio"]::after { content: none; }
+    .switch-row input[type="radio"]:checked {
+      border-color: var(--violet);
+      background: var(--violet);
+      box-shadow: inset 0 0 0 3px var(--ink);
+    }
+    .switch-row-sub { display: block; font-size: 0.8rem; color: var(--text-faint); margin-top: 0.1rem; }
+    .switch-row strong { font-weight: 700; font-size: 0.92rem; color: var(--text); }
+    .bare-set { border: 0; padding: 0; margin: 0 0 1.2rem; min-width: 0; }
+    .bare-set > legend { padding: 0; }
+    .report-screen textarea { min-height: 6rem; }
+
+    /* ---------- the admin screens ------------------------------------
+       An admin page is a page, not a panel: it was a .card wrapping the
+       whole screen, which on a phone is a box drawn round everything. */
+    .admin-page { display: block; }
+    .admin-tally {
+      display: flex;
+      flex-direction: column;
+      padding: 0.4rem 1.05rem;
+      border-radius: var(--radius);
+      background: var(--ink-raised);
+      margin-bottom: 1.1rem;
+    }
+    .admin-tally-item {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.7rem 0;
+      border: none;
+      border-bottom: 1px solid var(--ink-hairline);
+      background: none;
+    }
+    .admin-tally-item:last-child { border-bottom: none; }
+    .admin-tally-label {
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    /* The figures were --champagne, which in light is #8A7C0C -- gold as
+       text, correct for a link and wrong for a number you are meant to read
+       at a glance beside three others. */
+    .admin-tally-n {
+      font-family: var(--sans);
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .admin-tally-item.is-muted .admin-tally-n { color: var(--text-faint); }
+    /* Both were `display: block` for the tile layout, which in a row makes
+       each one take a line of its own and the row three times as tall. */
+    .admin-tally-n, .admin-tally-label { display: inline; margin-top: 0; }
+    .admin-tally-item.is-headline { border-color: transparent; border-bottom-color: var(--ink-hairline); }
+    .admin-tally-item.is-muted { opacity: 1; }
+    /* `flex: 1 1 7rem` was a *width* basis in the old row layout; in a
+       column the same basis is a 7rem-tall row. */
+    .admin-tally-item { flex: none; }

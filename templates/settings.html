@@ -1,9 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Settings — Velvt{% endblock %}
 {% block content %}
-<div class="card">
-  <p class="eyebrow">Your account</p>
-  <h1 style="margin-top: 0.5rem;">Settings</h1>
+<div class="settings">
+  <h1 class="settings-title">Settings</h1>
 
   {% if me.status == 'pending_deletion' %}
   <div style="border: 1px solid var(--ink-hairline); padding: 1rem; margin: 1.2rem 0;">
@@ -20,8 +19,8 @@
   {% endif %}
 
   <!-- ---------- account ---------- -->
-  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
-    <h2 style="font-size: 1.1rem; margin: 0 0 0.3rem;">Email</h2>
+  <section class="set-group">
+    <h2 class="stack-label">Email</h2>
     <p class="hint" style="margin: 0 0 0.6rem;">
       {{ me.email or 'No address on file.' }}
       {% if me.email and not me.email_verified_at %}
@@ -38,8 +37,8 @@
     {% endif %}
   </section>
 
-  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
-    <h2 style="font-size: 1.1rem; margin: 0 0 0.6rem;">Change password</h2>
+  <section class="set-group">
+    <h2 class="stack-label">Change password</h2>
     <form method="post" action="{{ url_for('change_password') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label for="current">Current password</label>
@@ -59,8 +58,8 @@
       is *what* you hear about, and someone who only wants to know when a
       person has written to them should not have to give up that to silence
       product news. Rows are the reasons, columns are the ways. -#}
-  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
-    <h2 style="font-size: 1.1rem; margin: 0 0 0.3rem;">Notifications</h2>
+  <section class="set-group">
+    <h2 class="stack-label">Notifications</h2>
     <p class="hint" style="margin: 0 0 0.9rem;">
       Whatever you choose here, everything still lands in
       <a href="{{ url_for('notifications_inbox') }}">your notifications</a> —
@@ -131,8 +130,8 @@
   </section>
 
   <!-- ---------- devices ---------- -->
-  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
-    <h2 style="font-size: 1.1rem; margin: 0 0 0.6rem;">Where you're signed in</h2>
+  <section class="set-group">
+    <h2 class="stack-label">Where you're signed in</h2>
     {% for s in sessions %}
       <p class="hint" style="margin: 0 0 0.5rem;">
         {{ s.user_agent or 'Unknown device' }}<br>
@@ -158,8 +157,8 @@
   </section>
 
   <!-- ---------- blocked ---------- -->
-  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
-    <h2 style="font-size: 1.1rem; margin: 0 0 0.6rem;">Blocked members</h2>
+  <section class="set-group">
+    <h2 class="stack-label">Blocked members</h2>
     {% if not blocked %}
       <p class="hint">You haven't blocked anyone.</p>
     {% endif %}
@@ -176,8 +175,8 @@
   </section>
 
   <!-- ---------- consent ---------- -->
-  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
-    <h2 style="font-size: 1.1rem; margin: 0 0 0.3rem;">Matching and sensitive details</h2>
+  <section class="set-group">
+    <h2 class="stack-label">Matching and sensitive details</h2>
     <p class="hint" style="margin: 0 0 0.7rem;">
       Your gender and who you're looking for can reveal your sexual orientation,
       so the law treats them as sensitive. We only use them to find you matches,
@@ -198,8 +197,8 @@
   </section>
 
   <!-- ---------- data ---------- -->
-  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
-    <h2 style="font-size: 1.1rem; margin: 0 0 0.6rem;">Your data</h2>
+  <section class="set-group">
+    <h2 class="stack-label">Your data</h2>
     <p class="hint" style="margin: 0 0 0.6rem;">
       Download everything we hold about you as a JSON file.
     </p>
@@ -207,8 +206,8 @@
   </section>
 
   {% if me.status != 'pending_deletion' %}
-  <section style="border-top: 1px solid var(--ink-hairline); padding-top: 1.2rem; margin-top: 1.2rem;">
-    <h2 style="font-size: 1.1rem; margin: 0 0 0.3rem;">Delete your account</h2>
+  <section class="set-group is-danger">
+    <h2 class="stack-label">Delete your account</h2>
     <p class="hint" style="margin: 0 0 0.7rem;">
       Your profile disappears immediately. After {{ deletion_grace_days }} days
       everything is permanently deleted. Sign in before then to change your mind.

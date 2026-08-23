@@ -1,30 +1,34 @@
 {% extends "base.html" %}
 {% block title %}Members — Velvt admin{% endblock %}
 {% block content %}
-<div class="card">
-  <p class="eyebrow">Admin</p>
-  <h1 style="margin-top: 0.5rem;">Members</h1>
+<div class="admin-page">
+  <h1 class="settings-title">Members</h1>
 
   {# Real and demo are counted apart on purpose. A single total that folded
      the seeded demo members in would be the same overstatement the landing
      page refuses to make -- and the gap between the two numbers is the one
      thing this page exists to show. #}
+  {#- ch.05: one card, a row per figure, the number right-aligned. It was
+      four tiles in a 2x2 grid with the count above its label, which put the
+      four numbers on two different lines and made a comparison between them
+      -- the one thing this block is for -- something you had to do by eye
+      across a corner. -#}
   <div class="admin-tally">
     <div class="admin-tally-item is-headline">
+      <span class="admin-tally-label">Registered and active</span>
       <span class="admin-tally-n">{{ totals.real_active }}</span>
-      <span class="admin-tally-label">registered<br>and active</span>
     </div>
     <div class="admin-tally-item">
+      <span class="admin-tally-label">Joined today</span>
       <span class="admin-tally-n">{{ totals.today }}</span>
-      <span class="admin-tally-label">joined<br>today</span>
     </div>
     <div class="admin-tally-item">
+      <span class="admin-tally-label">Joined this week</span>
       <span class="admin-tally-n">{{ totals.week }}</span>
-      <span class="admin-tally-label">joined this<br>week</span>
     </div>
     <div class="admin-tally-item is-muted">
+      <span class="admin-tally-label">Demo accounts</span>
       <span class="admin-tally-n">{{ totals.demo }}</span>
-      <span class="admin-tally-label">demo<br>accounts</span>
     </div>
   </div>
 

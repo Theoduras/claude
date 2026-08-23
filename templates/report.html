@@ -1,44 +1,52 @@
 {% extends "base.html" %}
 {% block title %}Report — Velvt{% endblock %}
+{% block appbar %}{{ appbar(back=None, back_label=t("chat.report")) }}{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <p class="eyebrow">{{ t("chat.report") }}</p>
-  <h1 style="margin-top: 0.5rem;">Report {{ subject.name or subject.username }}</h1>
-  <p class="subtitle" style="margin-bottom: 1.6rem;">
-    Tell us what happened. A moderator reads every report, and we'll let you
-    know once it's been looked at.
-  </p>
+{# ch.05: the same shape as a wizard step. Reasons are option rows, not
+   toggles -- a radio group is one answer out of several, and drawing each
+   one as its own on/off switch says the opposite. The block preference *is*
+   a switch, because it genuinely is one. #}
+<form method="post" action="{{ url_for('report_user', user_id=subject.id) }}"
+      class="wiz report-screen">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if match_id %}<input type="hidden" name="match_id" value="{{ match_id }}">{% endif %}
 
-  <form method="post" action="{{ url_for('report_user', user_id=subject.id) }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    {% if match_id %}<input type="hidden" name="match_id" value="{{ match_id }}">{% endif %}
+  <div class="wiz-body wiz-scroll">
+    <h1 class="wiz-q">{{ t("report.heading", name=subject.name or subject.username) }}</h1>
+    <p class="wiz-hint">{{ t("report.lede", name=subject.name or subject.username) }}</p>
 
-    <fieldset style="border: 0; padding: 0; margin: 0 0 1rem;">
-      <legend class="label">What's wrong?</legend>
-      {% for key, label in reasons %}
-      <label class="switch-row" for="reason-{{ key }}">
-        <input id="reason-{{ key }}" type="radio" name="reason" value="{{ key }}"
-               {% if loop.first %}required{% endif %}>
-        <span>{{ label }}</span>
-      </label>
-      {% endfor %}
+    <fieldset class="bare-set">
+      <legend class="stack-label">{{ t("report.what") }}</legend>
+      <div class="opt-list">
+        {% for key, label in reasons %}
+          <label class="opt" for="reason-{{ key }}">
+            <input id="reason-{{ key }}" type="radio" name="reason" value="{{ key }}"
+                   class="visually-hidden" {% if loop.first %}required{% endif %}>
+            <span class="opt-label">{{ label }}</span>
+            <span class="opt-mark"></span>
+          </label>
+        {% endfor %}
+      </div>
     </fieldset>
 
-    <label for="detail">Anything else we should know?</label>
+    <span class="stack-label">{{ t("report.more") }}</span>
     <textarea id="detail" name="detail" rows="4" maxlength="2000"
-              placeholder="Optional — what happened, and when."></textarea>
+              aria-label="{{ t('report.more') }}"
+              placeholder="{{ t('report.more_ph') }}"></textarea>
 
-    <label class="switch-row" for="block" style="margin-top: 1rem;">
+    <label class="switch-row is-trailing" for="block">
       <input id="block" name="block" type="checkbox" value="1" checked>
-      <span>Also block them</span>
+      <span>
+        <strong>{{ t("report.block_head", name=subject.name or subject.username) }}</strong>
+        <span class="switch-row-sub">{{ t("report.block_sub") }}</span>
+      </span>
     </label>
-    <p class="hint">Blocking ends any chat you have and stops you being matched again.</p>
 
-    <button class="btn btn-block" type="submit">Send report</button>
-  </form>
+    <p class="hint">{{ t("report.danger") }}</p>
+  </div>
 
-  <p class="hint" style="margin: 1.1rem 0 0; text-align: center;">
-    If you're in immediate danger, contact your local emergency services first.
-  </p>
-</div>
+  <div class="wiz-nav wiz-nav-block">
+    <button class="btn btn-danger btn-block" type="submit">{{ t("report.send") }}</button>
+  </div>
+</form>
 {% endblock %}
