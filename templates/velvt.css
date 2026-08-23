@@ -545,8 +545,13 @@
        other place there is no input margin to reclaim. Headings carry
        margin: 0, so a .hint used as a page lede -- which is what it is on
        /faq, /admin/reports, /admin/announce and /notifications -- was pulled
-       twelve pixels up into the descenders of the title above it. */
-    h1 + .hint, h2 + .hint, h3 + .hint { margin-top: 0; }
+       twelve pixels up into the descenders of the title above it.
+
+       .subtitle is the same case one step down: it is a paragraph with its
+       own bottom margin, not an input, so there is nothing there to reclaim
+       and a hint after it lands on top of its last line. */
+    h1 + .hint, h2 + .hint, h3 + .hint,
+    .subtitle + .hint { margin-top: 0; }
 
     /* A .hint that is refusing something rather than explaining it. Same
        size and position, so nothing moves when it changes register -- only
@@ -5545,3 +5550,29 @@
     .section-note strong { color: var(--violet); }
     .matchpop-ring-2 { border-color: var(--violet); }
     .photo-tile-label { background: var(--violet); color: var(--gleam); }
+
+    /* ---------- the flash, and the bare tag ---------------------------
+       Two more literals from the dark world. `.flash` painted #D8F5F2 --
+       pale mint, which is legible on a dark teal ground and invisible on
+       the light teal wash the same rule produces in light. It is the first
+       thing a new member sees ("Welcome! Check your inbox"), rendered as
+       pale mint on pale mint.
+
+       A confirmation is good news, so it takes the accent family it always
+       meant to: a wash of --teal with --teal text on it, both of which have
+       a light answer. And `.tag` -- the ADMIN badge, and a chat's phase
+       chip -- stops painting #F0E2FF over a violet gradient. */
+    .flash {
+      border-color: transparent;
+      background: color-mix(in srgb, var(--teal) 14%, var(--ink-raised));
+      background-image: none;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .flash a { color: var(--teal); font-weight: 700; }
+    .tag {
+      color: var(--violet);
+      border-color: transparent;
+      background: var(--violet-wash);
+      background-image: none;
+    }

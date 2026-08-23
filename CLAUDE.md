@@ -24,7 +24,7 @@ docker compose up -d      # Postgres, once per boot
 .\dev.ps1                 # venv + seed + Flask with the reloader
 # edit -> save -> refresh the browser. No restart, no git.
 python smoke.py           # hit every GET route, report 5xxs
-python check_auth.py      # 66 behaviour checks: auth, CSRF, safety, deletion, widening
+python check_auth.py      # 145 behaviour checks: auth, CSRF, safety, deletion, verification
 python check_bots.py      # demo members never reach a real person's search pool
 python check_presence.py  # a search leaves the pool when its browser stops polling
 python check_i18n.py      # both languages complete, and they still match each other
@@ -176,7 +176,7 @@ read heavier than 2px on 24. The Restyler previews all of it and exports the dif
 - `docs/launch-readiness.html` — the pre-launch audit these changes came from, with what
   is still outstanding (image scanning, passkeys, selfie verification, stepped
   registration)
-- `check_auth.py` — behaviour checks for auth, CSRF, safety and deletion
+- `check_auth.py` — behaviour checks for auth, CSRF, safety, deletion and the email gate
 - `check_retention.py` — behaviour checks for the retention schedule
 - `check_onboarding.py` — behaviour checks for the first-search gate and the explainer
 - `check_presence.py` — behaviour checks for the search heartbeat and ghost matches
@@ -731,7 +731,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 | Area | Routes |
 |---|---|
 | misc | `/lab` (admin), `/`, `/healthz` + `/-/health`, `/how-matching-works`, `/lang/<code>`, `/robots.txt`, `/tasks/purge-deletions`, `/tasks/notifications` |
-| auth | `/register`, `/login`, `/logout`, `/verify/<token>`, `/verify/resend`, `/forgot`, `/reset/<token>` |
+| auth | `/register`, `/login`, `/logout`, `/verify/<token>`, `/verify/pending`, `/verify/resend`, `/verify/email`, `/forgot`, `/reset/<token>` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
 | legal | `/terms`, `/privacy`, `/imprint`, `/safety`, `/faq` |
 | settings | `/settings`, `…/password`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/notifications`, `…/export`, `…/delete`, `…/delete/cancel` |
@@ -745,6 +745,35 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 Every POST needs a CSRF token: `{{ csrf_token() }}` in a hidden `csrf_token` field, or an
 `X-CSRF-Token` header for `fetch` (`window.velvtCsrf()` in `base.html`). A new form
 without one fails with a 400, not silently.
+
+**A confirmed address is the door, not a nag.** `require_verified_email()` holds a
+signed-in account on `/verify/pending` until it follows the link, because the address is
+how someone gets back in after a lost password and how all four notification kinds reach
+them at all — an account that never confirmed one is an account we cannot contact, and on
+a dating app it is also the cheapest thing between a throwaway address and a real
+person's inbox.
+
+`VERIFY_GATE_EXEMPT` is the allowlist, and every entry on it is a way *out*: confirm,
+resend, correct a typo, sign out, read what you agreed to, delete the account. **A gate
+with no exits is a locked account** — and the address someone typed wrong is exactly the
+address that cannot receive the link telling them so, which is why `/verify/email` exists
+at all. It moves the row to the new address *unconfirmed*, so correcting a typo is not a
+way past the gate. `/settings` is on the list because it is account administration rather
+than the app: no matching, no chat, nobody else's profile, and erasure does not wait on a
+mail provider.
+
+`awaiting_verification()` excludes three groups, each of which would otherwise be locked
+out of an account it can never open: deployments with no `RESEND_API_KEY` (no link can be
+sent, so the gate would be a wall — this is what keeps local development working),
+accounts with no address at all (the admin, the seeded demo members, admin-created
+profiles — none was ever mailed a link), and admins (locking the one account that can fix
+a broken mail setup behind that same mail setup is a trap with no floor).
+
+The shell drops back to its signed-out shape while the gate holds — `awaiting_verification`
+is in the context processor for exactly that. Every in-app link would bounce off the gate,
+and a nav whose every item returns you to the page you are on reads as a broken app rather
+than as a step you have not finished. The in-tab notification poll is off for the same
+reason: `/notifications/feed` is behind the gate.
 
 Before a first search can start, `profile_completeness()` requires name, age, gender,
 seeking and one photo — `PROFILE_REQUIRED` — and `/search` bounces to `/profile/edit`
