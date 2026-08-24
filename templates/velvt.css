@@ -3220,6 +3220,10 @@
       font-size: 0.82rem;
       color: var(--text-faint);
     }
+    /* Without this, the class's own `display: flex` outranks the browser's
+       default `[hidden] { display: none }` -- any author rule beats the UA
+       stylesheet -- so the note showed "Undo" on every visit, nothing removed. */
+    .photo-removed-note[hidden] { display: none; }
     .photo-removed-undo {
       padding: 0;
       border: 0;
