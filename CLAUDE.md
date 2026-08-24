@@ -203,7 +203,7 @@ read heavier than 2px on 24. The Restyler previews all of it and exports the dif
   trade. Kept on disk rather than deleted in case the artwork is wanted elsewhere
 - `static/velvt-hero.{webm,mp4,webp}` — the two felt characters crossing the gap
   and holding on, behind the landing hero. **It is by far the heaviest thing the
-  landing page asks for**: 344KB (VP9+alpha) or 227KB (H.264) against a page that
+  landing page asks for**: 2.1MB (VP9+alpha) or 227KB (H.264) against a page that
   is otherwise 5.6KB, so treat any further growth as a real decision. Only one
   video is fetched — the browser takes the first `<source>` it can play — and a
   `prefers-reduced-motion` visit fetches neither, because `landing.html` attaches
