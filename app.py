@@ -46,6 +46,7 @@ from flask import (
     abort,
     flash,
     g,
+    has_request_context,
     redirect,
     render_template,
     request,
@@ -2012,7 +2013,7 @@ def start_session(user_id, remember=True):
     )
     db.commit()
 
-    reset_session_keeping_language()
+    reset_session_keeping_prefs()
     session["sid"] = token
     # Unchecked "keep me signed in" leaves a browser-session cookie, which is
     # what someone on a shared machine is asking for.
@@ -2022,6 +2023,12 @@ def start_session(user_id, remember=True):
 
 
 LANG_SESSION_KEY = "lang"
+# The other display preference a visitor may hold for themselves. The admin's
+# choice in /admin/design is the site's default; this is one person overriding
+# it for their own eyes, and it costs nothing to honour: both worlds are always
+# in the stylesheet (see _render_stylesheet), so the mode is an attribute on
+# <html> rather than a different set of bytes.
+MODE_SESSION_KEY = "design_mode"
 
 
 def current_language():
@@ -2057,19 +2064,22 @@ def opt_label_for(value):
     return option_label(current_language(), value)
 
 
-def reset_session_keeping_language():
-    """Clear the session but carry the chosen language across.
+def reset_session_keeping_prefs():
+    """Clear the session but carry the display preferences across.
 
     session.clear() on sign-in and sign-out is deliberate -- it defends
     against session fixation, and nothing from the previous visitor should
-    survive. The language is the one exception: it is a display preference
-    rather than anything privileged, and dropping it sent someone who had
-    just picked Dutch back to English at exactly the moment they committed.
+    survive. The two display preferences are the exception: neither the
+    language nor the light/dark choice is privileged, and dropping them sent
+    someone who had just picked Dutch, or just turned the lights down, back
+    to the defaults at exactly the moment they committed.
     """
-    chosen = session.get(LANG_SESSION_KEY)
+    keep = {key: session.get(key)
+            for key in (LANG_SESSION_KEY, MODE_SESSION_KEY)}
     session.clear()
-    if chosen:
-        session[LANG_SESSION_KEY] = chosen
+    for key, value in keep.items():
+        if value:
+            session[key] = value
 
 
 def end_session():
@@ -2081,7 +2091,7 @@ def end_session():
         db.commit()
     # Language survives sign-out too: the sign-in page you land on should not
     # suddenly be in a language you did not choose.
-    reset_session_keeping_language()
+    reset_session_keeping_prefs()
     g.current_user = None
 
 
@@ -2206,6 +2216,7 @@ def inject_user():
         "css_digest": lambda: _render_stylesheet()["digest"],
         # Which world <html> declares. The stylesheet always carries both.
         "design_mode": design_mode,
+        "design_modes": DESIGN_MODES,
         # Global rather than passed per-route: whether a location control
         # renders at all comes up in the profile form, the search wizard and
         # the criteria screen alike.
@@ -8549,7 +8560,26 @@ def design_overrides(force=False):
 
 
 def design_mode():
-    """Which world the site is painting in right now: "dark" or "light"."""
+    """Which world the site is painting in right now: "dark" or "light".
+
+    The visitor's own choice first, then the admin's default. Same order and
+    same reasoning as current_language(): a display preference belongs to the
+    person reading, and the site-wide setting is what someone who has never
+    expressed one gets.
+
+    Falls back to the default rather than trusting the session blindly -- a
+    stale cookie naming a mode that no longer exists would otherwise put
+    `data-mode="whatever"` on <html>, which matches no block in the sheet and
+    paints the dark world's :root on a design that expects light.
+    """
+    # The session is only there to be read during a request. This function is
+    # not: css_digest() and the check suites call it with no request in
+    # flight, and before the visitor's choice existed it was safe to call
+    # anywhere. Asking for the site default outside a request keeps it so.
+    if has_request_context():
+        chosen = session.get(MODE_SESSION_KEY)
+        if chosen in DESIGN_MODES:
+            return chosen
     return design_overrides().get("mode", "light")
 
 
@@ -8662,6 +8692,32 @@ def set_language(code):
     lang = normalize_language(code)
     if lang:
         session[LANG_SESSION_KEY] = lang
+
+    target = request.values.get("next") or "/"
+    # Only ever a path on this site: no scheme, no host, and no
+    # protocol-relative "//evil.example", which a browser reads as a host.
+    if not target.startswith("/") or target.startswith("//"):
+        target = "/"
+    return redirect(target)
+
+
+@app.route("/mode/<mode>", methods=["GET", "POST"])
+def set_design_mode(mode):
+    """Switch the light/dark world for this visitor, and return them to the
+    page they were reading.
+
+    The language switcher's twin, and deliberately so: same shape, same
+    same-site redirect guard, same reasoning about being a plain GET link.
+    The only state it writes is a display preference in the caller's own
+    session -- the worst a forged request achieves is showing someone the
+    dark design -- and a link is what works with no JavaScript and needs no
+    CSRF token on a page a signed-out visitor is reading.
+
+    An unknown mode is ignored rather than stored, so the session can only
+    ever hold a name the stylesheet actually has a block for.
+    """
+    if mode in DESIGN_MODES:
+        session[MODE_SESSION_KEY] = mode
 
     target = request.values.get("next") or "/"
     # Only ever a path on this site: no scheme, no host, and no

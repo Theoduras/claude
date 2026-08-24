@@ -633,6 +633,19 @@ the same token has a different right answer in each. The editor edits a mode
 independently of the live one: designing light before switching to it is the
 normal order.
 
+**A visitor can choose for themselves.** `/mode/<mode>` is the language
+switcher's twin — a plain GET link, a same-site redirect back to the page you
+were reading, and the choice stored in the visitor's own session — and the Info
+sheet renders both as a labelled pair of segmented controls. `design_mode()`
+reads the session first and the admin's `app_settings` value second, the same
+order `current_language()` uses; `reset_session_keeping_prefs()` carries both
+across sign-in and sign-out, since neither is privileged and dropping them
+resets someone at the moment they commit. It costs nothing: both worlds are
+always in the stylesheet, so this changes one attribute on `<html>` and not a
+byte of CSS. `design_mode()` is guarded with `has_request_context()` — it is
+called by `css_digest()` and the check suites with no request in flight, and
+before the visitor's choice existed it was safe to call anywhere.
+
 **Light is the shipped default**, because it is the design the artifact is
 actually showing; one click in `/admin/design` changes it, and the dark world
 is in the stylesheet either way.

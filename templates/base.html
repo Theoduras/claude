@@ -107,6 +107,25 @@
       {% endfor %}
     </div>
   {% endmacro %}
+  {# The language switcher's twin: the same segmented control, for the other
+     display preference a visitor holds for themselves. A plain link like the
+     language one, so it works with no JavaScript, needs no CSRF token on a
+     page a signed-out visitor is reading, and survives being shared.
+
+     Both worlds are always in the stylesheet -- switching costs no refetch,
+     because which one paints is an attribute on <html> rather than a
+     different set of bytes. #}
+  {% macro mode_switch() %}
+    {% set here = request.full_path if request.query_string else request.path %}
+    {% set now = design_mode() %}
+    <div class="lang-switch mode-switch" role="group" aria-label="{{ t('mode.choose') }}">
+      {%- for m in ['light', 'dark'] if m in design_modes %}
+        <a href="{{ url_for('set_design_mode', mode=m) }}?next={{ here | urlencode }}"
+           class="lang-opt{% if m == now %} is-on{% endif %}"
+           {% if m == now %}aria-current="true"{% endif %}>{{ t("mode." ~ m) }}</a>
+      {% endfor %}
+    </div>
+  {% endmacro %}
   {# A full-viewport decorative layer, behind the frame and outside it. It sits
      here rather than inside {% block content %} because body::after's nap
      texture must fall *over* it -- both are z-index 0, and a pseudo-element
@@ -167,6 +186,7 @@
     <footer class="site-footer">
       {{ more_links() }}
       {{ lang_switch() }}
+      {{ mode_switch() }}
       {% if current_user %}
         {#- The sheet's logout row has no desktop counterpart otherwise: its
             trigger lives in the tab bar, which desktop does not render. -#}
@@ -239,10 +259,20 @@
         </button>
       </div>
       <div class="sheet-body">
-        {# A setting rather than a destination, so it sits above the list of
+        {# Settings rather than destinations, so they sit above the list of
            pages instead of inside it. Present signed out too: the landing and
-           sign-in screens are exactly where a Dutch speaker first arrives. #}
-        <div class="sheet-lang">{{ lang_switch() }}</div>
+           sign-in screens are exactly where a Dutch speaker first arrives,
+           and where someone reading at night first wants the lights down. #}
+        <div class="sheet-prefs">
+          <div class="sheet-pref">
+            <span class="sheet-pref-label">{{ t("lang.choose") }}</span>
+            {{ lang_switch() }}
+          </div>
+          <div class="sheet-pref">
+            <span class="sheet-pref-label">{{ t("mode.choose") }}</span>
+            {{ mode_switch() }}
+          </div>
+        </div>
         <nav class="more-sheet-links" aria-label="Info">
           {{ more_links() }}
         </nav>

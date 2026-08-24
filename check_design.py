@@ -13,6 +13,7 @@ a saved colour shows up.
 """
 
 import os
+import re
 
 os.environ.setdefault("ALLOW_BOT_MATCHES", "0")
 
@@ -307,6 +308,45 @@ check("the light override lands on the light block only",
 check("and neither is written into the other",
       body.count("#111111") == 1 and body.count("#EEEEEE") == 1)
 clear()
+
+# --- a visitor's own light/dark choice ------------------------------------
+# The admin's setting is the site's default; /mode/<mode> is one person
+# overriding it for their own eyes. Each "it is honoured" is paired with the
+# thing it must not do.
+set_mode("light")
+visitor = app.test_client()
+
+def mode_of(c, path="/faq"):
+    """The data-mode actually painted on <html> for this client."""
+    html = c.get(path).get_data(as_text=True)
+    match = re.search(r'<html[^>]*data-mode="(\w+)"', html)
+    return match.group(1) if match else None
+
+check("a visitor with no choice gets the site default",
+      mode_of(visitor) == "light", mode_of(visitor))
+
+resp = visitor.get("/mode/dark?next=/faq")
+check("choosing dark redirects back to the page you were reading",
+      resp.status_code == 302 and resp.headers["Location"].endswith("/faq"),
+      resp.headers.get("Location"))
+check("...and the visitor's own pages paint dark",
+      mode_of(visitor) == "dark", mode_of(visitor))
+check("...without touching the site default",
+      A.design_overrides(force=True).get("mode") == "light")
+check("...so another visitor still sees light",
+      mode_of(app.test_client()) == "light")
+
+visitor.get("/mode/sepia?next=/faq")
+check("a mode the stylesheet has no block for is refused",
+      mode_of(visitor) == "dark", mode_of(visitor))
+
+check("the switch cannot be used as an open redirect",
+      visitor.get("/mode/light?next=//evil.example")
+             .headers["Location"].endswith("/"))
+
+visitor.get("/mode/light?next=/faq")
+check("and switching back is one link",
+      mode_of(visitor) == "light", mode_of(visitor))
 
 # --- the preview frame can actually frame ---------------------------------
 headers = client.get("/faq").headers

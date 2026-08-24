@@ -5576,3 +5576,31 @@
       background: var(--violet-wash);
       background-image: none;
     }
+
+    /* ---------- the Info sheet's preferences --------------------------
+       Two settings above the list of pages: language, and which world the
+       site paints in. Each is a label over a segmented control, so they
+       read as a pair of settings rather than as two more things to tap in
+       a list of destinations. */
+    .sheet-prefs {
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+      padding-bottom: 0.9rem;
+      margin-bottom: 0.3rem;
+      border-bottom: 1px solid var(--ink-hairline);
+    }
+    .sheet-pref {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .sheet-pref-label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    /* The mode's options are words rather than the language's two-letter
+       codes, so they need room the code-sized segments never did. */
+    .mode-switch .lang-opt { font-size: 0.78rem; padding-inline: 0.7rem; }

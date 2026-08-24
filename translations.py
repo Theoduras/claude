@@ -59,7 +59,10 @@ TRANSLATIONS = {
         "tab.chats": "Chats",
         "tab.you": "You",
         "tab.info": "Info",
-        "lang.choose": "Choose a language",
+        "lang.choose": "Language",
+        "mode.choose": "Appearance",
+        "mode.light": "Light",
+        "mode.dark": "Dark",
 
         # --- landing ---
         "landing.title": "Velvt",
@@ -569,7 +572,10 @@ TRANSLATIONS = {
         "tab.chats": "Chats",
         "tab.you": "Jij",
         "tab.info": "Info",
-        "lang.choose": "Kies een taal",
+        "lang.choose": "Taal",
+        "mode.choose": "Weergave",
+        "mode.light": "Licht",
+        "mode.dark": "Donker",
 
         # --- landing ---
         "landing.title": "Velvt",
