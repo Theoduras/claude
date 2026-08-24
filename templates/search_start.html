@@ -274,6 +274,7 @@
   }
 
   function go(i) {
+    cancelAuto();
     at = Math.max(0, Math.min(i, last));
     render();
     var card = steps[at];
@@ -298,31 +299,71 @@
   back.addEventListener("click", function () { go(at - 1); });
   skip.addEventListener("click", function () { go(at + 1); });
 
-  // Picking an answer on a single-choice step advances on its own, the way
-  // the rest of the flow's one-tap steps do. Checkboxes (body type) are
-  // multi-select, so those wait for Next.
+  // ---- answering a step *is* the way forward ------------------------
   //
-  // This listens for click rather than change on purpose: a step can open
-  // with an option already selected (a saved search, or "Any age" as the
-  // default), and re-tapping that one fires no change event at all, leaving
-  // the tap looking broken.
-  var pendingFrom = null;
+  // Only the single-choice step used to advance on its own; every other one
+  // wanted a tap on Next after the tap that answered it, which is two taps
+  // for one decision, five times over.
+  //
+  // The two kinds of step need different moments, because a multi-select
+  // has no single tap that means "done":
+  //
+  //   - one answer out of several (radio) advances almost at once. The
+  //     choice is complete the instant it is made.
+  //   - many answers, or a slider, advance once you *stop*. Each further
+  //     tap cancels the pending move and starts the wait again, so picking
+  //     three things is three taps and one wait, not a race.
+  //
+  // Next stays where it is. It is no longer the only way on -- it is the
+  // way on for someone who has answered nothing (interests and body type
+  // are both legitimately empty) or who does not want to wait.
+  var AUTO_PICK_MS = 200;     // a single choice: complete when tapped
+  var AUTO_SETTLE_MS = 1300;  // a multi-choice: complete when you stop
+  var autoTimer = null;
+
+  function cancelAuto() {
+    if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+  }
+
+  function scheduleAuto(delay) {
+    cancelAuto();
+    var from = at;
+    autoTimer = setTimeout(function () {
+      autoTimer = null;
+      // Everything that could have changed under the timer, re-checked at
+      // the moment it fires rather than assumed from when it was set: the
+      // step may have moved, the last box may have been unticked, the
+      // interest overlay may be open over the top of it.
+      if (at !== from || at === last) return;
+      if (!answered(from)) return;
+      if (sheet && !sheet.hidden) return;
+      go(from + 1);
+    }, delay);
+  }
+
+  // Click rather than change on purpose: a step can open with an option
+  // already selected (a saved search, or "Any age" as the default), and
+  // re-tapping that one fires no change event at all, leaving the tap
+  // looking broken. A label click also bubbles twice -- once for the label,
+  // once for the click the browser forwards to the input it wraps -- and
+  // that needs no guard here, because the second one only cancels the first
+  // timer and sets an identical one.
   form.addEventListener("click", function (ev) {
     var row = ev.target.closest ? ev.target.closest(".opt") : null;
     if (!row || at === last) return;
     var input = row.querySelector("input");
-    if (!input || input.type !== "radio") return;
-    // One tap on a <label> bubbles twice — once for the label, once for the
-    // click the browser forwards to the input it wraps — so without this
-    // guard a single pick would advance two steps.
-    if (pendingFrom !== null) return;
-    var from = at;
-    pendingFrom = from;
-    setTimeout(function () {
-      pendingFrom = null;
-      if (at === from && answered(from)) go(from + 1);
-    }, 180);
+    if (!input) return;
+    scheduleAuto(input.type === "radio" ? AUTO_PICK_MS : AUTO_SETTLE_MS);
   });
+
+  // A slider settles rather than being answered: reschedule on every move
+  // so the step waits until the thumb has been still for a moment.
+  Array.prototype.forEach.call(
+    form.querySelectorAll('input[type="range"]'),
+    function (r) {
+      r.addEventListener("input", function () { scheduleAuto(AUTO_SETTLE_MS); });
+    }
+  );
 
   // Enter anywhere in the form means "next", not "submit", until the end.
   form.addEventListener("keydown", function (ev) {
@@ -431,6 +472,12 @@
       if (!pill) return;
       ev.preventDefault();
       toggleInterest(pill.dataset.value);
+      // Interests are the other multi-choice step: picking on the step
+      // itself settles the same way the checkbox lists do. Picking inside
+      // the overlay does not -- that sheet is closed with Done, and moving
+      // the step on underneath an open dialog is the one thing the wait
+      // must not do.
+      if (set === inlinePills) scheduleAuto(AUTO_SETTLE_MS);
     });
   });
 
@@ -449,9 +496,19 @@
   }
   function closeSheet() {
     sheet.classList.remove("is-open");
-    setTimeout(function () { sheet.hidden = true; }, 200);
+    setTimeout(function () {
+      sheet.hidden = true;
+      // Done means done: the step settles from here as if the last pill had
+      // just been tapped on the step itself.
+      scheduleAuto(AUTO_SETTLE_MS);
+    }, 200);
   }
-  moreBtn.addEventListener("click", openSheet);
+  moreBtn.addEventListener("click", function () {
+    // "More" is a way of answering the step, not an answer to it, so it
+    // calls off any move the last pill had scheduled.
+    cancelAuto();
+    openSheet();
+  });
   sheet.addEventListener("click", function (ev) {
     if (ev.target.closest("[data-close]")) closeSheet();
   });

@@ -536,6 +536,21 @@ block now: "Short-term relationship" and "Friendship" are still the stored value
 what the design says on screen. A label is exactly the thing that is allowed to
 differ from the value behind it.
 
+**Answering a step is the way forward.** Only the single-choice step advanced on
+its own; every other one wanted a tap on Next after the tap that answered it —
+two taps for one decision, five times over. The two kinds of step settle
+differently, because a multi-select has no single tap that means "done": one
+answer out of several moves at `AUTO_PICK_MS` (200ms — the choice is complete
+the instant it is made), and a multi-select or a slider moves at
+`AUTO_SETTLE_MS` (1300ms) *after you stop*, each further tap cancelling the
+pending move and restarting the wait. Next stays: it is the way on for someone
+who has answered nothing (interests and body type are both legitimately empty)
+or who does not want to wait, and the last step never auto-advances — starting
+a search is a deliberate tap. `scheduleAuto()` re-checks everything at the
+moment it fires rather than trusting what was true when it was set: the step
+may have moved, the last box may have been unticked, and the interest overlay
+may be open over the top of it.
+
 **Two English strings were hard-coded in the wizard** and are not any more: the
 step counter was assembled in the script, and "Start searching" was printed by
 `.wiz-next.is-final::after` in the stylesheet. Both are real strings carried on
