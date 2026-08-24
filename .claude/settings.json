@@ -1,0 +1,50 @@
+{
+  "autoCompactWindow": 200000,
+  "crossSessionInbound": "hold",
+  "env": {
+    "ENABLE_PROMPT_CACHING_1H": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Write(/home/user/claude/.claude/hooks/**)",
+      "Edit(/home/user/claude/.claude/hooks/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/usr/local/bin/python3\" \"/home/user/claude/.claude/hooks/cap_output.py\""
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/usr/local/bin/python3\" \"/home/user/claude/.claude/hooks/inject_archive_pointer.py\"",
+            "statusMessage": "Restoring context archive pointer"
+          }
+        ],
+        "matcher": "compact"
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/usr/local/bin/python3\" \"/home/user/claude/.claude/hooks/archive_context.py\"",
+            "statusMessage": "Archiving context before compaction"
+          }
+        ],
+        "matcher": "auto|manual"
+      }
+    ]
+  }
+}
