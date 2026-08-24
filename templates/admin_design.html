@@ -333,30 +333,95 @@
   //
   // An element's colours come from CSS rules, not from anything stored on the
   // element, so "what does this paint with?" cannot be read off it directly.
-  // Each token is resolved once per screen against a probe element, giving a
-  // computed value per token; the clicked element's own computed colours are
-  // then looked up in that map. A colour that matches no token is a literal
-  // in the stylesheet and is reported as such rather than silently ignored.
+  //
+  // It cannot be read off the *computed* colour either, which is what this
+  // used to do: resolve every token against a probe, then look the element's
+  // computed colour up in that map. Chromium serialises a color-mix() result
+  // as `color(srgb ...)` and a plain var() as `rgb(...)`, so the lookup could
+  // never match a mixed colour -- and tools/tokenise_css.py rewrote 192
+  // literals into color-mix() over the palette, so nearly every colour in the
+  // app came back "written straight into the stylesheet rather than as a
+  // token". Exactly backwards, and on the one screen whose whole job is to
+  // say which token to reach for. The button's own hover is the case in
+  // point: color-mix(in srgb, var(--violet) 88%, var(--shade)), reported as
+  // an untokenised grey.
+  //
+  // So read the *declared* value out of the cascade instead and pull the
+  // var() names out of it. That is exact rather than inferred: a mix names
+  // both its tokens, and a colour with no var() in it is genuinely a literal.
   var body = document.getElementById("dsg-inspector-body");
   var empty = document.getElementById("dsg-inspector-empty");
   var elLine = document.getElementById("dsg-el");
   var elTokens = document.getElementById("dsg-el-tokens");
   var elNone = document.getElementById("dsg-el-none");
 
-  function tokenMap(doc) {
-    var probe = doc.createElement("span");
-    probe.style.display = "none";
-    doc.body.appendChild(probe);
-    var map = {};
-    rows.forEach(function (row) {
-      var name = row.dataset.token;
-      probe.style.color = "";
-      probe.style.color = "var(" + name + ")";
-      var resolved = doc.defaultView.getComputedStyle(probe).color;
-      if (resolved && !map[resolved]) map[resolved] = name;
-    });
-    probe.remove();
-    return map;
+  var KNOWN = {};
+  rows.forEach(function (r) { KNOWN[r.dataset.token] = true; });
+
+  // Every style rule in the document that applies to this element, in cascade
+  // order. Order alone decides the winner here rather than full specificity
+  // arithmetic -- which is the bargain velvt.css already makes with itself
+  // ("same specificity, later wins"), and ch.05 is written to depend on it.
+  // Each hit is stamped with how late it was seen, because a role can be set
+  // through more than one property -- `background` and `background-color` both
+  // reach the same pixel -- and the winner is whichever was written last, not
+  // whichever the caller happened to list first.
+  function declaredFor(el, doc, props) {
+    var win = doc.defaultView;
+    var out = {}, order = 0;
+    function take(style) {
+      props.forEach(function (p) {
+        var v = style.getPropertyValue(p);
+        if (v && v.trim()) out[p] = { value: v.trim(), at: ++order };
+      });
+    }
+    function walk(rules) {
+      if (!rules) return;
+      for (var i = 0; i < rules.length; i++) {
+        var rule = rules[i];
+        if (rule.media) {
+          // A media block only counts when it is actually in force.
+          var q = rule.conditionText || rule.media.mediaText;
+          try { if (!win.matchMedia(q).matches) continue; } catch (e) { continue; }
+          walk(rule.cssRules);
+          continue;
+        }
+        if (rule.cssRules && !rule.selectorText) { walk(rule.cssRules); continue; }
+        if (!rule.selectorText) continue;
+        // :hover and friends are honoured rather than stripped: the inspector
+        // reports what is painting now, and "now" may well be hovered.
+        try { if (!el.matches(rule.selectorText)) continue; } catch (e) { continue; }
+        take(rule.style);
+      }
+    }
+    for (var s = 0; s < doc.styleSheets.length; s++) {
+      try { walk(doc.styleSheets[s].cssRules); } catch (e) { /* cross-origin */ }
+    }
+    // The element's own style attribute outranks all of it.
+    if (el.style) take(el.style);
+    return out;
+  }
+
+  // "initial", "inherit", "currentColor" and friends are not colours written
+  // into the sheet -- reporting them as literals sends someone looking for a
+  // hex that is not there.
+  var KEYWORD = /^(initial|inherit|unset|revert|revert-layer|currentcolor|none|auto)$/i;
+
+  // var(--a, var(--b)) and color-mix(... var(--a) ..., var(--b)) both name
+  // more than one token, and both are worth offering. Names the palette does
+  // not define are kept separately rather than dropped: a handful of rules
+  // reach for a var() that was never declared in :root (--velvet-bright and
+  // friends), so the fallback is what actually paints, and saying "literal"
+  // about those sends someone hunting for a hex that is not there either.
+  function tokensIn(decl) {
+    var known = [], unknown = [], seen = {}, m;
+    var re = /var\(\s*(--[A-Za-z0-9-]+)/g;
+    while ((m = re.exec(decl))) {
+      if (seen[m[1]]) continue;
+      seen[m[1]] = true;
+      (KNOWN[m[1]] ? known : unknown).push(m[1]);
+    }
+    return { known: known, unknown: unknown };
   }
 
   function describe(el) {
@@ -368,54 +433,109 @@
     return out;
   }
 
-  function inspect(el, doc) {
-    var map = tokenMap(doc);
-    var style = doc.defaultView.getComputedStyle(el);
-    var found = [];
-    [["background", "backgroundColor"],
-     ["text", "color"],
-     ["border", "borderTopColor"]].forEach(function (pair) {
-      var value = style[pair[1]];
-      if (!value || value === "rgba(0, 0, 0, 0)" || value === "transparent") return;
-      found.push([pair[0], map[value] || null, value]);
+  // What the inspector reports on. Each role lists every property that can
+  // set it -- longhand and shorthand both, since velvt.css writes
+  // `background:` as often as `background-color:`.
+  //
+  // The last field is the computed property used to ask whether a colour role
+  // is painted at all: an element with no border paints no border colour
+  // whatever a rule says. The roles below it are not colours, and a colour is
+  // not the only thing the palette holds -- --radius, --card-pad, --measure
+  // and the three font stacks are all editable, and clicking a card used to
+  // say nothing about where its corner came from.
+  var ROLES = [
+    ["background", ["background-color", "background"], "backgroundColor"],
+    ["text", ["color"], "color"],
+    ["border", ["border-top-color", "border-color", "border-top", "border"], "borderTopColor"],
+    ["radius", ["border-radius"], null],
+    ["padding", ["padding", "padding-top", "padding-inline"], null],
+    ["width", ["max-width", "width"], null],
+    ["font", ["font-family", "font"], null]
+  ];
+
+  function chipFor(role, token, note) {
+    var row = rows.filter(function (r) { return r.dataset.token === token; })[0];
+    if (!row) return null;
+    var label = row.querySelector(".dt-label").firstChild.textContent.trim();
+    var link = document.createElement("button");
+    link.type = "button";
+    link.className = "dsg-chip";
+    link.textContent = role + " — " + label + " (" + token + ")" + (note || "");
+    link.addEventListener("click", function () {
+      rows.forEach(function (r) { r.classList.remove("is-hit"); });
+      row.classList.add("is-hit");
+      row.scrollIntoView({ block: "center", behavior: "smooth" });
+      var swatch = row.querySelector(".dt-swatch");
+      (swatch || row.querySelector(".dt-value")).focus();
     });
+    return link;
+  }
+
+  function inspect(el, doc) {
+    var style = doc.defaultView.getComputedStyle(el);
+    var props = [];
+    ROLES.forEach(function (r) { props = props.concat(r[1]); });
+    var declared = declaredFor(el, doc, props);
 
     elLine.textContent = describe(el);
     elTokens.innerHTML = "";
-    var any = false;
+    var found = 0;
 
-    found.forEach(function (item) {
-      var role = item[0], token = item[1], literal = item[2];
+    ROLES.forEach(function (r) {
+      var role = r[0], isColour = r[2] !== null;
+      var painted = isColour ? style[r[2]] : "";
+      if (isColour &&
+          (!painted || painted === "rgba(0, 0, 0, 0)" || painted === "transparent")) return;
+
+      // Whichever of this role's properties was written last wins.
+      var best = null;
+      r[1].forEach(function (p) {
+        var hit = declared[p];
+        if (hit && (!best || hit.at > best.at)) best = hit;
+      });
+      var decl = best ? best.value : "";
+      if (KEYWORD.test(decl)) decl = "";
+      var names = tokensIn(decl);
+
+      // A colour role is worth a line even when it is inherited -- knowing
+      // the page behind it is what paints is an answer. The rest are only
+      // worth a line when this element actually sets them, or every click
+      // would list four "inherited" non-answers.
+      if (!isColour && !names.known.length) return;
+      found++;
       var line = document.createElement("p");
       line.className = "hint";
       line.style.margin = "0 0 0.4rem";
-      if (token) {
-        any = true;
-        var row = rows.filter(function (r) { return r.dataset.token === token; })[0];
-        var label = row.querySelector(".dt-label").firstChild.textContent.trim();
-        var link = document.createElement("button");
-        link.type = "button";
-        link.className = "dsg-chip";
-        link.textContent = role + " — " + label + " (" + token + ")";
-        link.addEventListener("click", function () {
-          rows.forEach(function (r) { r.classList.remove("is-hit"); });
-          row.classList.add("is-hit");
-          row.scrollIntoView({ block: "center", behavior: "smooth" });
-          var swatch = row.querySelector(".dt-swatch");
-          (swatch || row.querySelector(".dt-value")).focus();
+
+      if (names.known.length) {
+        // More than one name means the colour is mixed out of them, so say
+        // so: editing either moves this element, and neither one alone is
+        // "the" colour on screen.
+        var note = names.known.length > 1 ? ", mixed" : "";
+        names.known.forEach(function (n, i) {
+          var chip = chipFor(i === 0 ? role : "↳", n, note);
+          if (!chip) return;
+          if (i) line.appendChild(document.createTextNode(" "));
+          line.appendChild(chip);
         });
-        line.appendChild(link);
-      } else {
-        line.textContent = role + " — " + literal +
+      } else if (names.unknown.length) {
+        line.textContent = role + " — " + decl + ": " +
+          names.unknown.join(", ") + " is not in the palette, so the fallback " +
+          "is what paints. Nothing here can change it.";
+      } else if (decl) {
+        line.textContent = role + " — " + decl +
           ", written straight into the stylesheet rather than as a token.";
+      } else {
+        // Nothing declared for it anywhere: the colour is inherited, or the
+        // browser's own default.
+        line.textContent = role + " — " + painted + ", inherited.";
       }
       elTokens.appendChild(line);
     });
 
-    elNone.hidden = found.length > 0;
+    elNone.hidden = found > 0;
     empty.hidden = true;
     body.hidden = false;
-    if (!any && found.length) { /* literals only: the lines above say so */ }
   }
 
   frame.addEventListener("load", function () {

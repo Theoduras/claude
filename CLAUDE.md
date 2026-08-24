@@ -34,6 +34,7 @@ python check_landing.py   # the landing page's busyness line is true at every ti
 python check_design.py     # the admin design editor, and what it refuses
 python check_content.py    # rewriting words and re-pointing icons from admin
 python tools/check_hero_fits.py   # landing hero fits above the buttons (needs a browser)
+python tools/check_inspector.py   # the design inspector names the right token (needs a browser)
 ```
 
 `smoke.py` proves routes render; `check_auth.py` proves the security-relevant ones
@@ -620,13 +621,48 @@ refused.
 
 **The inspector answers "what does this element paint with?"** — a question an
 element cannot be asked directly, since its colours come from CSS rules rather
-than from anything stored on it. Each token is resolved once per screen against
-a hidden probe element, giving a computed value per token; the clicked
-element's own computed background/text/border are then looked up in that map.
-A colour matching no token is a literal in the stylesheet, and is reported as
-one rather than silently ignored. Clicks in the frame are swallowed
-(`preventDefault`) — the preview is for looking at, and a click that followed a
-link or submitted a form would navigate away or change real data.
+than from anything stored on it. It reads the **declared** value out of the
+cascade (every rule in `document.styleSheets` whose selector the element
+matches, in order, last one winning — the same "same specificity, later wins"
+bargain ch.05 already depends on) and pulls the `var()` names out of it. A
+declaration naming no token is a literal in the stylesheet, and is reported as
+one rather than silently ignored.
+
+**It used to read the computed colour instead, and was wrong almost
+everywhere.** Each token was resolved against a hidden probe, giving a
+colour→token map that the element's computed background/text/border were then
+looked up in. Two things broke it, and neither failed loudly: Chromium
+serialises a `color-mix()` result as `color(srgb ...)` and a plain `var()` as
+`rgb(...)`, so a mixed colour could never match — and `tools/tokenise_css.py`
+had already rewritten 192 literals into `color-mix()` over the palette, so
+most of the app reported as "written straight into the stylesheet rather than
+as a token" on the one screen whose whole job is to say which token to reach
+for. The map was also keyed by colour, so any two tokens sharing a value
+collapsed into whichever was registered first. Reading the declared name
+sidesteps both: a mix names both its tokens, and equal values are never
+confused because nothing is matched by value at all.
+
+Three consequences worth keeping: a colour role is reported even when it is
+inherited (knowing the page behind it paints is an answer), CSS-wide keywords
+(`initial`, `inherit`, `currentColor`) are not reported as literals, and a
+`var()` the palette does not define — `--velvet-bright` and the three others
+that were never declared in `:root` — is named as such, since its fallback is
+what paints and no edit here can reach it.
+
+**The palette is not only colours, so neither is the inspector**: `--radius`,
+`--card-pad`, `--measure` and the three font stacks are editable too, and
+those roles are listed only when the element actually sets them — otherwise
+every click would carry four "inherited" non-answers.
+
+Clicks in the frame are swallowed (`preventDefault`) — the preview is for
+looking at, and a click that followed a link or submitted a form would
+navigate away or change real data. `:hover` is honoured rather than stripped:
+the inspector reports what is painting *now*, and now may well be hovered,
+which is exactly the state the button's `color-mix()` background lives in.
+
+`tools/check_inspector.py` covers it, and needs a browser and an admin
+session — the inspector is script inside `/admin/design`, so no Python test
+client reaches it, which is why nothing caught the above.
 
 **`design_palettes` is the Restyler's saved states.** A palette is the whole
 override set under a name, so a direction can be parked instead of being the
