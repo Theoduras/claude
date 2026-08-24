@@ -36,12 +36,26 @@
     // Looping would snap them back apart every five seconds, which is the
     // opposite of what the page is promising.
     reel.load();
-    var go = reel.play();
-    if (go && go.catch) {
-      // A refused autoplay is not a failure worth reporting -- the still is
-      // already on screen underneath, and that is the fallback.
-      go.catch(function () {});
+    // On a phone, object-fit: cover crops this landscape footage down to a
+    // narrow vertical strip through its middle -- and for the first ~6 of
+    // its 10 seconds the pair starts far enough apart that neither one is
+    // in that strip at all, so mobile spent most of the run looking at an
+    // empty crop. Jumping the start point past that lead-in, mobile only,
+    // trades the empty stretch for the part that was always the point: the
+    // two of them closing the last of the gap.
+    function startReel() {
+      if (document.documentElement.getAttribute("data-viewport") === "mobile") {
+        try { reel.currentTime = 6; } catch (e) {}
+      }
+      var go = reel.play();
+      if (go && go.catch) {
+        // A refused autoplay is not a failure worth reporting -- the still is
+        // already on screen underneath, and that is the fallback.
+        go.catch(function () {});
+      }
     }
+    if (reel.readyState >= 1) { startReel(); }
+    else { reel.addEventListener("loadedmetadata", startReel, { once: true }); }
     reel.addEventListener("playing", function () {
       reel.classList.add("is-running");
     });

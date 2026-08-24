@@ -214,7 +214,16 @@ read heavier than 2px on 24. The Restyler previews all of it and exports the dif
   **Safari gets the `.mp4`, which is pre-composited on `--ink`** — VP9-alpha is
   not supported there and HEVC-with-alpha cannot be produced off a Mac. That
   file therefore assumes a dark ground, and is the one asset a palette change
-  cannot reach
+  cannot reach.
+
+  **On a phone the `object-fit: cover` crop shows a narrow vertical slice of a
+  landscape shot**, and this footage spends its first ~6 of 10 seconds with the
+  pair too far apart for either one to be in that slice — mobile was watching
+  an empty crop for most of the clip before they finally closed the gap into
+  frame. `landing.html`'s script jumps `currentTime` to 6 before playing, mobile
+  only (`data-viewport === "mobile"`), trading the empty lead-in for the part
+  that was the point. Desktop's `object-fit: contain` shows the whole frame, so
+  it plays from the start untouched.
 
 ## Database
 
