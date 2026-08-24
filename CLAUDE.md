@@ -201,29 +201,29 @@ read heavier than 2px on 24. The Restyler previews all of it and exports the dif
   unpkg.com, which the app's own CSP forbids, so it never ran in production, and
   vendoring a ~250KB renderer onto the lightest screen in the app was the wrong
   trade. Kept on disk rather than deleted in case the artwork is wanted elsewhere
-- `static/velvt-hero.{webm,mp4,webp}` — the two felt characters crossing the gap
-  and holding on, behind the landing hero. **It is by far the heaviest thing the
-  landing page asks for**: 2.1MB (VP9+alpha) or 227KB (H.264) against a page that
-  is otherwise 5.6KB, so treat any further growth as a real decision. Only one
-  video is fetched — the browser takes the first `<source>` it can play — and a
+- `static/velvt-hero{,-mobile}.webm`, `static/velvt-hero.mp4`, `static/velvt-hero.webp`
+  — the two felt characters crossing the gap and holding on, behind the landing
+  hero. **Two different clips, picked by viewport, not one clip reused.**
+  `velvt-hero-mobile.webm` is the original, shot portrait (540×960, 9:16, 5s,
+  298KB) to fill a phone screen without cropping anything away. `velvt-hero.webm`
+  is newer landscape footage (854×480, 10s, 2.1MB) for the desktop corner box,
+  where it is shown `contain` at its own aspect rather than cropped to fill —
+  landscape footage covering a portrait phone screen showed almost nothing of
+  either character for most of the clip, since `object-fit: cover` crops a wide
+  source down to a narrow vertical slice and the pair start off screen-wide
+  apart in this one. **It is by far the heaviest thing the landing page asks
+  for**, so treat any further growth on either file as a real decision. Only one
+  `<source>` is fetched — the browser takes the first it can play — and a
   `prefers-reduced-motion` visit fetches neither, because `landing.html` attaches
-  the sources by script rather than in the markup and the 40KB still is the
-  layer's own `background`. The background was cut per-frame with u2net
-  segmentation, not a chroma key: the original backdrop is a soft pink gradient
-  whose warm tones overlap the gold character, so keying punched holes in her.
+  the sources by script rather than in the markup and the still is the layer's
+  own `background`. The background was cut per-frame with u2net segmentation,
+  not a chroma key: the original backdrop is a soft pink gradient whose warm
+  tones overlap the gold character, so keying punched holes in her.
   **Safari gets the `.mp4`, which is pre-composited on `--ink`** — VP9-alpha is
   not supported there and HEVC-with-alpha cannot be produced off a Mac. That
   file therefore assumes a dark ground, and is the one asset a palette change
-  cannot reach.
-
-  **On a phone the `object-fit: cover` crop shows a narrow vertical slice of a
-  landscape shot**, and this footage spends its first ~6 of 10 seconds with the
-  pair too far apart for either one to be in that slice — mobile was watching
-  an empty crop for most of the clip before they finally closed the gap into
-  frame. `landing.html`'s script jumps `currentTime` to 6 before playing, mobile
-  only (`data-viewport === "mobile"`), trading the empty lead-in for the part
-  that was the point. Desktop's `object-fit: contain` shows the whole frame, so
-  it plays from the start untouched.
+  cannot reach; it is the same on both viewports, since only the `.webm` pair
+  differs.
 
 ## Database
 
