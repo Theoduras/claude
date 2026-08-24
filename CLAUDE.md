@@ -241,7 +241,9 @@ in query strings are rewritten, so **write `?`, not `%s`**, in `db.execute(...)`
 Tables: `users` (+`is_bot`/`email`/`dob`/`status`), `profiles`, `matches`
 (+`status`/`paired_at`/`decision_a`/`decision_b`/`ended_at`), `searches`
 (+`lat`/`lng`/`use_*`), `messages`, `photos`, `sessions`, `email_tokens`, `blocks`,
-`reports`, `admin_actions`, `legal_acceptances`, `consents`, `rate_hits`.
+`reports`, `admin_actions`, `legal_acceptances`, `consents`, `rate_hits`,
+`design_tokens`, `design_rules`, `design_palettes`, `copy_overrides`,
+`icon_slots`, `app_settings`.
 
 **Login is not the cookie.** The cookie carries an opaque token; `sessions` is the
 authority, so logout, password reset and suspension all take effect immediately and on
@@ -539,6 +541,13 @@ wrong one six times.
 **`.switch-track` had no rule at all** before this, so every filter on
 `/search/criteria` rendered as a naked browser checkbox beside an empty span.
 
+**A colour input is a swatch, not a well you type into**, and the filled-field
+rule now excludes it alongside range, checkbox and radio. With the field's
+padding it rendered as a ~4px dot inside a 34px box — which is what every
+swatch in `/admin/design` was, since a single class (`.dt-swatch`) cannot
+out-specify three `:not()`s and so never got the chance to set padding back
+to zero.
+
 **`--serif` is still a token and nothing is set in it.** ch.02 moved the headline
 off it; ten smaller places kept it (a profile's About text, the sheet title, a
 chat name, the edit heading), which meant the app read in two typefaces with no
@@ -663,6 +672,68 @@ which is exactly the state the button's `color-mix()` background lives in.
 `tools/check_inspector.py` covers it, and needs a browser and an admin
 session — the inspector is script inside `/admin/design`, so no Python test
 client reaches it, which is why nothing caught the above.
+
+## Editing one element, not the whole palette (`design_rules`)
+
+A token answers "what colour is a button". `design_rules` answers "make
+*this* different" — the corner on one card, the weight of one label — for
+the cases a token cannot reach, including the 38 near-palette colours
+deliberately left as literals. The inspector's panels (Paint, Box, Text,
+Hover, Motion) write it; the Tokens pane is the older inspector, kept
+because "which token paints this?" is a different question and usually the
+better edit.
+
+**A row is `(mode, selector, state, prop) -> value`, and the same
+only-what-differs bargain applies**: an empty table is exactly the shipped
+stylesheet, so Reset is a `DELETE`. `_render_rules()` appends them after the
+token overrides and before the custom block, sorted, so identical rules
+always produce identical bytes and therefore one digest.
+
+**`mode` is `shared`/`light`/`dark`, not the two worlds the tokens know.**
+Only *colour* is a per-mode answer; a radius or a font weight describes the
+thing rather than the palette, and a button that is 600 in light and 400 in
+dark is not one button, it is two. So `color`, `background-color` and
+`border-color` are filed under the mode they were chosen in and everything
+else under `shared`, which is emitted unqualified and paints both. The
+server *derives* this from the property rather than trusting the client's
+`mode` field, so a panel cannot file a radius under one world by accident.
+`light` has to exclude dark explicitly (`:root[data-mode="light"]`), since
+`shared`'s unqualified reach is exactly what a colour must not have.
+
+**The selector is the dangerous field, so it is checked by grammar, not by a
+blocklist.** A bad *value* wrecks its own declaration block; a bad
+*selector* sits outside one, and a stray `{` opens a rule of the attacker's
+choosing over every page the app serves. `design_selector_ok()` accepts only
+tags, classes, ids, `[data-*]` tests, four pseudo-classes, descendant and
+`>` combinators, and commas — `@`, braces, quotes, comment markers,
+`:has()`, `*`, `[style]` and `[onclick]` are simply not in the language.
+`DESIGN_RULE_PROPS` is an allowlist of what the panels offer, enforced
+server-side too: "the form only sends these" is a hope, not a control.
+Rows are re-checked again *on read*, so a row that would no longer be
+accepted stops being emitted rather than lingering as CSS nobody can delete.
+
+**Element identity could not be ported from the artifact.** The Restyler
+stamps `data-el="el-N"` over every node in document order and files rules
+under that id — fine there, where the screens are one static file and the
+numbering is a property of the build. Here pages are rendered per request
+and half of them are lists: a chat arrives and `el-47` is a different
+element than it was, so the rule would repaint whatever landed in that
+position. So an element is named by what it *is* — a class family
+(`Every .btn`, the unit a design system actually thinks in, and offered
+first) or a short structural path (`div.wiz-nav > button.btn`). The scope
+note says out loud when a path matches more than one element on screen,
+because a path is not unique the way an id is.
+
+**There is no custom-JavaScript pane**, which the artifact has. Script
+stored there would run in every visitor's browser on every page — stored
+XSS whose only gate is an admin login, which is exactly what an XSS
+elsewhere would hand over. Custom *CSS* is kept: it is checked for `@import`
+and tag break-outs, and refused if a brace or a comment is left open, since
+either would swallow whatever the panels appended after it.
+
+`check_design.py` covers all of it, pairing every "this applies" with its
+refusal — including that a member with a valid CSRF token still cannot
+write CSS for everybody.
 
 **`design_palettes` is the Restyler's saved states.** A palette is the whole
 override set under a name, so a direction can be parked instead of being the
@@ -813,7 +884,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 | legal | `/terms`, `/privacy`, `/imprint`, `/safety`, `/faq` |
 | settings | `/settings`, `…/password`, `…/sessions/<id>/revoke`, `…/sessions/revoke-others`, `…/consent`, `…/notifications`, `…/export`, `…/delete`, `…/delete/cancel` |
 | safety | `/report/<id>`, `/block/<id>`, `/unblock/<id>` |
-| moderation | `/admin/members`, `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate`, `/admin/announce`, `/admin/design`, `/admin/copy`, `/admin/icons` |
+| moderation | `/admin/members`, `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate`, `/admin/announce`, `/admin/design` (+`…/rules`, `…/rules/reset`, `…/custom`), `/admin/copy`, `/admin/icons` |
 | notifications | `/notifications`, `…/feed`, `…/seen`, `/push/subscribe`, `/push/unsubscribe`, `/sw.js`, `/manifest.webmanifest` |
 | search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/chips` (GET+POST), `/search/status`, `/search/cancel` |
 | match lifecycle | `/match/<id>/state`, `/match/<id>/decide`, `/match/<id>/skip-reveal` |

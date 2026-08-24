@@ -1,5 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Design — Velvt admin{% endblock %}
+
+{# The spacing scale, offered identically on all eight padding/margin
+   selects. Written once because eight hand-copied option lists are eight
+   chances for one of them to quietly disagree with the others. #}
+{% macro space_options() -%}
+<option value="">Inherit</option><option value="0">0</option>
+<option value="0.25rem">4px</option><option value="0.5rem">8px</option>
+<option value="0.75rem">12px</option><option value="1rem">16px</option>
+<option value="1.25rem">20px</option><option value="1.5rem">24px</option>
+<option value="2rem">32px</option><option value="2.5rem">40px</option>
+<option value="3rem">48px</option><option value="4rem">64px</option>
+{%- endmacro %}
+
 {% block content %}
 <div class="dsg">
   <header class="dsg-head">
@@ -74,12 +87,253 @@
           Click an element in the frame to edit the tokens it paints with.
         </p>
         <div id="dsg-inspector-body" hidden>
-          <p class="dsg-el" id="dsg-el"></p>
-          <div id="dsg-el-tokens"></div>
-          <p class="hint" id="dsg-el-none" hidden>
-            This element paints with no token of its own — it inherits. Try its
-            card or the page behind it.
-          </p>
+          <div class="dsg-what">
+            <b class="dsg-el" id="dsg-el"></b>
+            <code class="dsg-path" id="dsg-el-path"></code>
+          </div>
+
+          {# Walking beats clicking for the elements you cannot hit: a row's
+             padding belongs to the row, not to the label inside it that
+             actually received the click. #}
+          <div class="dsg-walk" id="dsg-walk">
+            <button type="button" data-walk="parent" title="Select the element around this one">↑ Outer</button>
+            <button type="button" data-walk="child" title="Select the first element inside this one">↓ Inner</button>
+            <button type="button" data-walk="prev" title="Previous sibling">←</button>
+            <button type="button" data-walk="next" title="Next sibling">→</button>
+          </div>
+
+          <div class="dsg-f dsg-f-scope">
+            <label for="dsg-scope">Apply to</label>
+            <select id="dsg-scope"></select>
+            <span class="dsg-fval" id="dsg-scope-n">—</span>
+          </div>
+          <p class="hint dsg-scope-note" id="dsg-scope-note"></p>
+
+          <div class="dsg-seg" id="dsg-seg">
+            <button type="button" data-pane="paint" class="is-on">Paint</button>
+            <button type="button" data-pane="box">Box</button>
+            <button type="button" data-pane="text">Text</button>
+            <button type="button" data-pane="hover">Hover</button>
+            <button type="button" data-pane="motion">Motion</button>
+            <button type="button" data-pane="tokens">Tokens</button>
+          </div>
+
+          <div class="dsg-pane is-on" data-pane="paint">
+            <p class="hint">
+              Colour is answered per mode — you are editing
+              <b>{{ editing }}</b>. Everything else on these panels applies to
+              light and dark at once.
+            </p>
+            <div class="dsg-f"><label>Text<em>this mode</em></label>
+              <input type="color" data-set="color" data-state="base">
+              <input type="text" data-set="color" data-state="base" placeholder="var(--text)">
+              <button type="button" class="dsg-clear" data-clear="color" data-state="base">clear</button></div>
+            <div class="dsg-f"><label>Background<em>this mode</em></label>
+              <input type="color" data-set="background-color" data-state="base">
+              <input type="text" data-set="background-color" data-state="base" placeholder="var(--ink-raised)">
+              <button type="button" class="dsg-clear" data-clear="background-color" data-state="base">clear</button></div>
+            <div class="dsg-f"><label>Radius<em>both modes</em></label>
+              <select data-set="border-radius" data-state="base">
+                <option value="">Inherit</option>
+                <option value="0">0</option>
+                <option value="var(--radius-sm)">sm</option>
+                <option value="var(--radius)">md</option>
+                <option value="1.25rem">lg</option>
+                <option value="999px">pill</option>
+              </select></div>
+            <div class="dsg-f"><label>Shadow<em>both modes</em></label>
+              <select data-set="box-shadow" data-state="base">
+                <option value="">None</option>
+                <option value="0 2px 8px -4px color-mix(in srgb, var(--shade) 60%, transparent)">soft</option>
+                <option value="0 8px 20px -10px color-mix(in srgb, var(--shade) 70%, transparent)">raised</option>
+                <option value="0 16px 40px -18px color-mix(in srgb, var(--shade) 80%, transparent)">overlay</option>
+                <option value="0 8px 20px -10px color-mix(in srgb, var(--violet) 70%, transparent)">brand</option>
+              </select></div>
+            <div class="dsg-f"><label>Opacity<em>both modes</em></label>
+              <input type="range" min="0" max="100" step="5" data-set="opacity" data-state="base" data-unit="/100">
+              <span class="dsg-fval" data-val="opacity">—</span>
+              <button type="button" class="dsg-clear" data-clear="opacity" data-state="base">clear</button></div>
+          </div>
+
+          <div class="dsg-pane" data-pane="box">
+            <p class="hint">
+              Spacing is offered in the sheet's own steps and nothing between
+              them, so a hand-tuned 13px cannot get in this way.
+            </p>
+            <p class="dsg-fhead">Padding<em>both modes</em></p>
+            <div class="dsg-sides">
+              {% for side in ["top", "right", "bottom", "left"] %}
+              <label>{{ side[0] | upper }}<select data-set="padding-{{ side }}" data-state="base">
+                {{ space_options() }}</select></label>
+              {% endfor %}
+            </div>
+            <p class="dsg-fhead">Margin<em>both modes</em></p>
+            <div class="dsg-sides">
+              {% for side in ["top", "right", "bottom", "left"] %}
+              <label>{{ side[0] | upper }}<select data-set="margin-{{ side }}" data-state="base">
+                {{ space_options() }}</select></label>
+              {% endfor %}
+            </div>
+            <p class="dsg-fhead">Border<em>width and style share; colour is per mode</em></p>
+            <div class="dsg-f"><label>Width<em>both modes</em></label>
+              <select data-set="border-width" data-state="base">
+                <option value="">Inherit</option><option value="0">0</option>
+                <option value="1px">1px</option><option value="2px">2px</option>
+                <option value="3px">3px</option>
+              </select></div>
+            <div class="dsg-f"><label>Style<em>both modes</em></label>
+              <select data-set="border-style" data-state="base">
+                <option value="">Inherit</option><option value="solid">solid</option>
+                <option value="dashed">dashed</option><option value="dotted">dotted</option>
+                <option value="none">none</option>
+              </select></div>
+            <div class="dsg-f"><label>Colour<em>this mode</em></label>
+              <input type="color" data-set="border-color" data-state="base">
+              <input type="text" data-set="border-color" data-state="base" placeholder="var(--ink-hairline)">
+              <button type="button" class="dsg-clear" data-clear="border-color" data-state="base">clear</button></div>
+            <p class="hint">
+              ch.01 says content over chrome: a border is the last resort,
+              after a shadow and a fill have both failed.
+            </p>
+          </div>
+
+          <div class="dsg-pane" data-pane="text">
+            <p class="hint">
+              The words themselves live in <a href="{{ url_for('admin_copy') }}">Words</a>,
+              and the marks in <a href="{{ url_for('admin_icons') }}">Icons</a> —
+              this panel is how the type is set, not what it says.
+            </p>
+            <div class="dsg-f"><label>Family<em>both modes</em></label>
+              <select data-set="font-family" data-state="base">
+                <option value="">Inherit</option>
+                <option value="var(--sans)">Body face</option>
+                <option value="var(--serif)">Serif</option>
+                <option value="var(--mono)">Mono</option>
+              </select></div>
+            <div class="dsg-f"><label>Weight<em>both modes</em></label>
+              <select data-set="font-weight" data-state="base">
+                <option value="">Inherit</option><option value="400">400</option>
+                <option value="500">500</option><option value="600">600</option>
+                <option value="700">700</option><option value="800">800</option>
+              </select></div>
+            <div class="dsg-f"><label>Size<em>both modes</em></label>
+              <input type="range" min="9" max="44" step="1" data-set="font-size" data-state="base" data-unit="px">
+              <span class="dsg-fval" data-val="font-size">—</span>
+              <button type="button" class="dsg-clear" data-clear="font-size" data-state="base">clear</button></div>
+            <div class="dsg-f"><label>Line height<em>both modes</em></label>
+              <input type="range" min="90" max="220" step="5" data-set="line-height" data-state="base" data-unit="/100">
+              <span class="dsg-fval" data-val="line-height">—</span>
+              <button type="button" class="dsg-clear" data-clear="line-height" data-state="base">clear</button></div>
+            <div class="dsg-f"><label>Tracking<em>both modes</em></label>
+              <input type="range" min="-6" max="20" step="1" data-set="letter-spacing" data-state="base" data-unit="/100em">
+              <span class="dsg-fval" data-val="letter-spacing">—</span>
+              <button type="button" class="dsg-clear" data-clear="letter-spacing" data-state="base">clear</button></div>
+            <div class="dsg-f"><label>Align<em>both modes</em></label>
+              <select data-set="text-align" data-state="base">
+                <option value="">Inherit</option><option value="left">left</option>
+                <option value="center">center</option><option value="right">right</option>
+              </select></div>
+            <div class="dsg-f"><label>Case<em>both modes</em></label>
+              <select data-set="text-transform" data-state="base">
+                <option value="">Inherit</option><option value="none">none</option>
+                <option value="uppercase">UPPER</option><option value="lowercase">lower</option>
+              </select></div>
+            <div class="dsg-f"><label>Style<em>both modes</em></label>
+              <select data-set="font-style" data-state="base">
+                <option value="">Inherit</option><option value="normal">normal</option>
+                <option value="italic">italic</option>
+              </select></div>
+            <div class="dsg-f"><label>Decoration<em>both modes</em></label>
+              <select data-set="text-decoration" data-state="base">
+                <option value="">Inherit</option><option value="none">none</option>
+                <option value="underline">underline</option>
+              </select></div>
+            <div class="dsg-f"><label>Numerals<em>both modes</em></label>
+              <select data-set="font-variant-numeric" data-state="base">
+                <option value="">Inherit</option><option value="normal">normal</option>
+                <option value="tabular-nums">tabular</option>
+              </select></div>
+            <div class="dsg-f"><label>Wrap<em>both modes</em></label>
+              <select data-set="text-wrap" data-state="base">
+                <option value="">Inherit</option><option value="balance">balance</option>
+                <option value="pretty">pretty</option><option value="nowrap">nowrap</option>
+              </select></div>
+          </div>
+
+          <div class="dsg-pane" data-pane="hover">
+            <div class="dsg-f"><label>Text<em>this mode</em></label>
+              <input type="color" data-set="color" data-state="hover">
+              <input type="text" data-set="color" data-state="hover" placeholder="unchanged">
+              <button type="button" class="dsg-clear" data-clear="color" data-state="hover">clear</button></div>
+            <div class="dsg-f"><label>Background<em>this mode</em></label>
+              <input type="color" data-set="background-color" data-state="hover">
+              <input type="text" data-set="background-color" data-state="hover" placeholder="unchanged">
+              <button type="button" class="dsg-clear" data-clear="background-color" data-state="hover">clear</button></div>
+            <div class="dsg-f"><label>Shadow<em>both modes</em></label>
+              <select data-set="box-shadow" data-state="hover">
+                <option value="">Unchanged</option>
+                <option value="0 8px 20px -10px color-mix(in srgb, var(--shade) 70%, transparent)">raised</option>
+                <option value="0 16px 40px -18px color-mix(in srgb, var(--shade) 80%, transparent)">overlay</option>
+                <option value="none">none</option>
+              </select></div>
+            <div class="dsg-f"><label>Move<em>both modes</em></label>
+              <select data-set="transform" data-state="hover">
+                <option value="">Unchanged</option>
+                <option value="translateY(-1px)">lift 1px</option>
+                <option value="translateY(-2px)">lift 2px</option>
+                <option value="scale(1.02)">grow</option>
+                <option value="scale(0.98)">press</option>
+                <option value="none">none</option>
+              </select></div>
+            <div class="dsg-f"><label>Over<em>both modes</em></label>
+              <select data-set="transition-duration" data-state="base">
+                <option value="">Inherit</option><option value="0s">instant</option>
+                <option value="0.12s">120ms</option><option value="0.18s">180ms</option>
+                <option value="0.3s">300ms</option>
+              </select></div>
+            <p class="hint">Hover the element in the frame to try it.</p>
+          </div>
+
+          <div class="dsg-pane" data-pane="motion">
+            <div class="dsg-f"><label>Effect<em>both modes</em></label>
+              <select data-set="animation-name" data-state="base">
+                <option value="">None</option>
+                <option value="pulse-dot">pulse</option>
+                <option value="landing-logo-sheen">sheen</option>
+              </select></div>
+            <div class="dsg-f"><label>Duration<em>both modes</em></label>
+              <input type="range" min="0.4" max="8" step="0.2" data-set="animation-duration" data-state="base" data-unit="s">
+              <span class="dsg-fval" data-val="animation-duration">—</span>
+              <button type="button" class="dsg-clear" data-clear="animation-duration" data-state="base">clear</button></div>
+            <div class="dsg-f"><label>Repeat<em>both modes</em></label>
+              <select data-set="animation-iteration-count" data-state="base">
+                <option value="">Inherit</option><option value="1">once</option>
+                <option value="3">three times</option><option value="infinite">forever</option>
+              </select></div>
+            <p class="hint">
+              A <code>prefers-reduced-motion</code> visit gets none of it —
+              the stylesheet turns animation off wholesale for those readers.
+            </p>
+          </div>
+
+          {# The old inspector, kept as a pane rather than replaced: "which
+             token paints this?" is a different question from "make this
+             one thing different", and the answer to the first is usually
+             the better edit. #}
+          <div class="dsg-pane" data-pane="tokens">
+            <p class="hint">
+              What this element paints with today. Editing the token moves
+              everything that shares it — which is usually what you want, and
+              always cheaper than a rule of its own.
+            </p>
+            <div id="dsg-el-tokens"></div>
+            <p class="hint" id="dsg-el-none" hidden>
+              This element paints with no token of its own — it inherits. Try its
+              card or the page behind it.
+            </p>
+          </div>
+
+          <p class="hint dsg-el-count" id="dsg-el-count" hidden></p>
         </div>
       </div>
 
@@ -160,6 +414,30 @@
       <p class="hint">No saved palettes yet.</p>
       {% endif %}
 
+      <h2 class="dsg-h2">Custom CSS</h2>
+      <form method="post" action="{{ url_for('admin_design_custom') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <p class="hint">
+          The escape hatch, for the thing the panels have no control for. It
+          is appended after everything else, so it wins. Write your own
+          selectors, and your own <code>:root[data-mode="light"]</code> blocks
+          where a colour needs a different answer per world.
+        </p>
+        <textarea class="dsg-code" name="css" rows="8" spellcheck="false"
+          placeholder="/* .btn-secondary { text-transform: uppercase; } */">{{ custom_css }}</textarea>
+        <button class="btn btn-small" type="submit">Save CSS</button>
+      </form>
+
+      <h2 class="dsg-h2">Element edits</h2>
+      <p class="hint" id="dsg-rules-count">
+        {{ rules | length }} selector(s) carry an edit of their own.
+      </p>
+      <form method="post" action="{{ url_for('admin_design_rules_reset') }}"
+            onsubmit="return confirm('Clear every element edit? The palette and the custom CSS are kept.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-small btn-secondary" type="submit">Clear element edits</button>
+      </form>
+
       <p class="hint dsg-locked">
         Not editable: {% for name in locked %}<code>{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
         The height curve every screen sizes itself from, the bar height derived
@@ -207,6 +485,83 @@
                    padding: 0.9rem; margin-bottom: 0.4rem; }
   .dsg-el { font-family: var(--mono); font-size: 0.78rem; color: var(--text-muted);
             margin: 0 0 0.7rem; word-break: break-all; }
+
+  /* --- the element editor ------------------------------------------- */
+  .dsg-what { display: flex; align-items: baseline; gap: 0.6rem;
+              flex-wrap: wrap; margin-bottom: 0.55rem; }
+  .dsg-what .dsg-el { margin: 0; color: var(--text); font-weight: 700; }
+  .dsg-path { font-family: var(--mono); font-size: 0.7rem; color: var(--violet);
+              word-break: break-all; }
+  .dsg-walk { display: flex; gap: 0.3rem; margin-bottom: 0.6rem; }
+  .dsg-walk button { flex: none; padding: 0.3rem 0.55rem; font-size: 0.72rem;
+                     border-radius: 0.5rem; border: 1px solid var(--ink-hairline);
+                     background: var(--field); color: var(--text-muted); cursor: pointer; }
+  .dsg-walk button:hover { color: var(--text); border-color: var(--violet); }
+
+  .dsg-f { display: grid; grid-template-columns: 8rem auto 1fr auto;
+           align-items: center; gap: 0.4rem; margin-bottom: 0.4rem; }
+  /* The sheet's global `label` is a small-caps field heading -- right for a
+     form, wrong for forty of them stacked in a panel, where it shouts every
+     row and leaves no room for the control. Reset rather than tweak: this
+     label is a name beside a widget, not a heading above a field. */
+  .dsg-f > label, .dsg-sides label {
+    display: flex; flex-direction: column;
+    font-size: 0.78rem; font-weight: 500; text-transform: none;
+    letter-spacing: 0; color: var(--text-muted); margin-bottom: 0;
+  }
+  .dsg-f > label em { font-style: normal; font-size: 0.6rem; letter-spacing: .07em;
+                      text-transform: uppercase; color: var(--text-faint);
+                      font-weight: 700; }
+  .dsg-sides label { font-size: 0.65rem; color: var(--text-faint); gap: 0.15rem; }
+  .dsg-f-scope > label { font-weight: 700; }
+  .dsg-f select, .dsg-f input[type="text"] { min-width: 0; width: 100%;
+           padding: 0.35rem 0.5rem; font-size: 0.78rem; border-radius: 0.5rem;
+           border: 1px solid var(--ink-hairline); background: var(--field); color: var(--text); }
+  /* A colour input is a swatch, and the sheet's own input rules turn it
+     into a field with padding and a border -- which collapses the swatch to
+     a dot. Sized explicitly, and the browser's own well is unpadded so the
+     colour fills it. */
+  .dsg-f input[type="color"] {
+    width: 2.1rem; height: 1.9rem; flex: none; padding: 0; border: 0;
+    border-radius: 0.45rem; background: none; cursor: pointer;
+    -webkit-appearance: none; appearance: none;
+  }
+  .dsg-f input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+  .dsg-f input[type="color"]::-webkit-color-swatch {
+    border: 1px solid var(--ink-hairline); border-radius: 0.45rem;
+  }
+  .dsg-f input[type="range"] { width: 100%; }
+  .dsg-f select { grid-column: 2 / -1; }
+  .dsg-fval { font-family: var(--mono); font-size: 0.7rem; color: var(--text-faint);
+              white-space: nowrap; }
+  .dsg-clear { border: 0; background: none; color: var(--violet); cursor: pointer;
+               font-size: 0.7rem; padding: 0; }
+  .dsg-clear:hover { text-decoration: underline; }
+  .dsg-fhead { font-size: 0.7rem; letter-spacing: .08em; text-transform: uppercase;
+               color: var(--text-faint); margin: 0.8rem 0 0.35rem;
+               display: flex; gap: 0.5rem; align-items: baseline; }
+  .dsg-fhead em { font-style: normal; font-size: 0.6rem; text-transform: none;
+                  letter-spacing: 0; }
+  .dsg-sides { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem;
+               margin-bottom: 0.4rem; }
+  .dsg-sides label { display: flex; flex-direction: column; gap: 0.15rem;
+                     font-size: 0.65rem; color: var(--text-faint); }
+  .dsg-sides select { padding: 0.3rem; font-size: 0.72rem; border-radius: 0.45rem;
+                      border: 1px solid var(--ink-hairline); background: var(--field);
+                      color: var(--text); min-width: 0; }
+
+  .dsg-seg { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.7rem 0; }
+  .dsg-seg button { flex: none; padding: 0.32rem 0.6rem; font-size: 0.72rem;
+                    border-radius: 999px; border: 1px solid transparent;
+                    background: var(--field); color: var(--text-muted); cursor: pointer; }
+  .dsg-seg button.is-on { background: var(--violet); color: #fff; font-weight: 700; }
+  .dsg-pane { display: none; }
+  .dsg-pane.is-on { display: block; }
+  .dsg-scope-note code { font-family: var(--mono); font-size: 0.7rem; }
+  .dsg-code { width: 100%; font-family: var(--mono); font-size: 0.75rem;
+              border-radius: 0.6rem; border: 1px solid var(--ink-hairline);
+              background: var(--field); color: var(--text); padding: 0.6rem;
+              margin-bottom: 0.5rem; }
 
   .dsg-group { margin-bottom: 1.1rem; }
   .dsg-group-name { color: var(--text-faint); font-size: 0.7rem; margin: 0 0 0.3rem;
@@ -279,7 +634,11 @@
       tag.id = "dsg-preview-style";
       doc.head.appendChild(tag);
     }
-    tag.textContent = ":root {" + declarations() + "}";
+    // The element rules go in the same tag, after the :root block, in the
+    // same order the server writes them -- so precedence in the preview is
+    // precedence on the live site.
+    tag.textContent = ":root {" + declarations() + "}\n" + rulesCss() +
+      '\n[data-dsg-sel] { outline: 2px solid #6D28D9 !important; outline-offset: 1px; }';
   }
 
   function repaint() {
@@ -321,7 +680,7 @@
   var chips = Array.prototype.slice.call(document.querySelectorAll(".dsg-chip"));
   function show(path, chip) {
     chips.forEach(function (c) { c.classList.toggle("is-on", c === chip); });
-    document.getElementById("dsg-path").textContent = path;
+    document.getElementById("dsg-el-path").textContent = path;
     frame.src = path;
   }
   chips.forEach(function (chip) {
@@ -477,7 +836,9 @@
     ROLES.forEach(function (r) { props = props.concat(r[1]); });
     var declared = declaredFor(el, doc, props);
 
-    elLine.textContent = describe(el);
+    // The header above the panels already names the element, and names it
+    // the way the editor talks about it. Writing a second, longer answer
+    // into the same node just made the two disagree.
     elTokens.innerHTML = "";
     var found = 0;
 
@@ -538,6 +899,319 @@
     body.hidden = false;
   }
 
+  // ---- the element editor ------------------------------------------------
+  //
+  // The artifact this came from stamps data-el="el-N" over every node in
+  // document order and files a rule under that id. It can: its screens are
+  // one static file, so the numbering is a property of the build. Here the
+  // pages are rendered per request and half of them are lists -- a chat
+  // arrives, a photo is deleted, and el-47 is a different element than it
+  // was when the rule was written. An id like that does not identify
+  // anything; it would repaint whatever happened to land in that position.
+  //
+  // So an element is named by what it *is*: a structural path of tag and
+  // class from the nearest landmark, or -- better, and offered first -- one
+  // of the classes it already carries, which is the unit a design system
+  // actually thinks in.
+  var selected = null, selectedDoc = null, scope = "";
+  var RULES = {{ rules|tojson }};
+  var editingModeName = {{ editing|tojson }};
+
+  var el = {
+    body: document.getElementById("dsg-inspector-body"),
+    name: document.getElementById("dsg-el"),
+    path: document.getElementById("dsg-el-path"),
+    scope: document.getElementById("dsg-scope"),
+    scopeN: document.getElementById("dsg-scope-n"),
+    scopeNote: document.getElementById("dsg-scope-note"),
+    count: document.getElementById("dsg-el-count")
+  };
+
+  // State classes are left out: `.is-on` is a mode a control is in, not a
+  // kind of thing it is, and offering it as a family invites a rule that
+  // repaints every selected control in the app the moment one is selected.
+  function familiesOf(node) {
+    var cls = (node.className && node.className.baseVal !== undefined)
+      ? node.className.baseVal : (node.className || "");
+    return String(cls).trim().split(/\s+/).filter(function (c) {
+      return c && c.indexOf("is-") !== 0;
+    });
+  }
+
+  function labelOf(node) {
+    var tag = node.tagName.toLowerCase();
+    var first = familiesOf(node)[0];
+    return first ? tag + "." + first : tag;
+  }
+
+  // Up to the nearest thing with an id or a landmark, so the path stays
+  // short enough to read and short enough not to break the moment an
+  // unrelated wrapper is added somewhere above it.
+  function pathOf(node) {
+    var bits = [], n = node, guard = 0;
+    while (n && n.nodeType === 1 && guard++ < 8) {
+      if (n.id) { bits.unshift("#" + n.id); break; }
+      var tag = n.tagName.toLowerCase();
+      if (tag === "body" || tag === "html") break;
+      bits.unshift(labelOf(n));
+      if (tag === "main" || tag === "nav" || tag === "header") break;
+      n = n.parentElement;
+    }
+    return bits.join(" > ");
+  }
+
+  // What the current edit is aimed at. A family is a class; "this element
+  // only" is the narrowest structural path that still resolves to it -- an
+  // id when it has one, otherwise its own tag.class under its parent's.
+  function selectorFor(node) {
+    if (scope) return "." + scope;
+    if (node.id) return "#" + node.id;
+    var own = labelOf(node);
+    var parent = node.parentElement;
+    if (parent && parent.tagName.toLowerCase() !== "body") {
+      var up = parent.id ? "#" + parent.id : labelOf(parent);
+      return up + " > " + own;
+    }
+    return own;
+  }
+
+  function matchedCount(node) {
+    if (!selectedDoc) return 1;
+    try {
+      return selectedDoc.querySelectorAll(selectorFor(node)).length;
+    } catch (e) { return 1; }
+  }
+
+  function buildScope(node) {
+    var fams = familiesOf(node);
+    var html = '<option value="">This element only</option>';
+    fams.forEach(function (c) {
+      var n = 0;
+      try { n = selectedDoc.querySelectorAll("." + c).length; } catch (e) {}
+      html += '<option value="' + c + '">Every .' + c + " (" + n + " here)</option>";
+    });
+    el.scope.innerHTML = html;
+    // A family the element no longer belongs to would silently write rules
+    // nothing on screen matches, so the scope resets whenever it cannot be
+    // carried over to the new selection.
+    if (scope && fams.indexOf(scope) === -1) scope = "";
+    el.scope.value = scope;
+    paintScope();
+  }
+
+  function paintScope() {
+    if (!selected) return;
+    var sel = selectorFor(selected);
+    var n = matchedCount(selected);
+    el.scopeN.textContent = n + (n === 1 ? " el" : " els");
+    el.scopeNote.innerHTML = scope
+      ? "Edits land on <b>every ." + escapeHtml(scope) + " in the app</b>, on every screen."
+      : "Edits land on <code>" + escapeHtml(sel) + "</code>. " +
+        (n > 1 ? "<b>" + n + " elements on this screen match it</b> — a path is not "
+               + "unique the way an id is." : "");
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function ruleKey(node, state, prop) {
+    var mode = COLOUR_PROPS[prop] ? editingModeName : "shared";
+    return mode + "|" + selectorFor(node) + "|" + state;
+  }
+  var COLOUR_PROPS = { "color": 1, "background-color": 1, "border-color": 1 };
+
+  function storedValue(node, state, prop) {
+    var decls = RULES[ruleKey(node, state, prop)];
+    return decls ? (decls[prop] || "") : "";
+  }
+
+  // Read what the panels currently hold for this element back out of the
+  // store, so switching selection shows that element's edits rather than
+  // the last one's.
+  var controls = Array.prototype.slice.call(
+    document.querySelectorAll("[data-set]"));
+
+  function syncPanel() {
+    if (!selected) return;
+    controls.forEach(function (c) {
+      var prop = c.dataset.set, state = c.dataset.state || "base";
+      var v = storedValue(selected, state, prop);
+      if (c.type === "color") {
+        c.value = /^#[0-9a-fA-F]{6}$/.test(v) ? v : "#000000";
+      } else if (c.type === "range") {
+        var num = parseFloat(v);
+        if (!isNaN(num)) {
+          c.value = c.dataset.unit === "/100" ? num * 100
+                  : c.dataset.unit === "/100em" ? num * 100 : num;
+        }
+        paintVal(prop, v);
+      } else {
+        c.value = v;
+      }
+    });
+  }
+
+  function paintVal(prop, v) {
+    var out = document.querySelector('[data-val="' + prop + '"]');
+    if (out) out.textContent = v || "—";
+  }
+
+  // A range is a number; the unit is what turns it into a CSS value. Kept on
+  // the element rather than in a lookup here so the markup stays the one
+  // place a control is described.
+  function valueOf(c) {
+    var raw = c.value;
+    if (c.type !== "range") return raw;
+    var unit = c.dataset.unit || "";
+    if (unit === "px") return raw + "px";
+    if (unit === "s") return raw + "s";
+    if (unit === "/100") return String(parseFloat(raw) / 100);
+    if (unit === "/100em") return (parseFloat(raw) / 100) + "em";
+    return raw;
+  }
+
+  var saveTimer = null, pending = [];
+
+  function send(prop, state, value) {
+    if (!selected) return;
+    var selector = selectorFor(selected);
+    var mode = COLOUR_PROPS[prop] ? editingModeName : "shared";
+    var key = mode + "|" + selector + "|" + state;
+    RULES[key] = RULES[key] || {};
+    if (value) RULES[key][prop] = value; else delete RULES[key][prop];
+    paintFrame();
+    pending.push({ selector: selector, state: state, prop: prop,
+                   value: value, mode: editingModeName });
+    // Dragging a slider fires on every pixel. Coalescing keeps that from
+    // becoming a request per pixel, and the last write for a property is
+    // the one that matters anyway.
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(flush, 250);
+  }
+
+  function flush() {
+    var batch = pending; pending = [];
+    batch.forEach(function (edit) {
+      fetch({{ url_for('admin_design_rules')|tojson }}, {
+        method: "POST",
+        headers: { "Content-Type": "application/json",
+                   "X-CSRF-Token": window.velvtCsrf() },
+        body: JSON.stringify(edit)
+      }).then(function (r) {
+        if (!r.ok) { console.warn("refused", edit); }
+      }).catch(function () {});
+    });
+  }
+
+  controls.forEach(function (c) {
+    var ev = (c.type === "color" || c.type === "range" || c.tagName === "SELECT")
+      ? "input" : "change";
+    c.addEventListener(ev, function () {
+      var prop = c.dataset.set, state = c.dataset.state || "base";
+      var v = valueOf(c);
+      if (c.type === "range") paintVal(prop, v);
+      // The colour picker and the text box next to it are two views of one
+      // value, so moving either has to move the other or the next sync
+      // silently reverts what you just typed.
+      controls.forEach(function (o) {
+        if (o !== c && o.dataset.set === prop && o.dataset.state === state) {
+          if (o.type === "color") {
+            if (/^#[0-9a-fA-F]{6}$/.test(v)) o.value = v;
+          } else if (o.type !== "range") { o.value = v; }
+        }
+      });
+      send(prop, state, v);
+    });
+  });
+
+  document.querySelectorAll("[data-clear]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var prop = b.dataset.clear, state = b.dataset.state || "base";
+      controls.forEach(function (o) {
+        if (o.dataset.set === prop && o.dataset.state === state && o.type !== "color") {
+          o.value = "";
+        }
+      });
+      paintVal(prop, "");
+      send(prop, state, "");
+    });
+  });
+
+  el.scope.addEventListener("change", function () {
+    scope = this.value;
+    paintScope();
+    syncPanel();
+  });
+
+  document.getElementById("dsg-seg").addEventListener("click", function (ev) {
+    var b = ev.target.closest("[data-pane]");
+    if (!b) return;
+    this.querySelectorAll("[data-pane]").forEach(function (x) {
+      x.classList.toggle("is-on", x === b);
+    });
+    document.querySelectorAll(".dsg-pane").forEach(function (p) {
+      p.classList.toggle("is-on", p.dataset.pane === b.dataset.pane);
+    });
+  });
+
+  document.getElementById("dsg-walk").addEventListener("click", function (ev) {
+    var b = ev.target.closest("[data-walk]");
+    if (!b || !selected) return;
+    var next = null;
+    if (b.dataset.walk === "parent") next = selected.parentElement;
+    if (b.dataset.walk === "child") next = selected.firstElementChild;
+    if (b.dataset.walk === "prev") next = selected.previousElementSibling;
+    if (b.dataset.walk === "next") next = selected.nextElementSibling;
+    if (next && next.tagName && next.tagName.toLowerCase() !== "script") {
+      choose(next, selectedDoc);
+    }
+  });
+
+  function choose(node, doc) {
+    selected = node;
+    selectedDoc = doc;
+    el.name.textContent = labelOf(node);
+    el.path.textContent = pathOf(node);
+    buildScope(node);
+    syncPanel();
+    inspect(node, doc);
+    // The outline is the only way to tell which of two similar rows is
+    // selected once the panel is showing values for it.
+    try {
+      doc.querySelectorAll("[data-dsg-sel]").forEach(function (n) {
+        n.removeAttribute("data-dsg-sel");
+      });
+      node.setAttribute("data-dsg-sel", "1");
+    } catch (e) {}
+  }
+
+  // The rules, as the same CSS the server will append on save -- so what the
+  // frame shows while you work is the mechanism that will paint every page,
+  // not an approximation of it.
+  var RULE_SCOPE = {
+    shared: "",
+    light: ':root[data-mode="light"] ',
+    dark: ':root:not([data-mode="light"]) '
+  };
+
+  function rulesCss() {
+    var out = [];
+    Object.keys(RULES).forEach(function (key) {
+      var bits = key.split("|");
+      var decls = RULES[key], body = "";
+      Object.keys(decls).forEach(function (p) {
+        if (decls[p]) body += p + ": " + decls[p] + ";";
+      });
+      if (!body) return;
+      var s = (RULE_SCOPE[bits[0]] || "") + bits[1] + (bits[2] === "hover" ? ":hover" : "");
+      out.push(s + "{" + body + "}");
+    });
+    return out.join("\n");
+  }
+
   frame.addEventListener("load", function () {
     var doc;
     try { doc = frame.contentDocument; } catch (e) { return; }
@@ -549,7 +1223,7 @@
       // that submitted a form would change real data.
       ev.preventDefault();
       ev.stopPropagation();
-      inspect(ev.target, doc);
+      choose(ev.target, doc);
     }, true);
   });
 

@@ -4363,7 +4363,13 @@
       color: var(--text-faint);
       margin-bottom: 0.3rem;
     }
-    input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+    /* A colour input is excluded for the same reason range, checkbox and
+       radio already are: it is a swatch, not a well you type into. Given
+       this padding it renders as a ~4px dot inside a 34px box -- which is
+       exactly what every swatch in /admin/design was, since a single class
+       (.dt-swatch) cannot out-specify three :not()s and never got the
+       chance to set padding back to 0. */
+    input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]),
     textarea,
     select {
       background: var(--field);

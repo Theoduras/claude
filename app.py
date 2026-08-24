@@ -47,6 +47,7 @@ from flask import (
     flash,
     g,
     has_request_context,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -1608,6 +1609,33 @@ CREATE TABLE IF NOT EXISTS design_palettes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_by BIGINT REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- One declaration, aimed at a selector. This is what the inspector writes
+-- when a token is not the answer -- the corner on one card, the weight of
+-- one label -- and it is the same "only what differs is stored" bargain
+-- design_tokens makes: an empty table is exactly the shipped stylesheet.
+--
+-- `mode` is 'shared', 'light' or 'dark' rather than the two worlds
+-- design_tokens knows about, because only *colour* is a per-mode answer. A
+-- radius or a font weight describes the thing rather than the palette, and
+-- a button that is 600 in light and 400 in dark is not one button, it is
+-- two -- so everything structural is filed under 'shared' and painted in
+-- both worlds at once.
+--
+-- `state` is 'base' or 'hover'. Keyed by selector rather than by element:
+-- a rule aimed at one card and a rule aimed at every .card differ only in
+-- what the selector says, so one code path writes both and the export is
+-- the CSS you would have written by hand either way.
+CREATE TABLE IF NOT EXISTS design_rules (
+    mode TEXT NOT NULL,
+    selector TEXT NOT NULL,
+    state TEXT NOT NULL,
+    prop TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    PRIMARY KEY (mode, selector, state, prop)
+);
 """
 
 # Arbitrary but fixed keys for Postgres advisory locks. Any instance taking
@@ -2928,7 +2956,146 @@ def admin_design():
         editing=editing,
         live_mode=state["mode"],
         modes=DESIGN_MODES,
+        rules=_rules_for_client(state.get("rules", {})),
+        custom_css=state.get("custom_css", ""),
+        rule_props=sorted(DESIGN_RULE_PROPS),
     )
+
+
+def _rules_for_client(rules):
+    """The stored rules as {"mode|selector|state": {prop: value}}.
+
+    Flattened to a string key because the inspector reads them back in
+    JavaScript, where a tuple is not a key.
+    """
+    return {"%s|%s|%s" % key: dict(decls) for key, decls in rules.items()}
+
+
+@app.post("/admin/design/rules")
+@admin_required
+def admin_design_rules():
+    """One declaration from the inspector, applied or cleared.
+
+    Separate from the token form because it is a different shape of edit:
+    the palette is a page of fields saved together, and this is a single
+    property changed on a single selector, over and over, while someone
+    watches the preview. A form post per keystroke would reload the frame
+    and lose the selection.
+
+    Every field is re-checked here rather than trusted from the panel. The
+    panels only *offer* valid combinations, but they are JavaScript in a
+    page an admin controls, and this writes into a stylesheet served to
+    every visitor -- so "the UI would not send that" is not a control.
+    """
+    payload = request.get_json(silent=True) or {}
+    selector = str(payload.get("selector", "")).strip()
+    state = str(payload.get("state", "base"))
+    prop = str(payload.get("prop", ""))
+    value = str(payload.get("value", "")).strip()
+    # Colour is a per-mode answer and everything else is not; the client says
+    # which mode it is editing, and the property decides whether that is used
+    # at all. Deriving it here rather than trusting a `mode` field means a
+    # panel cannot file a radius under one world by accident.
+    editing = payload.get("mode")
+    if editing not in DESIGN_MODES:
+        editing = design_overrides().get("mode", "light")
+    mode = editing if prop in DESIGN_RULE_COLOUR_PROPS else "shared"
+
+    if prop not in DESIGN_RULE_PROPS or state not in DESIGN_RULE_STATES:
+        return jsonify({"ok": False, "error": "property"}), 400
+    if not design_selector_ok(selector):
+        return jsonify({"ok": False, "error": "selector"}), 400
+
+    db = get_db()
+    if not value:
+        # Clearing is a delete, not a store of "": an empty declaration is
+        # not the same as no declaration, and only the second one lets the
+        # stylesheet's own answer come back.
+        db.execute(
+            "DELETE FROM design_rules"
+            " WHERE mode = ? AND selector = ? AND state = ? AND prop = ?",
+            (mode, selector, state, prop))
+    elif not design_value_ok(value):
+        return jsonify({"ok": False, "error": "value"}), 400
+    else:
+        db.execute(
+            """
+            INSERT INTO design_rules (mode, selector, state, prop, value, updated_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (mode, selector, state, prop) DO UPDATE
+               SET value = EXCLUDED.value,
+                   updated_at = NOW(),
+                   updated_by = EXCLUDED.updated_by
+            """,
+            (mode, selector, state, prop, value, current_uid()))
+    db.commit()
+    design_overrides(force=True)
+    # The digest goes back so the caller can tell the sheet moved under it.
+    # css_digest() is a template global rather than a function here, so this
+    # asks the renderer directly.
+    return jsonify({"ok": True, "mode": mode,
+                    "digest": _render_stylesheet()["digest"]})
+
+
+@app.post("/admin/design/custom")
+@admin_required
+def admin_design_custom():
+    """The Code pane: a block of CSS appended after everything else.
+
+    The escape hatch for what the panels have no control for. It is checked
+    the same way a value is -- it lands in the sheet every visitor loads --
+    but it is a whole block rather than one declaration, so braces and
+    newlines are exactly what it is *for* and cannot be banned. What is
+    banned is the thing that ends the sheet's own context: an @-rule that
+    could pull in another file, and a comment that never closes.
+
+    There is deliberately no custom *JavaScript* pane, which the artifact
+    had. Script stored here would run in every visitor's browser on every
+    page -- that is stored XSS with an admin login as the only gate, and
+    the gate is exactly what an XSS elsewhere in the app would hand over.
+    """
+    css = (request.form.get("css") or "").strip()
+    if len(css) > DESIGN_CUSTOM_CSS_MAX:
+        flash(t("msg.design_custom_long"))
+        return redirect(url_for("admin_design"))
+    lowered = css.lower()
+    if "@import" in lowered or "javascript:" in lowered or "</" in lowered:
+        flash(t("msg.design_custom_refused"))
+        return redirect(url_for("admin_design"))
+    # An unbalanced comment turns the rest of the file off, and an
+    # unbalanced brace swallows whatever the panels appended after it.
+    if lowered.count("/*") != lowered.count("*/") or css.count("{") != css.count("}"):
+        flash(t("msg.design_custom_unbalanced"))
+        return redirect(url_for("admin_design"))
+
+    db = get_db()
+    if css:
+        db.execute(
+            """
+            INSERT INTO app_settings (key, value) VALUES ('design_custom_css', ?)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            """, (css,))
+    else:
+        db.execute("DELETE FROM app_settings WHERE key = 'design_custom_css'")
+    db.commit()
+    design_overrides(force=True)
+    security_event("design", "custom-css", user_id=current_uid(),
+                   detail=f"{len(css)} chars")
+    flash(t("msg.design_saved"))
+    return redirect(url_for("admin_design"))
+
+
+@app.post("/admin/design/rules/reset")
+@admin_required
+def admin_design_rules_reset():
+    """Drop every element rule. The tokens and the custom block are untouched."""
+    db = get_db()
+    db.execute("DELETE FROM design_rules")
+    db.commit()
+    design_overrides(force=True)
+    security_event("design", "rules-reset", user_id=current_uid())
+    flash(t("msg.design_rules_reset"))
+    return redirect(url_for("admin_design"))
 
 
 # Below this, the member count is not shown at all -- not replaced with a
@@ -8382,6 +8549,10 @@ DESIGN_PREVIEW = [
 # declaration and start another rule is refused: that is the whole attack,
 # and it is also how a typo silently destroys the sheet from that point on.
 DESIGN_VALUE_MAX = 200
+# The Code pane's whole block. Generous next to a single value, because it is
+# meant to hold real rules, and still bounded: this is appended to a
+# stylesheet every visitor downloads.
+DESIGN_CUSTOM_CSS_MAX = 8000
 DESIGN_VALUE_BANNED = (";", "{", "}", "<", ">", "@", "/*", "*/", "\\")
 
 
@@ -8477,6 +8648,100 @@ def design_value_ok(value):
     return not any(bad in value for bad in DESIGN_VALUE_BANNED)
 
 
+# What the inspector's panels can write. An allowlist rather than a
+# denylist, and checked on the way in as well as offered in the UI: the
+# panels are the only thing that *should* post here, but "the form only
+# offers these" is not a control, it is a hope. Anything not on this list is
+# refused outright rather than sanitised into something adjacent.
+#
+# `content`, `position`, `z-index` and the like are deliberately absent:
+# this is a restyler, not a way to reposition one element over another or
+# paint text nobody wrote into the template.
+DESIGN_RULE_PROPS = frozenset((
+    # paint
+    "color", "background-color", "box-shadow", "border-radius", "opacity",
+    # box
+    "padding-top", "padding-right", "padding-bottom", "padding-left",
+    "margin-top", "margin-right", "margin-bottom", "margin-left",
+    "border-width", "border-style", "border-color",
+    # text
+    "font-family", "font-weight", "font-size", "line-height",
+    "letter-spacing", "text-align", "text-transform", "font-style",
+    "text-decoration", "font-variant-numeric", "text-wrap",
+    # hover and motion
+    "transform", "transition-duration", "transition-property",
+    "transition-timing-function", "animation-name", "animation-duration",
+    "animation-iteration-count", "animation-timing-function",
+))
+
+# Only colour is a per-mode answer; see the design_rules comment in SCHEMA.
+DESIGN_RULE_COLOUR_PROPS = frozenset(("color", "background-color", "border-color"))
+DESIGN_RULE_MODES = ("shared", "light", "dark")
+DESIGN_RULE_STATES = ("base", "hover")
+DESIGN_SELECTOR_MAX = 240
+
+# A selector is not a value, and the value check is not enough for one: a
+# value sits inside a declaration block, where the worst a stray character
+# does is break that block, while a selector sits *outside* it and a stray
+# `{` opens a rule of the attacker's choosing over the whole site.
+#
+# So this is a grammar, not a blocklist. A compound is a tag, a class, an id,
+# a [data-*] attribute test or one of three pseudo-classes; compounds join
+# with a descendant space or a `>` child combinator, and a comma separates
+# whole selectors. Everything else -- `@`, braces, quotes beyond the
+# attribute value, comment markers, `:has()`, `*` -- is simply not in the
+# language and is refused.
+_SEL_COMPOUND = (
+    r"(?:[a-zA-Z][\w-]*)?"                       # optional tag
+    r"(?:"
+    r"\.[A-Za-z_-][\w-]*"                        # .class
+    r"|\#[A-Za-z_-][\w-]*"                       # #id
+    r"|\[data-[\w-]+(?:=\"[\w -]{0,64}\")?\]"    # [data-x] / [data-x="y"]
+    r"|:(?:hover|focus-visible|first-child|last-child)"
+    r")*"
+)
+_SELECTOR_RE = re.compile(
+    r"^%s(?:\s*[>\s]\s*%s)*(?:\s*,\s*%s(?:\s*[>\s]\s*%s)*)*$"
+    % (_SEL_COMPOUND, _SEL_COMPOUND, _SEL_COMPOUND, _SEL_COMPOUND))
+
+
+def design_selector_ok(selector):
+    """Whether a submitted selector may be written into the stylesheet.
+
+    Refuses on structure rather than on a list of bad characters, because
+    the interesting attack here is a selector that simply *ends* -- a `{`
+    and a `}` turn one admin's restyle into a rule over every page the app
+    serves, and a comment marker turns the rest of the sheet off.
+    """
+    selector = selector.strip()
+    if not selector or len(selector) > DESIGN_SELECTOR_MAX:
+        return False
+    if any(bad in selector for bad in DESIGN_VALUE_BANNED if bad != ">"):
+        return False
+    # An empty compound matches everything, and `_SEL_COMPOUND` is entirely
+    # optional parts -- so ".x  ." would pass the grammar while naming a
+    # class with no name. Require every compound to carry something.
+    for part in re.split(r"[,>\s]+", selector):
+        if part and not re.match(r"^(?:[a-zA-Z][\w-]*|[.#\[:])", part):
+            return False
+    return bool(_SELECTOR_RE.match(selector))
+
+
+def design_rule_ok(mode, selector, state, prop, value):
+    """Whether one inspector declaration may be stored at all."""
+    return (mode in DESIGN_RULE_MODES
+            and state in DESIGN_RULE_STATES
+            and prop in DESIGN_RULE_PROPS
+            # A colour prop belongs to a mode and a structural one does not.
+            # Storing them the other way round is not dangerous, it is just
+            # wrong in a way nothing on screen would explain: a radius filed
+            # under "light" silently stops applying the moment someone
+            # switches the site to dark.
+            and (mode != "shared") == (prop in DESIGN_RULE_COLOUR_PROPS)
+            and design_selector_ok(selector)
+            and design_value_ok(value))
+
+
 # Rendered once per process and held here. The stylesheet is a Jinja
 # template (it interpolates url_for() for the wordmark mask) but it depends
 # on nothing request-specific, so re-rendering 134KB on every page view was
@@ -8499,7 +8764,7 @@ DESIGN_CACHE_SECONDS = 10
 # shipped palette for the first few seconds after every scale-up.
 _DESIGN_CACHE = {"at": None,
                  "values": {"values": {"dark": {}, "light": {}}, "mode": "light",
-                            "copy": {}, "icons": {}}}
+                            "copy": {}, "icons": {}, "rules": {}, "custom_css": ""}}
 
 
 DESIGN_MODES = ("dark", "light")
@@ -8536,7 +8801,28 @@ def _design_read():
         row["slot"]: row["glyph"]
         for row in get_db().execute("SELECT slot, glyph FROM icon_slots")
     }
-    return {"values": values, "mode": mode, "copy": copy, "icons": icons}
+
+    # The inspector's declarations, on the same trip and the same TTL as
+    # everything else, and filtered on the way out the way the tokens are:
+    # a row whose property or selector would no longer be accepted today
+    # stops being emitted rather than lingering as CSS nobody can see to
+    # delete. That matters more here than for a token, because the rules
+    # table is the one that can name an arbitrary selector.
+    rules = {}
+    for row in get_db().execute(
+            "SELECT mode, selector, state, prop, value FROM design_rules"
+            " ORDER BY selector, state, prop"):
+        if not design_rule_ok(row["mode"], row["selector"], row["state"],
+                              row["prop"], row["value"]):
+            continue
+        key = (row["mode"], row["selector"], row["state"])
+        rules.setdefault(key, {})[row["prop"]] = row["value"]
+
+    custom = get_db().execute(
+        "SELECT value FROM app_settings WHERE key = 'design_custom_css'").fetchone()
+
+    return {"values": values, "mode": mode, "copy": copy, "icons": icons,
+            "rules": rules, "custom_css": custom["value"] if custom else ""}
 
 
 def design_overrides(force=False):
@@ -8617,11 +8903,21 @@ def _render_stylesheet():
     # mode is not in it -- both worlds are always in the sheet, and which one
     # paints is decided by the attribute on <html>, so switching mode does not
     # need a new stylesheet.
-    stamp = tuple(
-        (mode, tuple(sorted(values.get(mode, {}).items()))) for mode in DESIGN_MODES)
+    rules = state.get("rules", {})
+    custom = state.get("custom_css", "") or ""
+    # The rules and the custom block are in the stamp for the same reason the
+    # tokens are: they are bytes of the sheet, so changing one has to change
+    # the digest or a browser holding the `immutable` copy never refetches.
+    stamp = (
+        tuple((mode, tuple(sorted(values.get(mode, {}).items())))
+              for mode in DESIGN_MODES),
+        tuple(sorted((key, tuple(sorted(decls.items())))
+                     for key, decls in rules.items())),
+        custom,
+    )
     if _SHEET.get("stamp") != stamp or "body" not in _SHEET:
         body = base
-        for mode, pairs in stamp:
+        for mode, pairs in stamp[0]:
             if not pairs:
                 continue
             # Appended rather than merged into the mode's own block. Same
@@ -8634,10 +8930,51 @@ def _render_stylesheet():
                 mode, scope)
             body += "".join("  %s: %s;\n" % (name, value) for name, value in pairs)
             body += "}\n"
+        body += _render_rules(rules)
+        if custom.strip():
+            # Last of all, so it can override the panels' own work -- it is
+            # the escape hatch for the thing they have no control for, and an
+            # escape hatch that loses to them is not one.
+            body += "\n\n/* ---- custom CSS, set in /admin/design ---- */\n"
+            body += custom.strip() + "\n"
         _SHEET["stamp"] = stamp
         _SHEET["body"] = body
         _SHEET["digest"] = hashlib.sha256(body.encode("utf-8")).hexdigest()[:12]
     return _SHEET
+
+
+# A mode's rules only reach that world. `shared` stays unqualified, which is
+# exactly the reach it wants; `light` has to exclude dark *explicitly*,
+# because the dark stamp only adds a selector -- an unqualified rule would
+# follow the reader into the dark world and quietly override its answer.
+DESIGN_RULE_SCOPE = {
+    "shared": "",
+    "light": ':root[data-mode="light"] ',
+    "dark": ':root:not([data-mode="light"]) ',
+}
+
+
+def _render_rules(rules):
+    """The inspector's declarations, as CSS appended to the sheet.
+
+    Sorted rather than emitted in dict order so the same set of rules always
+    produces the same bytes, and therefore the same digest: a stamp that
+    matched but rendered differently would hand two instances two different
+    URLs for identical CSS.
+    """
+    out = []
+    for (mode, selector, state), decls in sorted(rules.items()):
+        body = "".join("  %s: %s;\n" % (prop, decls[prop])
+                       for prop in sorted(decls))
+        if not body:
+            continue
+        sel = DESIGN_RULE_SCOPE.get(mode, "") + selector
+        if state == "hover":
+            sel += ":hover"
+        out.append("%s {\n%s}\n" % (sel, body))
+    if not out:
+        return ""
+    return "\n\n/* ---- elements, set in /admin/design ---- */\n" + "\n".join(out)
 
 
 @app.get("/favicon.ico")

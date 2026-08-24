@@ -33,7 +33,9 @@ def clear():
     with app.test_request_context():
         db = A.get_db()
         db.execute("DELETE FROM design_tokens")
+        db.execute("DELETE FROM design_rules")
         db.execute("DELETE FROM app_settings WHERE key = 'design_mode'")
+        db.execute("DELETE FROM app_settings WHERE key = 'design_custom_css'")
         db.commit()
         A.design_overrides(force=True)
 
@@ -361,6 +363,131 @@ for group, pages in A.DESIGN_PREVIEW:
     for label, path in pages:
         code = client.get(path).status_code
         check(f"preview {group}/{label} ({path}) renders", code == 200, code)
+
+# --- the inspector's element rules ----------------------------------------
+# The palette answers "what colour is a button"; these answer "make this one
+# thing different". Each check below is paired with its refusal, because a
+# rules table that accepts everything passes any test that only asks whether
+# a rule was applied -- and this one writes a *selector*, which is the part
+# that can end the declaration block and open one of its own.
+clear()
+
+
+def rule(selector, prop, value, state="base", mode="light"):
+    page = client.get("/admin/design").get_data(as_text=True)
+    tok = page.split('name="csrf_token" value="', 1)[1].split('"', 1)[0]
+    return client.post(
+        "/admin/design/rules",
+        json={"selector": selector, "prop": prop, "value": value,
+              "state": state, "mode": mode},
+        headers={"X-CSRF-Token": tok})
+
+
+check("no element rules means no element block",
+      "elements, set in" not in sheet()["body"])
+
+resp = rule(".btn", "border-radius", "999px")
+check("a structural rule is accepted", resp.status_code == 200, resp.status_code)
+body = sheet()["body"]
+check("and reaches the stylesheet unscoped, so it paints in both worlds",
+      "\n.btn {\n  border-radius: 999px;\n}" in body)
+
+resp = rule(".btn", "background-color", "#ff0000", mode="light")
+check("a colour rule is accepted", resp.status_code == 200, resp.status_code)
+body = sheet()["body"]
+check("and is filed under the mode it was chosen in",
+      ':root[data-mode="light"] .btn {\n  background-color: #ff0000;\n}' in body)
+check("so it cannot follow the reader into the other world",
+      ':root:not([data-mode="light"]) .btn {\n  background-color: #ff0000;' not in body)
+
+rule(".btn", "transform", "translateY(-2px)", state="hover")
+check("a hover rule lands on :hover", ".btn:hover {\n  transform: translateY(-2px);\n}"
+      in sheet()["body"])
+
+# The selector is the dangerous field: a value that breaks out only wrecks
+# its own block, while a selector that breaks out opens a rule over the
+# whole site.
+for evil in (".btn { } body { display: none",
+             ".btn}", "@import url(//evil)", ".btn /*", "*", ".x:has(.y)",
+             '.x[onclick="x"]', '.x[style="y"]'):
+    resp = rule(evil, "border-radius", "4px")
+    check(f"selector {evil[:22]!r} is refused", resp.status_code == 400, resp.status_code)
+check("and none of them reached the sheet",
+      "display: none\n" not in sheet()["body"]
+      and "@import" not in sheet()["body"])
+
+resp = rule(".btn", "position", "fixed")
+check("a property the panels do not offer is refused",
+      resp.status_code == 400, resp.status_code)
+resp = rule(".btn", "border-radius", "4px; } body { display: none")
+check("an unsafe value is refused here too", resp.status_code == 400, resp.status_code)
+check("and neither reached the sheet",
+      "position: fixed" not in sheet()["body"].split("elements, set in")[-1])
+
+before = sheet()["digest"]
+rule(".btn", "border-radius", "")
+check("clearing a rule is a delete, not an empty declaration",
+      "border-radius: 999px" not in sheet()["body"].split("elements, set in")[-1])
+check("and moves the digest, so cached pages refetch",
+      sheet()["digest"] != before)
+
+# A member must not be able to write CSS for everybody -- and with a CSRF
+# token their own session accepts, so this tests the authorisation rather
+# than stopping at the check every POST already gets. The earlier probe was
+# deleted, so this needs one of its own.
+with app.test_request_context():
+    db = A.get_db()
+    db.execute("DELETE FROM users WHERE username = 'rules-probe'")
+    rules_probe = db.insert_returning_id(
+        "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+        ("rules-probe", "x"))
+    db.commit()
+rules_client = app.test_client()
+login_as(rules_client, rules_probe)
+# The meta tag rather than a form field: base.html renders it on every page,
+# so this does not depend on the member happening to have a form in front of
+# them -- which, behind the verification gate, they may not.
+member_page = rules_client.get("/", follow_redirects=True).get_data(as_text=True)
+member_token = member_page.split('name="csrf-token" content="', 1)[1].split('"', 1)[0]
+resp = rules_client.post("/admin/design/rules",
+                         json={"selector": ".btn", "prop": "color",
+                               "value": "#ff00aa", "state": "base"},
+                         headers={"X-CSRF-Token": member_token})
+check("a member cannot write an element rule",
+      resp.status_code in (302, 303, 403, 404), resp.status_code)
+check("and nothing they sent reached the sheet", "#ff00aa" not in sheet()["body"])
+with app.test_request_context():
+    db = A.get_db()
+    db.execute("DELETE FROM users WHERE username = 'rules-probe'")
+    db.commit()
+
+# --- the custom CSS block -------------------------------------------------
+page = client.get("/admin/design").get_data(as_text=True)
+token = page.split('name="csrf_token" value="', 1)[1].split('"', 1)[0]
+
+resp = client.post("/admin/design/custom",
+                   data={"csrf_token": token, "css": ".zzz { color: #abcdef; }"})
+check("custom CSS is accepted", resp.status_code in (302, 303), resp.status_code)
+check("and is appended last, so it wins",
+      sheet()["body"].rstrip().endswith(".zzz { color: #abcdef; }"))
+
+for bad, why in ((".x { color: red;", "an unbalanced brace"),
+                 ("/* never closed", "an unclosed comment"),
+                 ("@import url(//evil);", "an @import"),
+                 ("</style><script>alert(1)</script>", "a tag break-out")):
+    client.post("/admin/design/custom", data={"csrf_token": token, "css": bad})
+    check(f"custom CSS with {why} is refused", bad not in sheet()["body"])
+
+client.post("/admin/design/custom", data={"csrf_token": token, "css": ""})
+check("clearing custom CSS empties it", "#abcdef" not in sheet()["body"])
+
+# --- reset ----------------------------------------------------------------
+rule(".btn", "border-radius", "999px")
+check("a rule is there to clear", "elements, set in" in sheet()["body"])
+resp = client.post("/admin/design/rules/reset", data={"csrf_token": token})
+check("reset drops every element rule", "elements, set in" not in sheet()["body"])
+store("--ink", "#0A0A0A")
+check("and leaves the palette alone", "--ink: #0A0A0A;" in sheet()["body"])
 
 clear()
 print()
