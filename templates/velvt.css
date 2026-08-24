@@ -3080,7 +3080,8 @@
       cursor: grab;
       touch-action: none;   /* or the drag scrolls the form instead */
       transition: transform 0.16s ease, border-color 0.16s ease,
-                  box-shadow 0.16s ease;
+                  box-shadow 0.16s ease, width 0.22s ease, opacity 0.22s ease,
+                  margin 0.22s ease;
     }
     .photo-tile > img {
       display: block;
@@ -3109,8 +3110,21 @@
       border-color: color-mix(in srgb, var(--champagne) 75%, transparent);
       box-shadow: 0 0 0 1px color-mix(in srgb, var(--champagne) 35%, transparent);
     }
-    .photo-tile.is-removed { border-style: dashed; }
-    .photo-tile.is-removed > img { opacity: 0.22; filter: grayscale(1); }
+    /* Removing a photo used to leave a dashed, greyed ghost sitting in its
+       slot -- the strip still looked full of a photo that, as far as the
+       screen was concerned, was gone. It collapses instead: width and
+       opacity both go to zero, and once that has played out the tile is
+       taken out of the flex flow entirely (see profile_edit's script),
+       which is what actually closes the gap -- a `gap`-laid-out flex row
+       still reserves space around a zero-width item until it stops being
+       laid out at all. */
+    .photo-tile.is-removed {
+      width: 0;
+      min-width: 0;
+      margin-inline: -0.3rem;
+      opacity: 0;
+      pointer-events: none;
+    }
 
     /* the tap target for "make this the main": the picture itself, which is
        what you would reach for anyway */
@@ -3153,23 +3167,6 @@
     .photo-tile.is-removed .photo-main,
     .photo-tile.is-removed .photo-tile-label { display: none; }
 
-    .photo-undo {
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      display: none;
-      padding: 0;
-      border: 0;
-      background: transparent;
-      color: var(--violet-crest);
-      font-family: var(--mono);
-      font-size: 0.66rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      cursor: pointer;
-    }
-    .photo-tile.is-removed .photo-undo { display: block; }
-
     .photo-tile-label {
       position: absolute;
       left: 0;
@@ -3211,6 +3208,28 @@
       border-color: var(--violet-crest);
       background: rgba(168, 133, 247, 0.12);
     }
+
+    /* The line beneath the strip: how many photos are gone, and the one
+       Undo that can still reach them -- everything the per-tile ghost used
+       to say, said once instead of once per removal. */
+    .photo-removed-note {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin: 0 0 0.9rem;
+      font-size: 0.82rem;
+      color: var(--text-faint);
+    }
+    .photo-removed-undo {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--violet);
+      font-weight: 700;
+      font-size: inherit;
+      cursor: pointer;
+    }
+    .photo-removed-undo:hover { text-decoration: underline; }
 
     @media (prefers-reduced-motion: reduce) {
       .photo-tile { transition: none; }

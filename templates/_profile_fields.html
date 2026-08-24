@@ -75,13 +75,21 @@
           {{ icon("photo.remove") }}
         </button>
         <span class="photo-tile-label">{{ t("form.main") }}</span>
-        <button type="button" class="photo-undo" data-undo>{{ t("form.undo") }}</button>
       </div>
     {% endfor %}
     {# the file input itself is offscreen; this label is the control #}
     <label class="photo-tile photo-tile-add" id="photo-add" for="photos"
            title="{{ t('form.add_photos') }}">+</label>
   </div>
+  {#- Removing used to leave a greyed ghost sitting in its slot with an
+      Undo button drawn over it -- occupying the strip for a photo that was,
+      as far as the screen was concerned, gone. A removed tile collapses out
+      of the strip instead (still in the DOM, still counted -- see sync()),
+      and Undo moves here, to the one photo you can still bring back. -#}
+  <p class="photo-removed-note" id="photo-removed-note" hidden>
+    <span id="photo-removed-count"></span>
+    <button type="button" class="photo-removed-undo" id="photo-removed-undo">{{ t("form.undo") }}</button>
+  </p>
   <p class="hint" style="margin-top: 0;">
     Tap a photo to make it the main one, drag to reorder. Only visible to
     someone else once you've both chosen to continue a match. JPEG, PNG or
@@ -293,6 +301,60 @@
     if (notice && notice.classList.contains("is-error")) { say("", false); }
   }
 
+  // ---- removing a photo: it leaves the strip, not just its slot --------
+  // A removed tile stays in the DOM -- sync() still needs it to write
+  // remove_photo_ids, and Undo needs something to bring back -- but it no
+  // longer sits there as a greyed ghost. It collapses out of the strip, and
+  // the one thing you can still do about it moves to a line below: how many
+  // are gone, and a single Undo for the most recent.
+  var removedStack = [];   // tiles, oldest removal first; Undo pops the end
+  var COLLAPSE_MS = 220;   // matches the width/opacity transition below
+  var removedNote = document.getElementById("photo-removed-note");
+  var removedCount = document.getElementById("photo-removed-count");
+  var removedUndo = document.getElementById("photo-removed-undo");
+
+  function renderRemovedNote() {
+    var n = removedStack.length;
+    removedNote.hidden = n === 0;
+    if (n === 0) return;
+    removedCount.textContent = n === 1
+      ? {{ t("form.photo_removed_one") | tojson }}
+      : {{ t("form.photo_removed_many") | tojson }}.replace("{n}", n);
+  }
+
+  function collapse(tile) {
+    tile.classList.add("is-removed");
+    removedStack.push(tile);
+    renderRemovedNote();
+    // The collapse is a transition on the tile itself; only once it has run
+    // does the tile leave the flex flow entirely, which is what closes the
+    // gap the strip's own `gap` would otherwise hold open for it.
+    window.setTimeout(function () {
+      if (tile.classList.contains("is-removed")) tile.hidden = true;
+    }, COLLAPSE_MS);
+  }
+
+  function restore(tile) {
+    // Room has to exist to come back to, or Undo would push the set over
+    // the cap and the save would be refused for a photo you never added.
+    if (live().length >= max) return false;
+    tile.hidden = false;
+    // Read the layout once with the box still collapsed, so the browser has
+    // a starting point to animate *from* on the next frame rather than
+    // snapping straight to full size.
+    void tile.offsetWidth;
+    tile.classList.remove("is-removed");
+    return true;
+  }
+
+  removedUndo.addEventListener("click", function () {
+    var tile = removedStack.pop();
+    if (!tile) return;
+    if (!restore(tile)) { removedStack.push(tile); return; }
+    renderRemovedNote();
+    sync();
+  });
+
   function controls(tile) {
     tile.querySelector("[data-main]").addEventListener("click", function () {
       // A drag that ends back over its own tile still fires a click; that
@@ -304,14 +366,7 @@
       sync();
     });
     tile.querySelector("[data-remove]").addEventListener("click", function () {
-      tile.classList.add("is-removed");
-      sync();
-    });
-    tile.querySelector("[data-undo]").addEventListener("click", function () {
-      // Room has to exist to come back to, or Undo would push the set over
-      // the cap and the save would be refused for a photo you never added.
-      if (live().length >= max) return;
-      tile.classList.remove("is-removed");
+      collapse(tile);
       sync();
     });
     drag(tile);
@@ -441,7 +496,6 @@
         makeMain: {{ t("form.make_main") | tojson }},
         remove: {{ t("form.remove_photo") | tojson }},
         main: {{ t("form.main") | tojson }},
-        undo: {{ t("form.undo") | tojson }},
         {#- the same glyph the server-rendered tiles use, from the same
             registry: a tile built in the browser must not carry its own
             private copy of a path that the slot map can no longer reach -#}
@@ -457,8 +511,7 @@
         ' aria-label="' + attr(L.makeMain) + '"></button>' +
         '<button type="button" class="photo-x" data-remove aria-label="' + attr(L.remove) + '">' +
         L.removeIcon + '</button>' +
-        '<span class="photo-tile-label">' + attr(L.main) + '</span>' +
-        '<button type="button" class="photo-undo" data-undo>' + attr(L.undo) + '</button>';
+        '<span class="photo-tile-label">' + attr(L.main) + '</span>';
       tile.querySelector("img").src = url;
       strip.insertBefore(tile, addSlot);
       controls(tile);

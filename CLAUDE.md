@@ -352,8 +352,12 @@ Interests, Hobbies, and the `wants`/`needs` prompts), plus an owner-only card fo
 `view_profile()` is untouched — so a new field shows up by adding a card, not a route.
 
 `/profile/edit` stages photo changes and applies them all on Save: the tile strip previews
-picked files with `URL.createObjectURL`, an × marks a photo for removal (Undo takes it
-back), tapping a tile makes it the main one, and dragging reorders. The browser transcribes
+picked files with `URL.createObjectURL`, an × marks a photo for removal, tapping a tile
+makes it the main one, and dragging reorders. A removed tile collapses out of the strip
+rather than sitting there greyed out with an Undo button drawn over it — it stays in the
+DOM (the transcript below still needs it, and Undo needs something to bring back), just
+out of the flex flow, and a quiet line under the strip carries the one Undo that matters:
+how many are gone, and a single tap for the most recent. The browser transcribes
 the strip into three hidden fields — `remove_photo_ids`, `photo_order`, `primary_photo_id`
 — and rewrites the file input through a `DataTransfer`, since a `FileList` is read-only;
 `apply_photo_edits()` (`app.py:~1228`) re-checks every id against ownership and writes
