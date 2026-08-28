@@ -240,9 +240,9 @@
           <span class="chat-head-name">{{ left['name'] }} &amp; {{ right['name'] }}</span>
           <p class="chat-head-live">
             <span class="live-dot"></span>
-            <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">@{{ left['username'] }}</a>
+            <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">{{ left['name'] or t("common.member") }}</a>
             &middot;
-            <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">@{{ right['username'] }}</a>
+            <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">{{ right['name'] or t("common.member") }}</a>
             &middot; <span id="live-status">{{ t("chat.live") }}</span>
           </p>
         </div>

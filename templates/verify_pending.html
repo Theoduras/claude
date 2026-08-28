@@ -33,6 +33,6 @@
     </form>
   </section>
 
-  <p class="hint">{{ t("verify.signed_in_as", username=current_user['username']) }}</p>
+  <p class="hint">{{ t("verify.signed_in_as", who=current_user['email'] or t("common.member")) }}</p>
 </div>
 {% endblock %}

@@ -12,8 +12,8 @@
   {% if match_id %}<input type="hidden" name="match_id" value="{{ match_id }}">{% endif %}
 
   <div class="wiz-body wiz-scroll">
-    <h1 class="wiz-q">{{ t("report.heading", name=subject.name or subject.username) }}</h1>
-    <p class="wiz-hint">{{ t("report.lede", name=subject.name or subject.username) }}</p>
+    <h1 class="wiz-q">{{ t("report.heading", name=subject.name or t("common.member")) }}</h1>
+    <p class="wiz-hint">{{ t("report.lede", name=subject.name or t("common.member")) }}</p>
 
     <fieldset class="bare-set">
       <legend class="stack-label">{{ t("report.what") }}</legend>
@@ -37,7 +37,7 @@
     <label class="switch-row is-trailing" for="block">
       <input id="block" name="block" type="checkbox" value="1" checked>
       <span>
-        <strong>{{ t("report.block_head", name=subject.name or subject.username) }}</strong>
+        <strong>{{ t("report.block_head", name=subject.name or t("common.member")) }}</strong>
         <span class="switch-row-sub">{{ t("report.block_sub") }}</span>
       </span>
     </label>

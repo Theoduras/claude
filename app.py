@@ -4215,7 +4215,7 @@ def edit_profile():
 def view_profile(user_id):
     row = get_db().execute(
         """
-        SELECT p.*, u.username FROM profiles p
+        SELECT p.* FROM profiles p
         JOIN users u ON u.id = p.user_id
         WHERE p.user_id = ?
         """,
@@ -4336,7 +4336,7 @@ def settings():
     ]
     blocked = db.execute(
         """
-        SELECT u.id, u.username, p.name FROM blocks b
+        SELECT u.id, p.name FROM blocks b
         JOIN users u ON u.id = b.blocked_id
         LEFT JOIN profiles p ON p.user_id = u.id
         WHERE b.blocker_id = ? ORDER BY b.created_at DESC
@@ -5023,7 +5023,7 @@ def notify_new_message(match_id, sender_id, recipient_id, body):
     put a stranger's first message where the person did not choose to open it.
     """
     sender = get_db().execute(
-        "SELECT COALESCE(p.name, u.username) AS name FROM users u "
+        "SELECT p.name AS name FROM users u "
         "LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?", (sender_id,)
     ).fetchone()
     name = (sender["name"] if sender else None) or "Someone"
@@ -5603,7 +5603,7 @@ def report_user(user_id):
 
     subject = get_db().execute(
         """
-        SELECT u.id, u.username, p.name FROM users u
+        SELECT u.id, p.name FROM users u
         LEFT JOIN profiles p ON p.user_id = u.id
         WHERE u.id = ?
         """,
@@ -7595,7 +7595,7 @@ def get_match_participants(match_id):
     profiles = [
         db.execute(
             """
-            SELECT p.*, u.username, u.is_bot FROM profiles p
+            SELECT p.*, u.is_bot FROM profiles p
             JOIN users u ON u.id = p.user_id
             WHERE p.user_id = ?
             """,

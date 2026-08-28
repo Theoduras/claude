@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
-{% block title %}{{ profile['name'] or profile['username'] }} — Velvt{% endblock %}
+{% block title %}{{ profile['name'] or t("common.member") }} — Velvt{% endblock %}
 {% block content %}
 {# A profile is a document, so it scrolls -- but it scrolls inside itself.
    .wiz-fit bounds the column to the viewport, which is what lets the name
@@ -9,7 +9,7 @@
    profile and a full one read as the same page. #}
 <div class="wiz profile-screen wiz-fit">
 
-  {% set display_name = profile['name'] or profile['username'] %}
+  {% set display_name = profile['name'] or t("common.member") %}
 
   {# The way out sits on the left, not on the right where the reference app
      puts it: the debug viewport chip is fixed to the top-right corner on
@@ -137,7 +137,6 @@
   {% if profile['relationship_preference'] %}
     {% set _ = facts.append(('pref', profile['relationship_preference'])) %}
   {% endif %}
-  {% set _ = facts.append(('at', '@' ~ profile['username'])) %}
 
   <div class="pro-card">
     <p class="pro-eyebrow">
@@ -277,7 +276,7 @@
        most need to report is often the one who already walked away. #}
     <p class="hint" style="margin-top: 1.6rem; text-align: center;">
       <a href="{{ url_for('report_user', user_id=profile['user_id']) }}">
-        Report or block {{ profile['name'] or profile['username'] }}
+        Report or block {{ profile['name'] or t("common.member") }}
       </a>
     </p>
   {% endif %}

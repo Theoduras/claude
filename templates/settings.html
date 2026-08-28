@@ -164,7 +164,7 @@
     {% endif %}
     {% for b in blocked %}
       <p class="hint" style="margin: 0 0 0.4rem;">
-        {{ b.name or b.username }}
+        {{ b.name or t("common.member") }}
         <form method="post" action="{{ url_for('unblock_user', user_id=b.id) }}"
               style="display:inline; margin-left: 0.4rem;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

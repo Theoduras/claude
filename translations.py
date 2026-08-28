@@ -49,6 +49,7 @@ TRANSLATIONS = {
     # and every other language mirrors these keys.
     "en": {
         # --- chrome: nav, tab bar, shared controls ---
+        "common.member": "Member",
         "nav.live_search": "Live search",
         "nav.chats": "Chats",
         "nav.profile": "Profile",
@@ -211,7 +212,7 @@ TRANSLATIONS = {
         "verify.change_lead": "Type the right one and we'll send a new link there.",
         "verify.change_label": "Email address",
         "verify.change_submit": "Send the link here",
-        "verify.signed_in_as": "Signed in as {username}.",
+        "verify.signed_in_as": "Signed in as {who}.",
         "msg.reset_sent": "If that address has an account, a reset link is on its way.",
         "msg.reset_expired": "That reset link has expired or already been used.",
         "msg.password_updated": "Password updated. You've been signed out on other devices.",
@@ -568,6 +569,7 @@ TRANSLATIONS = {
     # ---------------------------------------------------------------- nl ----
     "nl": {
         # --- chrome ---
+        "common.member": "Lid",
         "nav.live_search": "Live zoeken",
         "nav.chats": "Gesprekken",
         "nav.profile": "Profiel",
@@ -728,7 +730,7 @@ TRANSLATIONS = {
         "verify.change_lead": "Vul het juiste in, dan sturen we daar een nieuwe link heen.",
         "verify.change_label": "E-mailadres",
         "verify.change_submit": "Stuur de link hierheen",
-        "verify.signed_in_as": "Ingelogd als {username}.",
+        "verify.signed_in_as": "Ingelogd als {who}.",
         "msg.reset_sent": "Als dat adres een account heeft, is er een resetlink onderweg.",
         "msg.reset_expired": "Die resetlink is verlopen of al gebruikt.",
         "msg.password_updated": "Wachtwoord bijgewerkt. Je bent op andere apparaten uitgelogd.",
