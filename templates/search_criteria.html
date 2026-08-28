@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ t("crit.title") }}{% endblock %}
-{% block appbar %}{{ appbar(back=url_for("live_search"), back_label=t("crit.back")) }}{% endblock %}
+{% block appbar %}{{ appbar(back=url_for("live_search", new=1), back_label=t("crit.back")) }}{% endblock %}
 {% block content %}
 {#- ch.05: step two of the same wizard, so it wears the wizard's own
     furniture -- the progress rail, the step count, the question -- rather
@@ -16,7 +16,7 @@
     <span>{{ wanted.replace(',', ', ') }}</span>
     <span aria-hidden="true">·</span>
     <span>{% if place.location %}{{ place.location }}{% else %}anywhere{% endif %}{% if place.location and place.radius_km < radius_max %} · within {{ place.radius_km }} km{% endif %}</span>
-    <a href="{{ url_for('live_search') }}">{{ t("crit.change") }}</a>
+    <a href="{{ url_for('live_search', new=1) }}">{{ t("crit.change") }}</a>
   </p>
 
   <form method="post" action="{{ url_for('search_criteria') }}" id="criteria-form">
@@ -109,7 +109,7 @@
       </div>
       <p class="help-pop" id="help-distance">
         {{ t("crit.distance_help") }}
-        <a href="{{ url_for('live_search') }}">{{ t("crit.distance_change") }}</a>.
+        <a href="{{ url_for('live_search', new=1) }}">{{ t("crit.distance_change") }}</a>.
       </p>
     </div>
     {% endif %}

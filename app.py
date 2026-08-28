@@ -667,11 +667,18 @@ ALLOW_BOT_MATCHES = os.environ.get("ALLOW_BOT_MATCHES", "0") not in ("0", "false
 # The fragment is built from constants only, never from request data, and it
 # assumes the queries it lands in have joined `users` as `u`.
 # How long a waiting search stays in the pool without hearing from the
-# browser. The waiting screen polls /search/status every few seconds, so a
-# minute is many missed ticks -- long enough to ride out a tunnel or a
-# backgrounded tab, short enough that a closed laptop stops being offered
-# to people as a live person to talk to.
-SEARCH_ALIVE_SECONDS = 60
+# browser -- and, equivalently, how long after someone closes the app their
+# search keeps running before it is treated as paused.
+#
+# The heartbeat is no longer the waiting screen alone: base.html's poll runs
+# on every signed-in page and only while the tab is visible, which is as
+# close to "this person is online" as a browser gets. That poll ticks every
+# ten seconds while a search is waiting, so this is many missed ticks --
+# long enough to ride out a tunnel, a locked phone or a slow page, short
+# enough that a closed laptop stops being offered to people as a live person
+# to talk to. Past it the row leaves every pool query at once and /search
+# offers to resume it rather than starting over.
+SEARCH_ALIVE_SECONDS = 150
 
 
 def _candidate_eligible_sql():
@@ -2290,6 +2297,11 @@ def inject_user():
         # does not pay for the query.
         "unread_notifications": (
             lambda: unread_notification_count(current_uid()) if current_uid() else 0),
+        # The tab bar paints a live dot on Search while one is running, so
+        # leaving the waiting screen never looks like leaving the search.
+        # A callable for the same reason: the landing page never asks.
+        "search_is_running": (
+            lambda: bool(current_uid()) and search_is_live(active_search())),
         # So the copy on the photo form, the client-side check that runs
         # before an upload starts, and the server's own rejection all name
         # one number.
@@ -2378,6 +2390,7 @@ def load_current_user():
     # test client called from inside test_request_context, a CLI command).
     # Cleared here, where a before_request hook makes it per-request for real.
     g.unread_notifications = None
+    g.active_search = None
     user = _resolve_session_user()
     if user is None:
         return
@@ -5395,6 +5408,48 @@ def notifications_inbox():
         notification_retention_days=NOTIFICATION_RETENTION_DAYS)
 
 
+def feed_search_state():
+    """The live search, as the app-wide poll sees it: heartbeat, matcher, answer.
+
+    "waiting" is the state that makes the poll speed up and the Search tab
+    light up; "paused" is a stored search nobody has been at the keyboard
+    for, which /search offers to resume. chat_url is only ever the match
+    that has just formed and is still running -- being pulled into a
+    conversation that ended an hour ago would be an ambush, not a match.
+    """
+    search = active_search()
+    if search is None:
+        return {"state": "none"}
+
+    # A *live* search is kept alive and paired; a paused one is not revived
+    # here. Being back in the app is not the same as asking to search again,
+    # and a search that quietly restarted itself could pair somebody who had
+    # stopped expecting it -- that is what the resume screen is for.
+    if search_is_live(search):
+        touch_search(current_uid())
+        try:
+            try_pair(current_uid())
+        except Exception:
+            app.logger.exception("pairing from the notification poll failed")
+        g.pop("active_search", None)
+        search = active_search()
+
+    if search_is_live(search):
+        state = {"state": "waiting"}
+    elif search_is_resumable(search):
+        state = {"state": "paused"}
+    else:
+        state = {"state": "none"}
+    if search["status"] == "matched" and search["match_id"]:
+        match = get_db().execute(
+            "SELECT * FROM matches WHERE id = ?", (search["match_id"],)
+        ).fetchone()
+        if match and match_phase(match) in ("reveal", "timed"):
+            state["state"] = "matched"
+            state["chat_url"] = url_for("chat", match_id=search["match_id"])
+    return state
+
+
 @app.route("/notifications/feed")
 @login_required
 def notifications_feed():
@@ -5405,9 +5460,18 @@ def notifications_feed():
     background tab has nobody looking at it and a notification it raises is
     one nobody asked for.
 
-    Read-only on purpose. The rows are marked seen by POST /notifications/seen
-    once the browser has actually raised them: marking them here would
-    silently swallow every notice for anyone who has not granted permission.
+    Read-only on the notification rows themselves, on purpose. They are
+    marked seen by POST /notifications/seen once the browser has actually
+    raised them: marking them here would silently swallow every notice for
+    anyone who has not granted permission.
+
+    It does carry the live search, though, and that half does write. This is
+    the only request the app makes from every screen and only while the tab
+    is visible, which makes it the one honest answer to "is this person
+    still here" -- so it is the heartbeat, and while a search is waiting it
+    also runs the matcher, exactly as /search/status does on the waiting
+    screen. One request, both jobs, the same bargain the badge repaint below
+    already makes. A non-searcher pays one indexed read on a primary key.
     """
     prefs = notification_prefs(current_uid())
     allowed = [kind for kind in NOTIFY_KIND_KEYS if prefs[kind]["browser"]]
@@ -5425,6 +5489,7 @@ def notifications_feed():
     return {
         "unread": unread_notification_count(current_uid()),
         "fresh": [dict(row) for row in fresh],
+        "search": feed_search_state(),
     }
 
 
@@ -6552,6 +6617,98 @@ def touch_search(user_id):
     db.commit()
 
 
+def active_search(user_id=None):
+    """This person's search row, or None -- cached for the render.
+
+    Worn by the tab bar on every page (base.html paints a live dot on the
+    Search tab), so it must be one indexed read per request rather than one
+    per place that asks. Cached on `g` and cleared in load_current_user()
+    for the same reason unread_notifications is: `g` is scoped to the app
+    context, not the request.
+    """
+    user_id = user_id or current_uid()
+    if user_id is None:
+        return None
+    cached = getattr(g, "active_search", None)
+    if cached is not None and cached.get("user_id") == user_id:
+        return cached.get("row")
+    row = get_db().execute(
+        "SELECT * FROM searches WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    row = dict(row) if row is not None else None
+    g.active_search = {"user_id": user_id, "row": row}
+    return row
+
+
+def search_is_live(search):
+    """Waiting *and* heard from recently -- what the pool queries mean by
+    eligible, asked about your own row rather than about candidates."""
+    if not search or search["status"] != "waiting" or not search["last_seen"]:
+        return False
+    age = (dt.now(timezone.utc) - search["last_seen"]).total_seconds()
+    return age < SEARCH_ALIVE_SECONDS
+
+
+def sensitive_consent_withdrawn(user_id):
+    """Has this person withdrawn the sensitive-data consent?
+
+    Absence of a row is not withdrawal -- it is somebody who was never
+    asked. Same test notify_pool_candidates() applies to a candidate.
+    """
+    row = get_db().execute(
+        """
+        SELECT 1 FROM consents
+        WHERE user_id = ? AND purpose = ? AND withdrawn_at IS NOT NULL
+        """,
+        (user_id, CONSENT_SENSITIVE),
+    ).fetchone()
+    return row is not None
+
+
+def search_is_resumable(search):
+    """A stored search that can be put back in the pool as it stands.
+
+    A paused one (waiting, but nobody has been at the keyboard) or one the
+    searcher stopped themselves. A 'matched' row is not offered: the match
+    it points at is the thing to go back to, not the search.
+    """
+    if not search or not (search["relationship_type"] or "").strip():
+        return False
+    return search["status"] == "cancelled" or (
+        search["status"] == "waiting" and not search_is_live(search)
+    )
+
+
+def resume_search(user_id):
+    """Put an existing search back in the pool, exactly as it was written.
+
+    One targeted UPDATE rather than save_search(), which rewrites every
+    column from a form this has none of. created_at *is* reset, unlike a
+    chip edit: the row was out of the pool while it was paused, so the
+    waiting screen's elapsed clock and the SEARCH_WIDER_SECONDS offer
+    should count from the resume rather than from yesterday.
+    """
+    db = get_db()
+    db.execute(
+        """
+        UPDATE searches
+           SET status = 'waiting', match_id = NULL,
+               created_at = NOW(), last_seen = NOW()
+         WHERE user_id = ? AND status IN ('waiting', 'cancelled')
+        """,
+        (user_id,),
+    )
+    db.commit()
+    g.pop("active_search", None)
+    # Same bargain save_search() makes: a resumed search is a real "someone
+    # is searching" event, NOTIFY_DEDUPE_MINUTES covers repeat resumes, and
+    # a notification failing must never cost somebody their search.
+    try:
+        notify_pool_candidates(user_id)
+    except Exception:
+        app.logger.exception("could not notify the pool about a resumed search")
+
+
 @app.route("/search", methods=["GET", "POST"])
 @login_required
 def live_search():
@@ -6669,9 +6826,22 @@ def live_search():
             # poll picks it up once it ripens.
             return redirect(url_for("search_waiting"))
 
-    existing = get_db().execute(
-        "SELECT * FROM searches WHERE user_id = ?", (current_uid(),)
-    ).fetchone()
+    existing = active_search()
+
+    # Coming back to Search while a search is running means "show me my
+    # search", not "ask me all of it again" -- the tab bar's Search link is
+    # the same link either way. `?new=1` is how the resume screen (and the
+    # waiting screen's "change" link) asks for the wizard on purpose.
+    if existing and not request.args.get("new"):
+        if search_is_live(existing):
+            return redirect(url_for("search_waiting"))
+        if search_is_resumable(existing):
+            return render_template(
+                "search_resume.html",
+                search=existing,
+                chips=search_chips(existing),
+                paused=existing["status"] == "waiting",
+            )
 
     return render_template(
         "search_start.html",
@@ -7607,6 +7777,41 @@ def search_status():
         result["match_id"] = row["match_id"]
         result["chat_url"] = url_for("chat", match_id=row["match_id"])
     return result
+
+
+@app.route("/search/resume", methods=["POST"])
+@login_required
+def search_resume():
+    """Put the stored search back in the pool, rather than re-asking for it.
+
+    Same guards /search opens with -- an unconfirmed address, a missing
+    profile or an incomplete one are all reasons a search may not start, and
+    resuming one is starting one. Plus a fourth: withdrawing the sensitive-
+    data consent is what cancelled this row (see /settings/consent), so a
+    one-tap resume must not quietly undo that. The wizard is still there for
+    someone who means it.
+    """
+    blocked = unverified_email_block()
+    if blocked:
+        flash(blocked)
+        return redirect(url_for("settings"))
+
+    me = require_profile()
+    if me is None:
+        flash(t("msg.fill_profile_first"))
+        return redirect(url_for("edit_profile"))
+
+    state = profile_completeness(current_uid(), me)
+    if not state["ready"]:
+        flash(t("msg.profile_missing", items=", ".join(state["missing"]).lower()))
+        return redirect(url_for("edit_profile"))
+
+    existing = active_search()
+    if not search_is_resumable(existing) or sensitive_consent_withdrawn(current_uid()):
+        return redirect(url_for("live_search", new=1))
+
+    resume_search(current_uid())
+    return redirect(url_for("search_waiting"))
 
 
 @app.route("/search/cancel", methods=["POST"])

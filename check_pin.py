@@ -138,7 +138,10 @@ check("the preview does not echo the posted city",
 page = client.get("/profile/edit").get_data(as_text=True)
 check("the profile form renders no location input",
       'name="location"' not in page and CITY in page)
-page = client.get("/search").get_data(as_text=True)
+# ?new=1 because /search now returns a running search to the waiting screen
+# rather than re-asking the wizard's questions -- and the wizard is what this
+# is about.
+page = client.get("/search?new=1").get_data(as_text=True)
 check("the wizard has no location step", 'name="location"' not in page)
 steps = page.count('class="wiz-step"')
 check("...and renumbered itself from six steps to five", steps == 5, f"{steps} steps")

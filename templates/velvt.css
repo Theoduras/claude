@@ -4075,6 +4075,19 @@
       background: var(--violet-crest);
       box-shadow: 0 0 8px color-mix(in srgb, var(--violet-crest) 90%, transparent);
     }
+    /* A search still running, worn on the tab whether or not you are on it.
+       Teal rather than the active violet, and breathing rather than lit, so
+       "you are here" and "this is still going" never say the same thing.
+       After .is-active on purpose: while you are on Search it is both, and
+       the running state is the one with something to report. */
+    .tabbar a.is-live .tab-dot {
+      background: var(--teal-crest);
+      box-shadow: 0 0 8px color-mix(in srgb, var(--teal-crest) 90%, transparent);
+      animation: breathe-quiet 2.8s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .tabbar a.is-live .tab-dot { animation: none; }
+    }
 
     /* The phone layout normally comes from a media query, but a manual
        preview override needs to force it on regardless of the real

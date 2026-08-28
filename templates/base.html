@@ -133,6 +133,8 @@
      `main` (z-index 1) the layer would sit on top of the weave instead of
      under it, and the characters would look pasted on rather than woven in. #}
   {% block backdrop %}{% endblock %}
+  {#- One call, both navs: active_search() is cached on g for the render. -#}
+  {% set searching = search_is_running() %}
   <div class="app-shell{% block shell_class %}{% endblock %}">
   <nav>
     <a class="brand" href="{{ url_for('index') }}"><span class="brand-logo"></span><span class="brand-word">Velvt</span></a>
@@ -140,7 +142,11 @@
         awaiting_verification in inject_user(). -#}
     {% if current_user and not awaiting_verification %}
       {% if current_user['is_admin'] %}<span class="tag">{{ t("nav.admin") }}</span>{% endif %}
-      <a class="tab-dup" href="{{ url_for('live_search') }}">{{ t("nav.live_search") }}</a>
+      <a class="tab-dup{% if searching %} is-live{% endif %}"
+         href="{{ url_for('live_search') }}"
+         data-search-live>{{ t("nav.live_search") }}<span class="live-dot"
+         {% if not searching %}hidden{% endif %}
+         aria-label="{{ t('search.running') }}"></span></a>
       <a class="tab-dup" href="{{ url_for('chats') }}">{{ t("nav.chats") }}</a>
       <a class="tab-dup" href="{{ url_for('view_profile', user_id=current_user['id']) }}">{{ t("nav.profile") }}</a>
       {#- .tab-dup like its neighbours: on a phone these three collapse into
@@ -207,9 +213,12 @@
       rather than a bar that only sometimes exists. -#}
   <nav class="tabbar" aria-label="Primary">
     {% if current_user and not awaiting_verification %}
+      {#- A search that is running is worn here: leaving the waiting screen
+          is not leaving the search, and the tab is where you come back. -#}
       <a href="{{ url_for('live_search') }}"
-         class="{% if ep in search_eps %}is-active{% endif %}"
-         {% if ep in search_eps %}aria-current="page"{% endif %}>
+         class="{% if ep in search_eps %}is-active{% endif %}{% if searching %} is-live{% endif %}"
+         {% if ep in search_eps %}aria-current="page"{% endif %}
+         data-search-live>
         {{ icon("tab.search") }}
         <span class="tab-label">{{ t("tab.search") }}</span>
         <span class="tab-dot"></span>
@@ -303,10 +312,17 @@
      permission does not silently lose every notice. #}
   <script nonce="{{ csp_nonce() }}">
     (function () {
+      /* Two cadences, one poll. Idle it is a notification check; while a
+         search is waiting it is also that search's heartbeat and the only
+         thing running the matcher, so it has to tick fast enough that a
+         match reaches its reveal (20s) rather than arriving after it. */
       var EVERY = 45000;
+      var SEARCHING_EVERY = 10000;
+      var every = EVERY;
       var feed = "{{ url_for('notifications_feed') }}";
       var seenUrl = "{{ url_for('notifications_seen') }}";
       var timer = null;
+      var running = false;
 
       function raise(items) {
         if (!("Notification" in window) || Notification.permission !== "granted") {
@@ -353,6 +369,33 @@
         }
       }
 
+      /* The Search tab wears the search the same way the More trigger
+         wears the unread count: the page was right when it rendered and
+         stale from then on, and a search can pause while you are reading
+         something else. */
+      function paintSearch(state) {
+        document.querySelectorAll("[data-search-live]").forEach(function (el) {
+          el.classList.toggle("is-live", state === "waiting");
+          var dot = el.querySelector(".live-dot");
+          if (dot) dot.hidden = state !== "waiting";
+        });
+      }
+
+      function search(data) {
+        var s = data.search || { state: "none" };
+        paintSearch(s.state);
+        every = s.state === "waiting" ? SEARCHING_EVERY : EVERY;
+        /* Matched, and the match is still running: go to it. The reveal is
+           time-boxed, so arriving is the whole point -- and this poll only
+           runs on a visible tab, so nobody is navigated behind their back.
+           Already being on that chat is not a reason to reload it. */
+        if (s.chat_url && location.pathname !== s.chat_url) {
+          window.location.href = s.chat_url;
+          return true;
+        }
+        return false;
+      }
+
       function poll() {
         if (document.visibilityState !== "visible") return;
         fetch(feed, { headers: { "Accept": "application/json" } })
@@ -360,17 +403,30 @@
           .then(function (data) {
             if (!data) return;
             paint(data.unread);
+            if (search(data)) return;
             if (data.fresh.length) raise(data.fresh);
           })
-          .catch(function () { /* offline; the next tick will do */ });
+          .catch(function () { /* offline; the next tick will do */ })
+          .then(function () { schedule(); });
+      }
+
+      /* setTimeout rather than setInterval: the interval is not a constant
+         any more, and a chain cannot pile up requests behind a slow one. */
+      function schedule() {
+        if (!running || timer) return;
+        timer = setTimeout(function () { timer = null; poll(); }, every);
       }
 
       function start() {
-        if (timer) return;
-        timer = setInterval(poll, EVERY);
+        if (running) return;
+        running = true;
         poll();
       }
-      function stop() { clearInterval(timer); timer = null; }
+      function stop() {
+        running = false;
+        clearTimeout(timer);
+        timer = null;
+      }
 
       document.addEventListener("visibilitychange", function () {
         if (document.visibilityState === "visible") { start(); } else { stop(); }

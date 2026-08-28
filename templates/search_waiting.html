@@ -80,7 +80,9 @@
   </div>
 
   <div class="wiz-nav">
-    <a class="wiz-skip" href="{{ url_for('live_search') }}">{{ t("waiting.change") }}</a>
+    {#- new=1: /search now returns you *here* while a search is running, so
+        the way to the wizard has to say it wants the wizard. -#}
+    <a class="wiz-skip" href="{{ url_for('live_search', new=1) }}">{{ t("waiting.change") }}</a>
     <form method="post" action="{{ url_for('search_cancel') }}" class="wiz-nav-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-secondary wiz-stop" type="submit">{{ t("waiting.stop") }}</button>

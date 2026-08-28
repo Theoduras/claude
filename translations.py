@@ -317,7 +317,21 @@ TRANSLATIONS = {
         ),
         "waiting.change": "Change",
         "waiting.stop": "Stop searching",
-        "waiting.phrase_1": "We'll pair you the moment it's mutual. You can close this — we'll hold your place while the tab is open.",
+        "waiting.phrase_1": "We'll pair you the moment it's mutual. You can go and do something else — your search keeps running while you're in the app.",
+        "search.running": "Searching",
+        "resume.title": "Your search",
+        "resume.eyebrow": "Picking up where you left off",
+        "resume.heading": "Carry on searching?",
+        "resume.paused_hint": (
+            "Your search paused while you were away, so nobody was left waiting on "
+            "someone who isn't here. It's still written down exactly as you set it."
+        ),
+        "resume.stopped_hint": (
+            "You stopped this search. Everything you chose is still here, so you can "
+            "start it again without answering it all over."
+        ),
+        "resume.resume": "Resume search",
+        "resume.start_new": "Start a new search",
         "waiting.phrase_2": "Checking who's searching right now…",
         "waiting.phrase_3": "Matching your filters against theirs…",
         "waiting.phrase_4": "Both sides have to fit — holding out for that…",
@@ -834,7 +848,21 @@ TRANSLATIONS = {
         ),
         "waiting.change": "Aanpassen",
         "waiting.stop": "Stop met zoeken",
-        "waiting.phrase_1": "We koppelen je zodra het wederzijds is. Je kunt dit sluiten — we houden je plek vast zolang het tabblad open is.",
+        "waiting.phrase_1": "We koppelen je zodra het wederzijds is. Je kunt gerust iets anders doen — je zoekopdracht loopt door zolang je in de app bent.",
+        "search.running": "Aan het zoeken",
+        "resume.title": "Jouw zoekopdracht",
+        "resume.eyebrow": "Verder waar je gebleven was",
+        "resume.heading": "Verder zoeken?",
+        "resume.paused_hint": (
+            "Je zoekopdracht is gepauzeerd terwijl je weg was, zodat niemand zat te "
+            "wachten op iemand die er niet is. Alles staat er nog precies zo bij."
+        ),
+        "resume.stopped_hint": (
+            "Je bent gestopt met zoeken. Alles wat je koos staat er nog, dus je kunt "
+            "opnieuw beginnen zonder alles nog een keer in te vullen."
+        ),
+        "resume.resume": "Verder zoeken",
+        "resume.start_new": "Nieuwe zoekopdracht",
         "waiting.phrase_2": "Kijken wie er nu aan het zoeken is…",
         "waiting.phrase_3": "Jouw filters vergelijken met die van anderen…",
         "waiting.phrase_4": "Het moet van twee kanten passen — daar wachten we op…",

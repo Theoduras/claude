@@ -268,16 +268,52 @@ Three queries select the waiting search pool — `try_pair()`, `_search_pool()` 
 `CANDIDATE_ELIGIBLE_SQL` and `NOT_BLOCKED_SQL`. **Keep them in step:** if the preview and
 the matcher disagree, the preview promises candidates the matcher then refuses.
 
-**A waiting search is only in the pool while its browser is still there.** Nothing marks
-a row cancelled when someone closes the tab, so without a heartbeat the matcher pairs
-live people with ghosts — an "it's a match", a five-minute room, and nobody on the other
-side. `searches.last_seen` is rewritten by `touch_search()` from every request the
-waiting screen makes (`/search/waiting` and both of its polls, `/search/status` and
-`/search/chips`), and `SEARCH_ALIVE_SECONDS` (60s, many missed ticks) of silence drops
-the row out of *every* pool query at once, because the liveness predicate lives inside
-`CANDIDATE_ELIGIBLE_SQL` rather than in each query. Demo members are exempt — they have
-no browser to poll with — which is dead weight in production, where `u.is_bot = FALSE`
-has already excluded them. `check_presence.py` covers it.
+**A waiting search is only in the pool while the searcher is still online.** Nothing
+marks a row cancelled when someone closes the tab, so without a heartbeat the matcher
+pairs live people with ghosts — an "it's a match", a five-minute room, and nobody on the
+other side. `searches.last_seen` is rewritten by `touch_search()`, and
+`SEARCH_ALIVE_SECONDS` (150s) of silence drops the row out of *every* pool query at once,
+because the liveness predicate lives inside `CANDIDATE_ELIGIBLE_SQL` rather than in each
+query. Demo members are exempt — they have no browser to poll with — which is dead weight
+in production, where `u.is_bot = FALSE` has already excluded them.
+
+**The heartbeat is the whole app, not the waiting screen.** It used to be only
+`/search/waiting` and its two polls, which meant reading a chat for a minute silently
+ended your search and nothing on screen said so. `base.html`'s notification poll already
+runs on every signed-in page and *only while the tab is visible*, which is as close to
+"this person is online" as a browser gets — so `feed_search_state()` hangs off it
+(`/notifications/feed`): it touches the row, runs `try_pair()`, and answers with the
+search's state. One request, both jobs, the same bargain the unread-badge repaint makes.
+While a search is waiting the poll ticks every 10s instead of 45s, because a match has a
+20-second reveal and a 45s tick would spend all of it getting there.
+
+**Being back in the app is not the same as asking to search again.** A *live* search is
+kept alive by that poll; a paused one is never revived by it. `GET /search` is where the
+difference shows: a live search redirects to `/search/waiting` (so the tab bar's Search
+link returns you to your search rather than re-asking its five questions), a paused or
+cancelled one renders `search_resume.html` — the stored criteria as chips, **Resume
+search**, and **Start a new search** for someone who wants different answers.
+`?new=1` is how anything asks for the wizard on purpose.
+
+`POST /search/resume` → `resume_search()` is one targeted `UPDATE`, deliberately not
+`save_search()` (which rewrites every column from a form this has none of). `created_at`
+*is* reset, unlike a chip edit: the row was out of the pool while it was paused, so the
+elapsed clock and the `SEARCH_WIDER_SECONDS` offer should count from the resume. It
+carries the same guards `/search` opens with plus one more — a withdrawn sensitive-data
+consent is what cancelled the row (`/settings/consent`), and a one-tap resume must not
+quietly undo that.
+
+**A running search is worn on the Search tab** (`is-live`, a breathing teal dot beside
+the violet "you are here" one), from `search_is_running()` in the context processor —
+`active_search()` is cached on `g` and cleared in `load_current_user()`, the same
+app-context trap `unread_notifications` has. The poll repaints it, so a search that
+pauses while you are reading something else does not leave a dot claiming otherwise.
+
+**A match reaches you wherever you are.** The feed carries `chat_url` for the match that
+has just formed and is *still running* (`reveal`/`timed` only — being pulled into a
+conversation that ended an hour ago would be an ambush), and the base layout navigates
+to it. `check_presence.py` covers all of it, pairing each "this keeps running" with the
+"this does not" beside it.
 
 `search_blockers()` explains *why* a search isn't matching — a count per filter of who
 would fit without it, plus a concrete suggested value for each, every one verified through
@@ -886,7 +922,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 | safety | `/report/<id>`, `/block/<id>`, `/unblock/<id>` |
 | moderation | `/admin/members`, `/admin/reports`, `…/<id>/resolve`, `/admin/users/<id>/reinstate`, `/admin/announce`, `/admin/design` (+`…/rules`, `…/rules/reset`, `…/custom`), `/admin/copy`, `/admin/icons` |
 | notifications | `/notifications`, `…/feed`, `…/seen`, `/push/subscribe`, `/push/unsubscribe`, `/sw.js`, `/manifest.webmanifest` |
-| search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/chips` (GET+POST), `/search/status`, `/search/cancel` |
+| search | `/search`, `/search/criteria`, `/api/places`, `/search/preview`, `/search/waiting`, `/search/chips` (GET+POST), `/search/status`, `/search/resume`, `/search/cancel` |
 | match lifecycle | `/match/<id>/state`, `/match/<id>/decide`, `/match/<id>/skip-reveal` |
 | chat | `/chats`, `/chat/<id>`, `…/messages`, `…/send` |
 
