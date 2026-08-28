@@ -5,14 +5,12 @@ name: Seed the demo profiles
 # demo members are wiped and re-added, and nothing else in the database is
 # touched.
 #
-# Triggered by pushing a change to this file, or to seed_demo.py.
+# Manual only, and deliberately so. This used to run on any push to main that
+# touched this file or seed_demo.py -- which meant a deploy could write demo
+# rows into a database holding real members, as a side effect of a change
+# nobody read as "seed production". Which database to seed is the whole
+# question this workflow asks, so it has to be answered by a person.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/seed-demo.yml
-      - seed_demo.py
   workflow_dispatch:
     inputs:
       database:

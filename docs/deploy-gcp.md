@@ -223,20 +223,28 @@ True` is the normal in-progress state. An empty
 
 **Then pick one hostname.** Serving on both the apex and `www` splits sessions:
 a cookie set on `example.com` is not sent to `www.example.com`, so a user who
-logs in on one and later lands on the other appears logged out. Set
-`CANONICAL_HOST` and the app 308-redirects every other host — `www` and the
-`*.run.app` URL alike — to that one, and marks the session cookie `Secure`:
+logs in on one and later lands on the other appears logged out. `CANONICAL_HOST`
+is what settles it — the app 308-redirects every other host, `www` and the
+`*.run.app` URL alike, to that one. It is also the name the app builds links
+from in verification and password-reset email: with it unset, `app_url()` falls
+back to the request's own `Host` header, which is not a name to hand somebody
+the way back into their account.
 
-```bash
-gcloud run services update velvet --region="$REGION" \
-  --update-env-vars=CANONICAL_HOST=example.com
-```
+For velvt.nl it is already set, **in `.github/workflows/deploy-gcp.yml`'s
+`--set-env-vars` list**, and that is the only place it can live. `gcloud run
+services update --update-env-vars` works exactly until the next deploy:
+`--set-env-vars` replaces the whole set, so a value typed at the console or in
+the console UI is silently dropped by CI. For a different deployment, edit that
+line rather than running an update.
 
 Leave it unset for local development and for any deployment without a mapped
-domain; unset means no redirect and no `Secure` flag, since a `Secure` cookie
-is never returned over plain http on localhost. `/healthz` is exempt from the
-redirect — Cloud Run's startup probe reaches the container directly rather
-than through the mapped domain, so redirecting it would fail every deploy.
+domain: unset means no redirect. The session cookie's `Secure` flag is a
+separate switch — it follows `FLASK_DEBUG` (`SESSION_COOKIE_SECURE =
+IS_PRODUCTION`, `app.py:~517`), not this, so that a `Secure` cookie is never
+asked for over plain http on localhost. `/healthz` and `/-/health` are exempt
+from the redirect — Cloud Run's startup probe reaches the container on its
+`*.run.app` hostname rather than through the mapped domain, so redirecting them
+would fail every deploy.
 
 ## 6b. The dev subdomain (`dev.velvt.nl`)
 
@@ -346,16 +354,27 @@ this must never be the production service:
   `deploy-gcp.yml` — that line is what keeps velvt.nl indexable, so do not
   remove it.
 
-`CANONICAL_HOST=dev.velvt.nl` also applies, so the `*.run.app` URL redirects
-to the mapped domain and the session cookie is `Secure`, same as production.
+`CANONICAL_HOST=dev.velvt.nl` also applies, so the `*.run.app` URL redirects to
+the mapped domain and dev's email links carry dev's own hostname — production
+sets its own name the same way, so the two never write each other's URLs into
+somebody's inbox. Both mark the session cookie `Secure`, but that follows
+`FLASK_DEBUG=0` rather than this.
 
 Seed dev's demo members with **Actions → Seed the demo profiles → Run
-workflow**, choosing `velvet_dev` as the database.
+workflow**, choosing `velvet_dev` as the database. Nothing seeds on its own;
+see §7.
 
 ## 7. Seed the demo profiles (optional)
 
-The seeder needs to reach the database. Easiest is the Cloud SQL Auth Proxy
-from your own machine:
+**Actions → Seed the demo profiles → Run workflow**, choosing `velvet` or
+`velvet_dev`. That dispatch is the only trigger: the workflow used to also run
+on any push to `main` touching itself or `seed_demo.py`, which meant an ordinary
+deploy could reset demo rows into the database holding real members without
+anyone reading the change as "seed production". Which database to seed is the
+one question this workflow asks, so a person answers it.
+
+To run it from your own machine instead, the seeder needs to reach the database
+— easiest is the Cloud SQL Auth Proxy:
 
 ```bash
 cloud-sql-proxy "$CONN_NAME" &
@@ -396,6 +415,21 @@ Don't take on that complexity before the latency is an actual complaint.
 `.github/workflows/deploy-gcp.yml` redeploys the current code to the
 already-created Cloud Run service + Cloud SQL instance above on every push
 to **`main`**. It assumes steps 1–4 have already been done once by hand.
+
+Its `--set-env-vars` line is the whole definition of what makes this
+deployment production, and it is authoritative — the flag replaces the
+variable set, so anything not named there is gone after the next deploy:
+
+| | |
+|---|---|
+| `DB_NAME=velvet` | the members' database. `velvet_dev` is dev's, §6b |
+| `CANONICAL_HOST=velvt.nl` | one hostname, and the name email links carry |
+| `SEARCH_INDEXING=1` | the only deployment a crawler may index |
+| `FLASK_DEBUG=0`, `AUTO_LOGIN=0` | production behaviour, and no login bypass |
+| no `ALLOW_BOT_MATCHES` | demo members stay out of every search pool |
+
+The secrets alongside it are production's own: `velvet-secret-key` and
+`velvet-admin-pass`, not the `velvet-dev-*` pair.
 
 Work on a feature branch does **not** deploy — pushing there ships nothing,
 and Cloud Run keeps serving whatever `main` last built. To put a branch in

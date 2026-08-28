@@ -94,6 +94,15 @@ jobs:
       #    bitmap. At --concurrency=80 the default is not enough headroom, and
       #    the symptom would be an instance OOM-killed mid-upload.
       #    See docs/deploy-gcp.md.
+      #
+      #    CANONICAL_HOST belongs in --set-env-vars and nowhere else: that flag
+      #    replaces the whole variable set, so a value typed into the console
+      #    survives exactly until the next deploy. Without it the app builds
+      #    the links it puts in verification and reset email from the request's
+      #    own Host header, which is the address someone opens their account
+      #    with -- and the *.run.app URL and www stay separate cookie origins.
+      #    The redirect exempts /healthz, so the startup probe below still
+      #    reaches this revision on its run.app hostname.
       - name: Deploy
         run: |
           gcloud run deploy "$SERVICE" \
@@ -102,7 +111,7 @@ jobs:
             --region="$REGION" \
             --allow-unauthenticated \
             --add-cloudsql-instances="${{ steps.sql.outputs.conn_name }}" \
-            --set-env-vars="INSTANCE_CONNECTION_NAME=${{ steps.sql.outputs.conn_name }},DB_USER=velvet_app,DB_NAME=velvet,AUTO_LOGIN=0,FLASK_DEBUG=0,SEARCH_INDEXING=1,MAIL_FROM=Velvt <noreply@velvt.nl>,SUPPORT_EMAIL=support@velvt.nl,MAIL_REPLY_TO=support@velvt.nl" \
+            --set-env-vars="INSTANCE_CONNECTION_NAME=${{ steps.sql.outputs.conn_name }},DB_USER=velvet_app,DB_NAME=velvet,AUTO_LOGIN=0,FLASK_DEBUG=0,SEARCH_INDEXING=1,CANONICAL_HOST=velvt.nl,MAIL_FROM=Velvt <noreply@velvt.nl>,SUPPORT_EMAIL=support@velvt.nl,MAIL_REPLY_TO=support@velvt.nl" \
             --set-secrets="DB_PASS=velvet-db-pass:latest,APP_SECRET_KEY=velvet-secret-key:latest,APP_ADMIN_PASSWORD=velvet-admin-pass:latest${{ steps.mail.outputs.resend }}${{ steps.optional.outputs.extra }}" \
             --min-instances=0 \
             --max-instances=10 \
