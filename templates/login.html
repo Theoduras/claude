@@ -13,8 +13,9 @@
     </p>
 
     <div class="wiz-field">
-      <label for="username">{{ t("login.username_or_email") }}</label>
-      <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+      <label for="email">{{ t("login.email") }}</label>
+      <input id="email" name="email" type="email" autocomplete="email"
+             inputmode="email" required autofocus>
 
       <label for="password">{{ t("login.password") }}</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required>

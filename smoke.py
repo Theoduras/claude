@@ -66,7 +66,6 @@ def main():
         resp = client.post(
             "/register",
             data={
-                "username": username,
                 "email": f"{username}@example.test",
                 "dob": "1995-06-15",
                 "password": password,
@@ -85,7 +84,8 @@ def main():
         # ask the database who we just became.
         with app.test_request_context():
             row = app_module.get_db().execute(
-                "SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (username,)
+                "SELECT id FROM users WHERE LOWER(email) = LOWER(?)",
+                (f"{username}@example.test",)
             ).fetchone()
         me_id = None if row is None else row["id"]
         if me_id is None:

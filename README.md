@@ -201,12 +201,14 @@ history kept in the database. All rooms are listed under **Chats**. While
 login is bypassed, the chat form lets you pick which of the two matched
 profiles is speaking, so you can play both sides from one browser.
 
-**Accounts and login:** anyone can register (username + password, min 8
-chars) and log in; registering walks you straight into the profile
-editor. The seeded `admin` account logs in with `admin12345` (override
-via `APP_ADMIN_PASSWORD`). When the admin creates a profile they can set
-an optional password so that member can log in themselves; without one
-the profile exists but has no login access. For local development,
+**Accounts and login:** anyone can register (email address + password,
+min 8 chars) and log in; the address is the only identifier — there are
+no usernames. Registering walks you straight into the profile editor.
+The seeded admin account signs in as `admin@velvt.local` with
+`admin12345` (override via `APP_ADMIN_EMAIL` / `APP_ADMIN_PASSWORD`).
+When the admin creates a profile they can set an address and an optional
+password so that member can log in themselves; without either the
+profile exists but has no login access. For local development,
 `AUTO_LOGIN=1` skips the login page and browses as admin.
 
 Chat messages are always sent as the logged-in user, and chatrooms are

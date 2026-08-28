@@ -23,7 +23,7 @@ def token(c, p="/login"):
 def register(c):
     name = "onb_" + uuid.uuid4().hex[:8]
     c.post("/register", data={
-        "username": name, "email": f"{name}@example.test", "dob": "1995-06-15",
+        "email": f"{name}@example.test", "dob": "1995-06-15",
         "password": "correct horse battery", "confirm": "correct horse battery",
         "accept_terms": "1", "accept_sensitive": "1", "csrf_token": token(c, "/register")})
     return name
@@ -32,7 +32,8 @@ def register(c):
 def uid_of(name):
     with app.test_request_context():
         return A.get_db().execute(
-            "SELECT id FROM users WHERE username = ?", (name,)).fetchone()["id"]
+            "SELECT id FROM users WHERE email = ?",
+            (f"{name}@example.test",)).fetchone()["id"]
 
 
 PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -107,7 +108,7 @@ with app.test_client() as c:
 
     # 5. a second device does not see it again -- it is on the account
     with app.test_client() as c2:
-        c2.post("/login", data={"username": name, "password": "correct horse battery",
+        c2.post("/login", data={"email": f"{name}@example.test", "password": "correct horse battery",
                                 "csrf_token": token(c2)})
         r = c2.get("/search", follow_redirects=False)
         check("a second device is not shown it again", r.status_code == 200,

@@ -11,13 +11,9 @@
     <p class="wiz-hint">{{ t("register.subtitle") }}</p>
 
     <div class="wiz-field">
-      <label for="username">{{ t("register.username") }}</label>
-      <input id="username" name="username" type="text" autocomplete="username"
-             minlength="3" value="{{ form.username }}" required autofocus>
-
       <label for="email">{{ t("register.email") }}</label>
       <input id="email" name="email" type="email" autocomplete="email"
-             value="{{ form.email }}" required>
+             inputmode="email" value="{{ form.email }}" required autofocus>
       <p class="hint">{{ t("register.email_hint") }}</p>
 
       <label for="dob">{{ t("register.dob") }}</label>

@@ -41,11 +41,16 @@ def token(client, path="/login"):
     return m.group(1) if m else ""
 
 
+def email_of(name):
+    """The address register() gives a probe. Sign-in is by address now, so a
+    test that knows the handle still has to ask for the address."""
+    return f"{name}@example.test"
+
+
 def register(client, **over):
     name = over.pop("username", f"chk_{uuid.uuid4().hex[:10]}")
     data = {
-        "username": name,
-        "email": over.pop("email", f"{name}@example.test"),
+        "email": over.pop("email", email_of(name)),
         "dob": over.pop("dob", "1995-06-15"),
         "password": over.pop("password", "correct horse battery"),
         "confirm": over.pop("confirm", "correct horse battery"),
@@ -59,8 +64,11 @@ def register(client, **over):
 
 def uid_of(username):
     with app.test_request_context():
+        # Either identifier: probes built straight in the database have a
+        # handle and no address, and registered ones now have both.
         row = A.get_db().execute(
-            "SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (username,)
+            "SELECT id FROM users WHERE LOWER(username) = LOWER(?) "
+            "OR LOWER(email) = LOWER(?)", (username, email_of(username))
         ).fetchone()
         return None if row is None else row["id"]
 
@@ -135,7 +143,7 @@ with app.test_client() as c1:
     name, _ = register(c1)
     uid = uid_of(name)
     with app.test_client() as c2:
-        c2.post("/login", data={"username": name, "password": "correct horse battery",
+        c2.post("/login", data={"email": email_of(name), "password": "correct horse battery",
                                 "csrf_token": token(c2)}, follow_redirects=False)
         check("second device gets its own session", sessions_for(uid) == 2,
               f"{sessions_for(uid)} rows")
@@ -222,7 +230,7 @@ with app.test_client() as c:
         db.execute("UPDATE users SET status = 'suspended' WHERE id = ?", (uid,))
         db.commit()
     with app.test_client() as c2:
-        c2.post("/login", data={"username": name, "password": "correct horse battery",
+        c2.post("/login", data={"email": email_of(name), "password": "correct horse battery",
                                 "csrf_token": token(c2)}, follow_redirects=False)
         check("suspended user cannot sign back in", sessions_for(uid) == 0,
               f"{sessions_for(uid)} rows")
@@ -795,9 +803,9 @@ with app.test_client() as c:
     nm, _ = register(c)
     pw = "correct horse battery"   # register()'s default; it returns the response, not this
     c.post("/logout", data={"csrf_token": token(c, "/profile/edit")})
-    c.post("/login", data={"username": nm, "password": "definitely-wrong",
+    c.post("/login", data={"email": email_of(nm), "password": "definitely-wrong",
                            "csrf_token": token(c)})
-    c.post("/login", data={"username": nm, "password": pw, "csrf_token": token(c)})
+    c.post("/login", data={"email": email_of(nm), "password": pw, "csrf_token": token(c)})
 
 logins = events("login")
 outcomes = [r["outcome"] for r in logins]
@@ -808,7 +816,7 @@ check("the attempted password is never recorded",
       not any("definitely-wrong" in (r["detail"] or "") for r in logins))
 
 with app.test_client() as c:
-    c.post("/login", data={"username": nm, "password": pw})  # no CSRF token
+    c.post("/login", data={"email": email_of(nm), "password": pw})  # no CSRF token
 check("a rejected CSRF request is recorded", len(events("csrf")) >= 1)
 
 # The spike alarm: once when it crosses, then quiet.
@@ -1076,7 +1084,10 @@ A.send_email = lambda to, subject, html: _outbox.append((to, subject, html)) or 
 try:
     gate = app.test_client()
     gate_name, gate_reply = register(gate)
-    gate_email = f"{gate_name}@example.test"
+    gate_email = email_of(gate_name)
+    # The address is about to move, and it is the only identifier an account
+    # has now -- so hold the id rather than looking the row up by it later.
+    gate_uid = uid_of(gate_name)
 
     check("registering lands on the confirmation screen",
           gate_reply.headers.get("Location", "").endswith("/verify/pending"),
@@ -1114,8 +1125,8 @@ try:
 
     with app.test_request_context():
         moved = A.get_db().execute(
-            "SELECT email, email_verified_at FROM users WHERE username = ?",
-            (gate_name,)).fetchone()
+            "SELECT email, email_verified_at FROM users WHERE id = ?",
+            (gate_uid,)).fetchone()
     check("...and the account moves to it", moved["email"] == fixed, moved["email"])
     check("...still unconfirmed, so the gate has not been talked past",
           moved["email_verified_at"] is None)
@@ -1137,7 +1148,7 @@ try:
     check("an address already registered is refused", "use that address" in taken)
     with app.test_request_context():
         held = A.get_db().execute(
-            "SELECT email FROM users WHERE username = ?", (gate_name,)).fetchone()
+            "SELECT email FROM users WHERE id = ?", (gate_uid,)).fetchone()
     check("...without moving the account", held["email"] == fixed, held["email"])
 
     gate.get(f"/verify/{link}")
@@ -1153,7 +1164,7 @@ try:
     with app.test_request_context():
         A.get_db().execute(
             "UPDATE users SET email = NULL, email_verified_at = NULL "
-            "WHERE username = ?", (other_name,))
+            "WHERE id = ?", (uid_of(other_name),))
         A.get_db().commit()
     check("an account with no address is not held",
           other.get("/chats").status_code == 200,

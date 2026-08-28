@@ -61,9 +61,10 @@ def signed_in_client():
         db = A.get_db()
         name = f"pin_{uuid.uuid4().hex[:8]}"
         uid = db.insert_returning_id(
-            "INSERT INTO users (username, password_hash, is_bot, status, match_intro_seen_at) "
-            "VALUES (?, ?, FALSE, 'active', NOW())",
-            (name, A.generate_password_hash("pinpin12345")))
+            "INSERT INTO users (username, email, password_hash, is_bot, status, "
+            "match_intro_seen_at) VALUES (?, ?, ?, FALSE, 'active', NOW())",
+            (name, f"{name}@example.test",
+             A.generate_password_hash("pinpin12345")))
         db.execute(
             """INSERT INTO profiles (user_id, name, age, gender, seeking, location)
                VALUES (?, 'Pin', 30, 'Woman', 'Everyone', 'Berlin')""", (uid,))
@@ -71,7 +72,7 @@ def signed_in_client():
                    "VALUES (?, ?, 'image/png', TRUE)", (uid, b"\x89PNG\r\n\x1a\n" + b"0" * 32))
         db.commit()
     client = app.test_client()
-    client.post("/login", data={"username": name, "password": "pinpin12345",
+    client.post("/login", data={"email": f"{name}@example.test", "password": "pinpin12345",
                                 "csrf_token": csrf_from(client, "/login")})
     return client, uid
 

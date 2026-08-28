@@ -14,8 +14,9 @@ database, or set DB_USER/DB_PASS/DB_NAME plus either DB_HOST or
 INSTANCE_CONNECTION_NAME (Cloud SQL). Set APP_SECRET_KEY to keep sessions
 valid across restarts and across instances.
 
-An admin account is created automatically on startup (username "admin",
-password from APP_ADMIN_PASSWORD, default "admin12345"). Anyone can
+An admin account is created automatically on startup (address from
+APP_ADMIN_EMAIL, default "admin@velvt.local"; password from
+APP_ADMIN_PASSWORD, default "admin12345"). Anyone can
 register an account and log in. Set AUTO_LOGIN=1 to skip the login page
 during local development and browse as admin automatically.
 """
@@ -186,6 +187,11 @@ POOL = ConnectionPool(
 )
 
 ADMIN_USERNAME = "admin"
+# Signing in is by email address now, so the bootstrap admin needs one --
+# it is the only account nobody registers, and without an address it would
+# be the one account that cannot reach its own login form. Never mailed:
+# admins are exempt from the verification gate.
+ADMIN_EMAIL = os.environ.get("APP_ADMIN_EMAIL", "admin@velvt.local").strip()
 ADMIN_PASSWORD = _required_secret("APP_ADMIN_PASSWORD", "admin12345")
 # Ignored outside debug: on a public deployment this logs every anonymous
 # visitor in as the administrator.
@@ -1665,10 +1671,11 @@ def init_db():
             if admin is None:
                 cur.execute(
                     """
-                    INSERT INTO users (username, password_hash, is_admin)
-                    VALUES (%s, %s, TRUE) RETURNING id
+                    INSERT INTO users (username, email, password_hash, is_admin)
+                    VALUES (%s, %s, %s, TRUE) RETURNING id
                     """,
-                    (ADMIN_USERNAME, generate_password_hash(ADMIN_PASSWORD)),
+                    (ADMIN_USERNAME, ADMIN_EMAIL,
+                     generate_password_hash(ADMIN_PASSWORD)),
                 )
                 admin_id = cur.fetchone()["id"]
                 cur.execute(
@@ -1676,8 +1683,17 @@ def init_db():
                     (admin_id,),
                 )
             else:
+                # An admin created before sign-in moved to email addresses has
+                # none, which is now the same as having no way in. COALESCE
+                # rather than an overwrite: an address someone set by hand is
+                # the one they are actually using.
                 cur.execute(
-                    "UPDATE users SET is_admin = TRUE WHERE id = %s", (admin["id"],)
+                    """
+                    UPDATE users SET is_admin = TRUE,
+                                     email = COALESCE(email, %s)
+                    WHERE id = %s
+                    """,
+                    (ADMIN_EMAIL, admin["id"]),
                 )
 
 
@@ -1863,6 +1879,21 @@ def csrf_valid(supplied):
     except (BadSignature, SignatureExpired):
         return False
     return secrets.compare_digest(unsigned, nonce)
+
+
+def internal_handle(seed):
+    """A unique value for `users.username`, derived rather than asked for.
+
+    Nobody types a username any more and nobody is shown one, but the column
+    is the join key half the admin screens read and every account created
+    before this still has one, so it stays -- filled in from the address
+    instead of from a field. The suffix is what keeps two people called
+    `sam@` apart; the index on LOWER(username) is still the authority, so a
+    caller inserts inside a UniqueViolation handler rather than trusting
+    this to have won the race.
+    """
+    base = re.sub(r"[^a-z0-9]+", "", (seed or "").split("@")[0].lower())[:20]
+    return f"{base or 'member'}_{secrets.token_hex(4)}"
 
 
 def valid_email(value):
@@ -3178,10 +3209,9 @@ def register():
     if current_uid() and not design_previewing():
         return redirect(url_for("live_search"))
 
-    form = {"username": "", "email": "", "dob": ""}
+    form = {"email": "", "dob": ""}
 
     if request.method == "POST":
-        form["username"] = request.form.get("username", "").strip()
         form["email"] = request.form.get("email", "").strip()
         form["dob"] = request.form.get("dob", "").strip()
         password = request.form.get("password", "")
@@ -3191,9 +3221,7 @@ def register():
         age = None if dob is None else age_on(dob)
 
         error = None
-        if not form["username"] or len(form["username"]) < 3:
-            error = t("msg.username_short")
-        elif not valid_email(form["email"]):
+        if not valid_email(form["email"]):
             error = t("msg.email_required")
         elif dob is None:
             error = t("msg.dob_required")
@@ -3230,7 +3258,7 @@ def register():
                     VALUES (?, ?, ?, ?, NOW())
                     """,
                     (
-                        form["username"],
+                        internal_handle(form["email"]),
                         form["email"],
                         generate_password_hash(password),
                         dob,
@@ -3258,16 +3286,19 @@ def register():
                 db.commit()
             except psycopg.errors.UniqueViolation:
                 db.rollback()
-                # Which one collided decides the message, so "taken" never
-                # doubles as an account-enumeration oracle for addresses.
+                # The address is the only thing anybody typed, so it is the
+                # only thing worth a message. The derived handle shares an
+                # index too, and a clash there is nobody's mistake -- saying
+                # "already registered" for it would send someone to a sign-in
+                # page for an account that does not exist.
                 taken = db.execute(
-                    "SELECT 1 AS hit FROM users WHERE LOWER(username) = LOWER(?)",
-                    (form["username"],),
+                    "SELECT 1 AS hit FROM users WHERE LOWER(email) = LOWER(?)",
+                    (form["email"],),
                 ).fetchone()
                 error = (
-                    "That username is already taken."
+                    "That email address is already registered. Try signing in."
                     if taken
-                    else "That email address is already registered. Try signing in."
+                    else t("msg.try_again")
                 )
             else:
                 send_verification_email(new_id, form["email"])
@@ -3291,18 +3322,16 @@ def login():
         return redirect(url_for("live_search"))
 
     if request.method == "POST":
-        identifier = request.form.get("username", "").strip()
+        identifier = request.form.get("email", "").strip()
         password = request.form.get("password", "")
         remember = bool(request.form.get("remember"))
 
-        # Either the username or the email address signs you in -- people
-        # remember one or the other, rarely which one this site wanted.
+        # The address is the account. There is no username to remember any
+        # more, and nothing else here is unique: the display name is not,
+        # and asking for one of two identifiers was the older confusion.
         user = get_db().execute(
-            """
-            SELECT * FROM users
-            WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)
-            """,
-            (identifier, identifier),
+            "SELECT * FROM users WHERE LOWER(email) = LOWER(?)",
+            (identifier,),
         ).fetchone()
 
         if user and check_password_hash(user["password_hash"], password):
@@ -3316,7 +3345,7 @@ def login():
             return redirect(url_for("live_search"))
 
         # The identifier is not recorded: a failed login often *is* somebody's
-        # password typed into the username box, and that would put it in the
+        # password typed into the address box, and that would put it in the
         # log in clear.
         security_event("login", "failure",
                        user_id=user["id"] if user else None,
@@ -5785,12 +5814,14 @@ def admin_reports():
     rows = get_db().execute(
         """
         SELECT r.*,
-               rep.username AS reporter_username,
-               sub.username AS reported_username,
+               rep.email    AS reporter_email,
+               repp.name    AS reporter_name,
+               sub.email    AS reported_email,
                sub.status   AS reported_status,
                subp.name    AS reported_name
         FROM reports r
         LEFT JOIN users rep ON rep.id = r.reporter_id
+        LEFT JOIN profiles repp ON repp.user_id = r.reporter_id
         JOIN users sub ON sub.id = r.reported_id
         LEFT JOIN profiles subp ON subp.user_id = r.reported_id
         WHERE (? = 'all' OR r.status = ?)
@@ -5806,8 +5837,8 @@ def admin_reports():
         if row["match_id"]:
             context[row["id"]] = get_db().execute(
                 """
-                SELECT m.body, m.created_at, u.username
-                FROM messages m JOIN users u ON u.id = m.sender_id
+                SELECT m.body, m.created_at
+                FROM messages m
                 WHERE m.match_id = ? AND m.sender_id = ?
                 ORDER BY m.id DESC LIMIT 5
                 """,
@@ -5894,7 +5925,7 @@ def admin_new_profile():
     db = get_db()
 
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
         values = {f: request.form.get(f, "").strip() for f in PROFILE_FIELDS}
         # Same pin as the member-facing form -- an admin-created profile has to
@@ -5903,8 +5934,13 @@ def admin_new_profile():
 
         error = None
         phys = None
-        if not username or len(username) < 3:
-            error = t("msg.username_short")
+        # The address is optional here and the account is still created
+        # without one -- a profile made for somebody who is not signing in
+        # (a demo member, a stand-in) never had a way in either. What it
+        # cannot be is wrong: an unreachable address is an account whose
+        # owner cannot sign in and cannot reset a password.
+        if email and not valid_email(email):
+            error = t("msg.email_required")
         elif password and len(password) < 8:
             error = t("msg.password_short_optional")
         else:
@@ -5917,9 +5953,11 @@ def admin_new_profile():
                 # Without a password the account can't log in until one
                 # is set; with one, the person can sign in right away.
                 new_id = db.insert_returning_id(
-                    "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                    "INSERT INTO users (username, email, password_hash) "
+                    "VALUES (?, ?, ?)",
                     (
-                        username,
+                        internal_handle(email or values["name"]),
+                        email or None,
                         generate_password_hash(
                             password or secrets.token_urlsafe(32)
                         ),
@@ -5950,17 +5988,17 @@ def admin_new_profile():
                 db.commit()
             except psycopg.errors.UniqueViolation:
                 db.rollback()
-                error = t("msg.username_taken")
+                error = t("msg.email_taken")
             else:
-                flash(f"Profile for {values['name']} (@{username}) created.")
+                flash(f"Profile for {values['name']} created.")
                 return redirect(url_for("view_profile", user_id=new_id))
 
         flash(error)
         profile = dict(values)
-        profile["username"] = username
+        profile["email"] = email
     else:
         profile = {f: "" for f in PROFILE_FIELDS}
-        profile["username"] = ""
+        profile["email"] = ""
 
     chips, chosen = interest_choices(profile.get("interests"))
 

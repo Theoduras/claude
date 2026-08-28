@@ -11,9 +11,9 @@
   <div class="wiz-body wiz-scroll">
     <form id="new-profile-form" method="post" action="{{ url_for('admin_new_profile') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label for="username">{{ t("admin.username") }}</label>
-      <input id="username" name="username" type="text" minlength="3" required autofocus
-             value="{{ profile['username'] or '' }}" placeholder="{{ t('admin.username_ph') }}">
+      <label for="email">{{ t("admin.email") }}</label>
+      <input id="email" name="email" type="email" autocomplete="email" autofocus
+             value="{{ profile['email'] or '' }}" placeholder="{{ t('admin.email_ph') }}">
 
       <label for="password">{{ t("admin.password") }}</label>
       <input id="password" name="password" type="password" minlength="8" autocomplete="new-password"

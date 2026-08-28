@@ -26,14 +26,14 @@
   <article class="admin-item">
     <p class="hint" style="margin: 0 0 0.35rem;">
       #{{ r.id }} · {{ r.created_at.strftime('%Y-%m-%d %H:%M') }} ·
-      reported by {{ r.reporter_username or 'a deleted account' }}
+      reported by {{ r.reporter_name or r.reporter_email or 'a deleted account' }}
     </p>
 
     <h2 class="admin-item-title">
       {{ reasons.get(r.reason, r.reason) }}
       —
       <a href="{{ url_for('view_profile', user_id=r.reported_id) }}">
-        {{ r.reported_name or r.reported_username }}
+        {{ r.reported_name or r.reported_email or 'a deleted account' }}
       </a>
       <span class="hint">({{ r.reported_status }})</span>
     </h2>

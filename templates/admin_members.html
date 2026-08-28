@@ -49,7 +49,7 @@
   </p>
 
   <form method="get" action="{{ url_for('admin_members') }}" class="admin-filter">
-    <input type="search" name="q" value="{{ query }}" placeholder="username, name or email">
+    <input type="search" name="q" value="{{ query }}" placeholder="name or email">
     <input type="hidden" name="show" value="{{ show }}">
     <button class="btn btn-secondary btn-small" type="submit">Search</button>
   </form>
@@ -72,7 +72,7 @@
         <h2>
           {# A member with no profile row yet still gets a link: their profile
              page is where you find out how far they got. #}
-          <a href="{{ url_for('view_profile', user_id=m.id) }}">{{ m.name or m.username }}</a>
+          <a href="{{ url_for('view_profile', user_id=m.id) }}">{{ m.name or m.email or "Member" }}</a>
           {% if m.age %}<span class="hint">{{ m.age }}</span>{% endif %}
         </h2>
         <span class="admin-badges">
@@ -82,7 +82,7 @@
         </span>
       </div>
       <p class="hint admin-member-meta">
-        @{{ m.username }}{% if m.email %} · {{ m.email }}{% endif %}
+        {% if m.email %}{{ m.email }}{% else %}no address on file{% endif %}
         {%- if not m.email_verified_at and not m.is_bot %} · <strong>email unconfirmed</strong>{% endif %}
         · joined {{ m.created_at.strftime('%Y-%m-%d') }}
         {%- if m.last_seen_at %} · last seen {{ m.last_seen_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}
