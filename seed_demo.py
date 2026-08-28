@@ -5,6 +5,8 @@ when you hit Search yourself there is always a pool to be matched from.
 
     python seed_demo.py           # add the demo members (idempotent)
     python seed_demo.py --reset   # remove them first, then re-add
+    python seed_demo.py --report  # count them, and what removing them costs
+    python seed_demo.py --purge   # remove them and stop -- no re-seeding
 
 They all share the password below, so you can log in as any of them to
 see the other side of a chat.
@@ -371,15 +373,31 @@ def validate():
             assert not val or val in options, f"{username}: bad {field} {val!r}"
 
 
-def reset(db):
+def demo_ids(db):
+    """The ids of the seeded demo members, and only those.
+
+    Matching on the username alone would be enough locally, where nobody else
+    ever registers -- but this also runs against a database holding real
+    members, and `mia_b` is a name a real person could have picked. is_bot is
+    what the rest of the app already treats as the demo marker (the landing
+    page's tiers, /admin/members' separate count, every search pool query), so
+    it is the predicate that decides here too: a real account wearing one of
+    these names is not a demo member and must survive.
+    """
     usernames = [m[0] for m in DEMO_MEMBERS]
     placeholders = ",".join("?" * len(usernames))
-    ids = [
+    return [
         r["id"]
         for r in db.execute(
-            f"SELECT id FROM users WHERE username IN ({placeholders})", usernames
+            f"SELECT id FROM users "
+            f"WHERE username IN ({placeholders}) AND is_bot = TRUE",
+            usernames,
         )
     ]
+
+
+def reset(db):
+    ids = demo_ids(db)
     if not ids:
         return 0
     id_ph = ",".join("?" * len(ids))
@@ -397,6 +415,109 @@ def reset(db):
     db.execute(f"DELETE FROM users WHERE id IN ({id_ph})", ids)
     db.commit()
     return len(ids)
+
+
+def report(db):
+    """Say what is in this database, and what deleting the demo members costs.
+
+    Reads only -- no DELETE, no INSERT, no commit. It exists because the answer
+    on a production database is not obvious from the outside: demo members
+    auto-reply in chat, so a real member who has ever searched is probably
+    holding a conversation with one, and matches cascade from users. Which
+    conversations would go is the number the decision turns on, so it is
+    counted separately rather than folded into a total.
+    """
+    ids = demo_ids(db)
+    print(f"Demo members present: {len(ids)} of {len(DEMO_MEMBERS)}")
+    if len(ids) < len(DEMO_MEMBERS):
+        placeholders = ",".join("?" * len(DEMO_MEMBERS))
+        here = {
+            r["username"]
+            for r in db.execute(
+                f"SELECT username FROM users "
+                f"WHERE username IN ({placeholders}) AND is_bot = TRUE",
+                [m[0] for m in DEMO_MEMBERS],
+            )
+        }
+        missing = [m[0] for m in DEMO_MEMBERS if m[0] not in here]
+        print(f"  not in this database: {', '.join(missing)}")
+
+    # is_bot rows that are not one of the 40 named members. Locally these are
+    # debris from the check suites, which mint bots of their own; --purge does
+    # not touch them, because it deletes by name. On a database where the check
+    # suites have never run this should be 0, and if it is not, that is worth
+    # seeing before deleting anything.
+    strays = db.execute(
+        f"SELECT COUNT(*) AS n FROM users WHERE is_bot = TRUE "
+        f"AND username NOT IN ({','.join('?' * len(DEMO_MEMBERS))})",
+        [m[0] for m in DEMO_MEMBERS],
+    ).fetchone()["n"]
+    if strays:
+        print(f"Other is_bot accounts, not named in DEMO_MEMBERS: {strays}")
+        print("  (--purge deletes by name, so these are left alone)")
+
+    print("\nReal members (is_bot = FALSE), by status:")
+    rows = list(db.execute(
+        "SELECT status, COUNT(*) AS n FROM users "
+        "WHERE is_bot = FALSE GROUP BY status ORDER BY status"
+    ))
+    if not rows:
+        print("  none")
+    for r in rows:
+        print(f"  {r['status']:<18} {r['n']}")
+    total_real = sum(r["n"] for r in rows)
+    print(f"  {'TOTAL':<18} {total_real}")
+    print("  (this count includes the admin account)")
+
+    if not ids:
+        print("\nNo demo members here, so nothing would be deleted.")
+        return
+
+    id_ph = ",".join("?" * len(ids))
+    # A match is real<->demo when exactly one side is a demo member. Both sides
+    # demo is the seeder pairing its own members, and costs a real person
+    # nothing.
+    counts = db.execute(
+        f"""SELECT
+              COUNT(*) FILTER (WHERE a_demo AND b_demo)          AS demo_demo,
+              COUNT(*) FILTER (WHERE a_demo <> b_demo)           AS real_demo
+            FROM (
+              SELECT user_a IN ({id_ph}) AS a_demo,
+                     user_b IN ({id_ph}) AS b_demo
+              FROM matches
+              WHERE user_a IN ({id_ph}) OR user_b IN ({id_ph})
+            ) m""",
+        ids * 4,
+    ).fetchone()
+    print("\nMatches involving a demo member:")
+    print(f"  demo <-> demo      {counts['demo_demo']}   (nobody real affected)")
+    print(f"  real <-> demo      {counts['real_demo']}   <-- these would be deleted")
+
+    msgs = db.execute(
+        f"""SELECT
+              COUNT(*)                                              AS total,
+              COUNT(*) FILTER (WHERE m.sender_id NOT IN ({id_ph}))   AS by_real
+            FROM messages m
+            WHERE m.match_id IN (
+              SELECT id FROM matches
+              WHERE (user_a IN ({id_ph})) <> (user_b IN ({id_ph}))
+            )""",
+        ids * 3,
+    ).fetchone()
+    print("\nMessages inside those real <-> demo conversations:")
+    print(f"  total              {msgs['total']}")
+    print(f"  written by a real member  {msgs['by_real']}")
+
+    affected = db.execute(
+        f"""SELECT COUNT(DISTINCT u.id) AS n
+            FROM users u
+            JOIN matches mt ON u.id IN (mt.user_a, mt.user_b)
+            WHERE u.is_bot = FALSE
+              AND (mt.user_a IN ({id_ph})) <> (mt.user_b IN ({id_ph}))""",
+        ids * 2,
+    ).fetchone()["n"]
+    print(f"\nReal members holding at least one demo conversation: {affected}")
+    print("\nNothing was changed. Run with --purge to delete the demo members.")
 
 
 def seed(db):
@@ -511,6 +632,14 @@ def main():
         "--reset", action="store_true",
         help="delete the demo members (and their matches) before seeding",
     )
+    parser.add_argument(
+        "--report", action="store_true",
+        help="count what is here and what --purge would remove; writes nothing",
+    )
+    parser.add_argument(
+        "--purge", action="store_true",
+        help="delete the demo members and stop -- do not seed them back",
+    )
     args = parser.parse_args()
 
     validate()
@@ -518,6 +647,20 @@ def main():
 
     with POOL.connection() as conn:
         db = Db(conn)
+
+        # --report and --purge both stop here. Seeding is the default for a
+        # bare run and for --reset, and both of those exist to give a *local*
+        # database a pool to search against; a database being cleaned up is
+        # exactly the one that must not be re-seeded on the way out.
+        if args.report:
+            report(db)
+            return 0
+
+        if args.purge:
+            removed = reset(db)
+            print(f"Removed {removed} demo member(s). Nothing was seeded back.")
+            return 0
+
         if args.reset:
             removed = reset(db)
             print(f"Removed {removed} existing demo member(s).")

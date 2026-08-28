@@ -1,20 +1,28 @@
-name: Seed the demo profiles
+name: Demo profiles
 
-# Loads the 20 demo members from seed_demo.py into the Cloud SQL database,
-# over the Cloud SQL Auth Proxy. Uses --reset, so it is safe to re-run: the
-# demo members are wiped and re-added, and nothing else in the database is
-# touched.
+# Reaches a Cloud SQL database over the Auth Proxy to count, add or remove the
+# demo members from seed_demo.py.
 #
 # Manual only, and deliberately so. This used to run on any push to main that
 # touched this file or seed_demo.py -- which meant a deploy could write demo
 # rows into a database holding real members, as a side effect of a change
 # nobody read as "seed production". Which database to seed is the whole
-# question this workflow asks, so it has to be answered by a person.
+# question this workflow asks, so it has to be answered by a person. It did
+# happen, twice, before that was fixed, which is why `purge` exists at all.
+#
+# `action` defaults to report because `database` defaults to velvet, which is
+# production: the pair of defaults has to be the harmless one. report writes
+# nothing at all, so a dispatch nobody thought hard about is a no-op.
 on:
   workflow_dispatch:
     inputs:
+      action:
+        description: 'report = count only; purge = delete demo members; seed = add them'
+        type: choice
+        default: report
+        options: [report, purge, seed]
       database:
-        description: 'Which database to seed'
+        description: 'Which database'
         type: choice
         default: velvet
         options: [velvet, velvet_dev]
@@ -44,7 +52,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Seed over the Cloud SQL Auth Proxy
+      - name: Run over the Cloud SQL Auth Proxy
         run: |
           set -euo pipefail
 
@@ -65,6 +73,16 @@ jobs:
 
           python -m pip install -q -r requirements.txt
 
+          # One flag per action, rather than passing the input through: an
+          # empty or unexpected `action` has to land on the harmless one, not
+          # on whatever seed_demo.py does with an argument it does not know.
+          case "${{ inputs.action || 'report' }}" in
+            purge) FLAG=--purge ;;
+            seed)  FLAG=--reset ;;
+            *)     FLAG=--report ;;
+          esac
+          echo "Running seed_demo.py $FLAG against ${{ inputs.database || 'velvet' }}"
+
           # token_urlsafe by construction, so it is safe in a URL.
           DATABASE_URL="postgresql://velvet_app:${DB_PASS}@127.0.0.1:5432/${{ inputs.database || 'velvet' }}" \
-            python seed_demo.py --reset
+            python seed_demo.py "$FLAG"
