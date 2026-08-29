@@ -3197,9 +3197,50 @@ def landing_pulse():
 
 @app.route("/")
 def index():
+    """The landing page signed out, the home screen signed in.
+
+    It used to redirect a signed-in member straight to /search, which meant
+    the wordmark every screen carries -- the one link that reads as "home"
+    -- dropped them into the search wizard, and nothing anywhere said what
+    the app contains. /search is still where signing in lands; this is what
+    the wordmark, and the address on its own, now give you.
+
+    The verification gate still wins. `index` is in VERIFY_GATE_EXEMPT, so
+    without this branch an unconfirmed account would get a screen of cards
+    whose every link bounces off the gate; today it reaches /verify/pending
+    by way of the redirect, and it still should.
+    """
     if current_uid() and not design_previewing():
-        return redirect(url_for("live_search"))
+        if awaiting_verification():
+            return redirect(url_for("verify_pending"))
+        return render_template("home.html", **home_state())
+    # ?home=1 is how the design editor reaches the signed-in screen: both
+    # live at this one address, so the preview needs a way to say which.
+    if design_previewing() and request.args.get("home") and current_uid():
+        return render_template("home.html", **home_state())
     return render_template("landing.html", pulse=landing_pulse())
+
+
+def home_state():
+    """What the home screen puts on its cards.
+
+    Two of the three live values are already in hand -- search_is_running()
+    and the unread count are both cached on `g` for the render. Only
+    profile_completeness() is a query this page adds, and it is the one
+    that earns it: an incomplete profile is the reason a new member cannot
+    search yet, so the card that links to it should be the thing that says
+    so.
+    """
+    me = get_db().execute(
+        "SELECT * FROM profiles WHERE user_id = ?", (current_uid(),)
+    ).fetchone()
+    return {
+        "pulse": landing_pulse(),
+        # A member who registered a minute ago has no profile row at all,
+        # so the greeting has to have a name-less form rather than assume.
+        "name": (me["name"] or "").strip() if me is not None else "",
+        "completeness": profile_completeness(current_uid(), me),
+    }
 
 
 @app.route("/help")
@@ -8888,6 +8929,11 @@ DESIGN_PREVIEW = [
         ("Sign in", "/login?preview=1"),
         ("Register", "/register?preview=1"),
         ("Forgot", "/forgot"),
+    ]),
+    ("Signed in", [
+        # Both screens live at "/", so the preview needs a way to say which
+        # of the two it means -- see index().
+        ("Home", "/?preview=1&home=1"),
     ]),
     ("Search", [
         ("How it works", "/how-matching-works"),

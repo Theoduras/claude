@@ -411,6 +411,36 @@ the strip into three hidden fields — `remove_photo_ids`, `photo_order`, `prima
 `apply_photo_edits()` (`app.py:~1228`) re-checks every id against ownership and writes
 `photos.sort_order`. Reads are `ORDER BY is_primary DESC, sort_order, id` everywhere.
 
+## `/` is two screens
+
+Signed out it is the marketing hero; signed in it is **`home.html`**, an overview of what
+the app contains. It used to redirect a signed-in member straight to `/search`, which
+meant the wordmark every screen carries — the one link that reads as "home" — dropped
+them into the search wizard, and nothing anywhere said that chat, a profile or
+notification settings existed. Signing in still lands on `/search`; this is what the
+wordmark, and the bare address, now give you.
+
+**Six cards, and three of them say something live.** `.grid` + `.profile-card` +
+`.opt-icon` with the same `.opt-2/3/4` hues the option rows use — the layout is the
+existing components, and the only new CSS is that a card is a link (ch.08). The Search
+card reports `search_is_running()`, the Profile card what `profile_completeness()` still
+wants before a first search is possible, the Notifications card the unread count. Two of
+those three are already cached on `g` for the render; `home_state()` adds one query, for
+the one that explains why a new member cannot search yet.
+
+**The film is the landing page's, from one partial.** `templates/_hero_film.html` holds
+the `.hero-film` layer, its three `data-*` sources and the script that attaches them —
+so the `prefers-reduced-motion` bargain (no bytes at all, not bytes then hidden) and the
+mobile/desktop source split cannot drift between the two screens. `film_class` is the
+only difference: `is-home` confines it to a top band behind the greeting on a phone,
+where six cards would otherwise have a photo peeking through every gap, and steps the
+desktop corner box back to a watermark.
+
+**The verification gate still wins.** `index` is in `VERIFY_GATE_EXEMPT`, so without an
+explicit branch an unconfirmed account would get a screen of cards whose every link
+bounces off the gate. `/?preview=1&home=1` is how `/admin/design` reaches this screen —
+both live at one address, so the preview needs a way to say which.
+
 ## What the landing page claims
 
 `landing_pulse()` builds the one line under the headline from four tiers, tried in
@@ -914,7 +944,7 @@ Regenerate with `grep -n "^@app.route" app.py` — line numbers below drift on e
 
 | Area | Routes |
 |---|---|
-| misc | `/lab` (admin), `/`, `/healthz` + `/-/health`, `/how-matching-works`, `/lang/<code>`, `/robots.txt`, `/tasks/purge-deletions`, `/tasks/notifications` |
+| misc | `/lab` (admin), `/` (landing signed out, home signed in), `/healthz` + `/-/health`, `/how-matching-works`, `/lang/<code>`, `/robots.txt`, `/tasks/purge-deletions`, `/tasks/notifications` |
 | auth | `/register`, `/login`, `/logout`, `/verify/<token>`, `/verify/pending`, `/verify/resend`, `/verify/email`, `/forgot`, `/reset/<token>` |
 | profile | `/profile/edit`, `/profile/<id>`, `/admin/profiles/new`, `/photo/<id>` |
 | legal | `/terms`, `/privacy`, `/imprint`, `/safety`, `/faq` |

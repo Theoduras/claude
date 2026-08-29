@@ -65,6 +65,28 @@ TRANSLATIONS = {
         "mode.light": "Light",
         "mode.dark": "Dark",
 
+        # --- home (signed in) ---
+        "home.title": "Home",
+        "home.greeting": "Welcome back",
+        "home.greeting_named": "Welcome back, {name}",
+        "home.lede": "Everything Velvt does, and where it lives.",
+        "home.search_title": "Live search",
+        "home.search_body": "Say what you're after, then wait with everyone else who is free right now.",
+        "home.search_running": "Searching now",
+        "home.chats_title": "Chats",
+        "home.chats_body": "The conversations that came out of a match, and the five minutes that started them.",
+        "home.profile_title": "Your profile",
+        "home.profile_body": "What the person on the other side of five minutes gets to look at.",
+        "home.profile_missing": "Still needed: {items}",
+        "home.notifications_title": "Notifications",
+        "home.notifications_body": "What happened while you were away, and how you'd like to hear about it.",
+        "home.notifications_unread": "{n} unread",
+        "home.settings_title": "Settings",
+        "home.settings_body": "Password, sessions, what we may keep, and leaving.",
+        "home.safety_title": "Safety",
+        "home.safety_body": "Blocking, reporting, and what to do when something feels wrong.",
+        "home.how_it_works": "How matching works",
+
         # --- landing ---
         "landing.title": "Velvt",
         # Newlines are the typographic choice of each language: the template
@@ -602,6 +624,28 @@ TRANSLATIONS = {
         "mode.choose": "Weergave",
         "mode.light": "Licht",
         "mode.dark": "Donker",
+
+        # --- home (signed in) ---
+        "home.title": "Start",
+        "home.greeting": "Welkom terug",
+        "home.greeting_named": "Welkom terug, {name}",
+        "home.lede": "Alles wat Velvt doet, en waar het staat.",
+        "home.search_title": "Live zoeken",
+        "home.search_body": "Zeg waar je naar op zoek bent en wacht met iedereen die nu ook vrij is.",
+        "home.search_running": "Nu aan het zoeken",
+        "home.chats_title": "Chats",
+        "home.chats_body": "De gesprekken die uit een match kwamen, en de vijf minuten die ze begonnen.",
+        "home.profile_title": "Jouw profiel",
+        "home.profile_body": "Waar de ander tijdens die vijf minuten naar kijkt.",
+        "home.profile_missing": "Nog nodig: {items}",
+        "home.notifications_title": "Meldingen",
+        "home.notifications_body": "Wat er gebeurde terwijl je weg was, en hoe je het wilt horen.",
+        "home.notifications_unread": "{n} ongelezen",
+        "home.settings_title": "Instellingen",
+        "home.settings_body": "Wachtwoord, sessies, wat we mogen bewaren, en weggaan.",
+        "home.safety_title": "Veiligheid",
+        "home.safety_body": "Blokkeren, melden, en wat je doet als iets niet goed voelt.",
+        "home.how_it_works": "Hoe matchen werkt",
 
         # --- landing ---
         "landing.title": "Velvt",

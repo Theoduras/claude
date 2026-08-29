@@ -76,12 +76,22 @@
 
     The pill.* slots are the design system's chips: a chip carries an icon
     before its label, and --space-1 exists for exactly that gap. Set a glyph
-    and every pill of that kind grows one; clear it and they all lose it. -#}
+    and every pill of that kind grows one; clear it and they all lose it.
+
+    The home.* slots mostly point at the same glyphs the tab bar uses, but
+    they are slots of their own so a card can be re-pointed from
+    /admin/icons without the tab bar's glyph moving with it. -#}
 {%- set SLOTS = {
   "tab.search": "tab-search",
   "tab.chats": "tab-chats",
   "tab.you": "tab-you",
   "tab.info": "tab-info",
+  "home.search": "tab-search",
+  "home.chats": "tab-chats",
+  "home.profile": "tab-you",
+  "home.notifications": "pulse",
+  "home.settings": "sliders",
+  "home.safety": "shield",
   "sheet.close": "close-sm",
   "sheet.close.wide": "close",
   "sheet.logout": "log-out",
