@@ -6011,3 +6011,52 @@
       mask-image: none;
       -webkit-mask-image: none;
     }
+
+    /* Each door wears a face. The image is set to the card's right edge
+       and masked away before it reaches the text, so it is the card's
+       far half that carries it -- a picture the eye lands on after the
+       title, not a photo with words on top of it. Anchored bottom-right
+       and `contain` rather than `cover`: these are whole figures, and a
+       figure cropped through the head by a card two hundred pixels wide
+       reads as a bug. `contain` also means the card decides how much of
+       the picture it can afford; a short card simply shows a smaller one.
+
+       It is a sibling element rather than .home-card::after because
+       .profile-card's two pseudo-elements are already switched off in
+       light mode (ch. light), and this has to survive that. */
+    .home-card-art {
+      position: absolute;
+      inset: 0 0 0 auto;
+      width: 62%;
+      z-index: 0;
+      pointer-events: none;
+      background-repeat: no-repeat;
+      background-position: right bottom;
+      background-size: contain;
+      opacity: 0.5;
+      /* Two masks in one: the horizontal gradient hands the left half of
+         the card back to the text, the vertical one keeps the figure from
+         ending on a hard line where the card's padding does. */
+      -webkit-mask-image:
+        linear-gradient(90deg, transparent 0%, var(--shade) 62%),
+        linear-gradient(180deg, transparent 0%, var(--shade) 22%);
+      mask-image:
+        linear-gradient(90deg, transparent 0%, var(--shade) 62%),
+        linear-gradient(180deg, transparent 0%, var(--shade) 22%);
+      -webkit-mask-composite: source-in;
+      mask-composite: intersect;
+      transition: opacity 0.2s ease;
+    }
+    /* The card's own contents are in normal flow, so they need saying
+       once that they are above the picture. .opt-icon is a disc with a
+       background of its own and would otherwise sit under it. */
+    .home-card > :not(.home-card-art) { position: relative; z-index: 1; }
+    .home-card:hover .home-card-art { opacity: 0.62; }
+    /* On white the same 0.5 is a poster rather than a suggestion: the
+       panel behind it stopped being dark, so nothing is absorbing the
+       image any more. */
+    :root[data-mode="light"] .home-card-art { opacity: 0.28; }
+    :root[data-mode="light"] .home-card:hover .home-card-art { opacity: 0.36; }
+    @media (prefers-reduced-motion: reduce) {
+      .home-card-art { transition: none; }
+    }
