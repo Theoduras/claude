@@ -5985,32 +5985,6 @@
       color: var(--text-faint);
     }
 
-    /* On desktop the film is a bottom-right corner box (ch. hero), which
-       on the landing page has nothing over it. Here a full-width grid
-       does, so it steps back further rather than reading as noise behind
-       the last two cards. Mobile keeps the full bleed and its scrim. */
-    /* On a phone the landing film is full-bleed, which works there because
-       the screen is a headline and two buttons. Here it would be a photo
-       peeking through the gaps between six cards, so it is confined to the
-       band behind the greeting and feathered out before the grid starts. */
-    .hero-film.is-home {
-      inset: 0 0 auto 0;
-      height: 42svh;
-      opacity: 0.5;
-      -webkit-mask-image: linear-gradient(180deg, var(--shade) 45%, transparent 100%);
-      mask-image: linear-gradient(180deg, var(--shade) 45%, transparent 100%);
-    }
-    /* Desktop already draws it as a bottom-right corner box rather than a
-       bleed, so there it only has to step back far enough not to read as
-       noise behind the last row of cards. */
-    html:not([data-viewport="mobile"]) .hero-film.is-home {
-      inset: auto clamp(0px, 2vw, 34px) 0 auto;
-      height: min(46svh, 440px);
-      width: min(30vw, 360px);
-      opacity: 0.22;
-      mask-image: none;
-      -webkit-mask-image: none;
-    }
 
     /* Each door wears a face. The image is set to the card's right edge
        and masked away before it reaches the text, so it is the card's
@@ -6033,7 +6007,7 @@
       background-repeat: no-repeat;
       background-position: right bottom;
       background-size: contain;
-      opacity: 0.5;
+      opacity: 0.7;
       /* Two masks in one: the horizontal gradient hands the left half of
          the card back to the text, the vertical one keeps the figure from
          ending on a hard line where the card's padding does. */
@@ -6051,12 +6025,12 @@
        once that they are above the picture. .opt-icon is a disc with a
        background of its own and would otherwise sit under it. */
     .home-card > :not(.home-card-art) { position: relative; z-index: 1; }
-    .home-card:hover .home-card-art { opacity: 0.62; }
-    /* On white the same 0.5 is a poster rather than a suggestion: the
+    .home-card:hover .home-card-art { opacity: 0.82; }
+    /* On white the same 0.7 is a poster rather than a suggestion: the
        panel behind it stopped being dark, so nothing is absorbing the
        image any more. */
-    :root[data-mode="light"] .home-card-art { opacity: 0.28; }
-    :root[data-mode="light"] .home-card:hover .home-card-art { opacity: 0.36; }
+    :root[data-mode="light"] .home-card-art { opacity: 0.4; }
+    :root[data-mode="light"] .home-card:hover .home-card-art { opacity: 0.5; }
     @media (prefers-reduced-motion: reduce) {
       .home-card-art { transition: none; }
     }
