@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en" data-mode="light" data-viewport="mobile">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Velvt — signed-in home, design A</title>
+<style>
+/* Design A -- the door. One purpose: the search, and nothing louder than it. */
+    :root {
+      /* grounds — violet-biased neutrals, never plain grey */
+      --ink:          #0B0713;
+      --ink-raised:   #150C22;
+      --ink-hairline: rgba(168, 133, 247, 0.16);
+
+      /* violet velvet */
+      --violet:       #8A2BE2;
+      --violet-crest: #A855F7;
+      --violet-deep:  #3B0B66;
+
+      /* teal velvet */
+      --teal:         #12807F;
+      --teal-crest:   #1DA6A2;
+      --teal-deep:    #06383B;
+
+      /* the light on the pile */
+      --champagne:    #E8D3A9;
+
+      /* type */
+      --text:         #F7F1FB;
+      --text-muted:   #B7A6CB;
+      --text-faint:   #7C6B92;
+
+      /* semantics */
+      --danger:       #FF7A8A;
+      --danger-deep:  #4A0F1E;
+
+      --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      /* numbers that must not reflow as they tick: timers, counts, readouts */
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+      /* ---------- height-fluid sizing ------------------------------
+         The flow's promise is that a step never scrolls, which used to be
+         kept with stepped @media (max-height) blocks: full size above
+         740px tall, a trim below it, a harder trim below 700. Those are
+         cliffs -- two phones 1px apart in height got visibly different
+         type -- and every trimmed value had to be restated by hand, so the
+         two sets drifted.
+
+         --fit is a rem that shrinks with the viewport's height instead: it
+         is exactly 1rem on a 740px-tall screen and above, and eases down to
+         0.70rem at 540px, continuously. Anything sized in calc(N *
+         var(--fit)) therefore keeps its old full-height value and finds its
+         own trim on the way down, with no breakpoint to land on.
+
+         --fit-tight is the same curve, steeper (0.52 at 540px), for the
+         screens that carry more than a step does -- the reveal's two
+         portraits, chips and countdown -- and for decoration that should
+         yield before content does.
+
+         The floors are set by the shortest screen the flow has to hold
+         without scrolling, not by taste: below them a step spills, which is
+         the one thing this whole scale exists to prevent.
+
+         The vh coefficient is the whole trick: 1vh is height/100, so a
+         coefficient of N vh moves the value by exactly N px across a 100px
+         change in viewport height. */
+      --fit: clamp(0.7rem, 2.4vh - 0.11rem, 1rem);
+      --fit-tight: clamp(0.52rem, 4.267vh - 1.038rem, 1rem);
+
+      /* The bar is fixed, so main has to reserve its height by hand -- and
+         every part of the bar is now sized in --fit, which makes that height
+         one expression rather than a number someone has to remember to keep
+         in step. 4.875 is measured, not guessed: it is what the padding,
+         the 21px icon, the gap, the label and the border come to at --fit
+         = 1rem. Reserve it plus a small gap and the step's last row sits
+         just above the bar at every height, with no fixed pull-up. */
+      /* ch.05 floats the bar as a pill inset from the bottom rather than
+         sitting it on the edge, so the reserve is the bar's own height plus
+         the gap underneath it. 5.6 is 4.875 measured as before, plus the
+         0.6 the pill is lifted and a little breathing room -- one number
+         still, and still derived rather than remembered. */
+      --tabbar-h: calc(5.6 * var(--fit) + env(safe-area-inset-bottom, 0px));
+
+      --measure: 62rem;
+      --radius: 18px;
+      --radius-sm: 11px;
+      /* named so full-bleed children can cancel it with a negative margin
+         instead of hard-coding the same clamp in two places */
+      --card-pad: clamp(1.25rem, 3vw, 1.9rem);
+
+      /* fiber grain — inline so no external request is needed */
+      --nap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+    
+      /* The mid-stop of the wordmark's sheen. It was --champagne, which is
+         gold -- correct on the dark ground, and in light it sweeps the mark
+         through #8A7C0C and reads olive. The artifact's mark is violet
+         throughout, so this is the token that lets it be. */
+      --brand-sheen: #E8D3A9;
+      /* A ground *behind* violet content, as opposed to --violet-deep, which
+         is also the dark end of the velvet gradient. One token could not be
+         both once there were two worlds: on white the gradient still wants a
+         deep indigo and the ground wants a pale wash. */
+      --violet-wash: #3B0B66;
+
+      /* ---------- ch.05: surfaces the two worlds disagree about --------
+         Three grounds that were literals until now, which is exactly why
+         light mode painted dark inputs on a white page and a near-black
+         bar under a near-white one. A literal cannot have a second answer;
+         a token can. */
+
+      /* the filled well of an input, and of any row that reads as one */
+      --field:       #120B1D;
+      /* the tab bar's own ground. It is the one surface that stays dark in
+         both worlds -- see the floating pill in ch.05 -- so it carries its
+         own type colours rather than borrowing --text, which inverts. */
+      --bar:         #0A0611;
+      --bar-ink:     #F7F1FB;
+      --bar-quiet:   #7C6B92;
+      /* the acid yellow the artifact uses for a state that is *running*:
+         the TIMED chip, and nothing else. Reads on both grounds. */
+      --delight:     #FAE83E;
+      --on-delight:  #241F04;
+
+      --gleam:       #FFFFFF;  /* the light side of this mode: inner glows, gleams */
+      --shade:       #000000;  /* its dark side: shadows, scrims, wells */
+    }
+
+    /* ==================================================================
+       The light world.
+
+       Same token names, different answers. This is only possible because
+       every colour in this file is now a token or derived from one
+       (tools/tokenise_css.py) -- while 192 of them were literals, a second
+       palette repainted the tokens and left the literals painting the first
+       design underneath.
+
+       The values are the light column of the Restyler's own palette, which
+       is the design that was already reviewed, rather than a fresh guess at
+       one. Where a name encodes a *dark* role the light answer inverts the
+       role rather than the colour: `--violet-deep` is a ground behind violet
+       content, so on a light page it is a pale wash and not a dark one. A
+       token named for what it paints survives that; one named for its colour
+       would not have.
+
+       Two are worth stating outright:
+
+       --champagne is the light on the pile, and a pale gold on a near-white
+       page is invisible. It becomes the deep gold the Restyler uses for the
+       same job -- gold as *text* rather than gold as a highlight.
+
+       --shade is not black here. A shadow works by darkening what is under
+       it, and on a light ground pure black reads as a hole rather than as
+       lift; #242424 at the same alphas is the Restyler's own elevation.
+       ================================================================== */
+    :root[data-mode="light"] {
+      /* canvas, as edited in the artifact: pure white, not the palette's
+         #F4F3F0. Which makes the card surface a shade *darker* than the page
+         rather than lighter -- the inversion is deliberate on that ground and
+         is what the artifact renders. */
+      --ink:          #FFFFFF;
+      --ink-raised:   #FBFAF8;   /* surface  */
+      --ink-hairline: #E5E3DE;   /* hairline */
+
+      /* The velvet triple is the artifact's velvet-1 / action / velvet-3.
+         --violet is the button fill, which is `action`; the two either side
+         are the ends of the gradient at .velvet, line ~610. */
+      --violet:       #6D28D9;   /* action   */
+      --violet-crest: #6739FF;   /* velvet-1 */
+      --violet-deep:  #3C2E86;   /* velvet-3 */
+
+      /* The artifact's light column has no accent family -- its greens are
+         status colours -- so only --teal is quoted (`live`). The other two are
+         derived from it rather than borrowed from `success`, which is a
+         different job. --teal-deep is #D8F5F2, already in this file's own
+         vocabulary as the pale teal it used on dark. */
+      --teal:         #0E9F6E;   /* live */
+      --teal-crest:   #12B981;
+      --teal-deep:    #D8F5F2;
+
+      /* `delight-deep`, not `delight`. --champagne is a text and focus-ring
+         colour almost everywhere it appears in this file -- link hover, the
+         focus outline, .flash a -- and acid yellow at #FAE83E is unreadable
+         doing that on white. This is the artifact's own answer for gold as
+         text. */
+      --champagne:    #8A7C0C;
+
+      --text:         #14121A;   /* ink   */
+      --text-muted:   #3D3A45;   /* body  */
+      --text-faint:   #8B8794;   /* quiet */
+
+      --danger:       #EA4545;
+      /* No light answer in the artifact; --danger-deep is a ground behind
+         danger text, so it inverts to a pale red the same way. */
+      --danger-deep:  #FDE7E7;
+
+      /* Violet, not gold: the artifact's wordmark is one hue with a lighter
+         sweep across it. */
+      --violet-wash:  #EDE4FE;   /* action-wash */
+
+      --brand-sheen:  #A78BFA;
+
+      --field:        #EFEEEA;
+      --bar:          #1B1B1B;
+      --bar-ink:      #FFFFFF;
+      --bar-quiet:    #9A9A9A;
+      --delight:      #FAE83E;
+      --on-delight:   #241F04;
+
+      --gleam:        #FFFFFF;
+      --shade:        #242424;   /* on-delight: the artifact's dark neutral */
+    }
+
+
+    /* ------------------------------------------------------------------
+       The shell, ch.05. Transcribed from templates/velvt.css so the
+       mockup is the app's own components rather than a lookalike: same
+       class names, same tokens, same shapes. Only what these three
+       screens actually use is here.
+       ------------------------------------------------------------------ */
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--sans);
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--text);
+      background-color: var(--ink);
+    }
+    a { color: inherit; text-decoration: none; }
+
+    .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: var(--measure);
+      margin: 0 auto;
+      padding: 0 clamp(1rem, 4vw, 2rem) var(--tabbar-h);
+    }
+
+    /* ---------- 1. the app bar --------------------------------------- */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0 calc(-1 * clamp(1rem, 4vw, 2rem));
+      padding: 0.55rem clamp(0.5rem, 2vw, 1rem) 0.9rem;
+    }
+    .topbar-side { flex: 1 1 0; display: flex; align-items: center; min-width: calc(2.6 * var(--fit)); }
+    .topbar-side.is-end { justify-content: flex-end; }
+    .topbar-brand { display: flex; align-items: center; justify-content: center; color: var(--text); }
+    .brand-logo {
+      display: block;
+      height: calc(2.25 * var(--fit));
+      aspect-ratio: 753 / 391;
+      background: linear-gradient(115deg, var(--violet-crest), var(--brand-sheen) 95%);
+      -webkit-mask: url("../static/velvt-logo.svg") left center / contain no-repeat;
+      mask: url("../static/velvt-logo.svg") left center / contain no-repeat;
+    }
+    .brand-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .topbar-btn {
+      display: grid; place-items: center;
+      width: calc(2.4 * var(--fit)); height: calc(2.4 * var(--fit));
+      padding: 0; color: var(--text-muted);
+      background: none; border: none; border-radius: 50%; cursor: pointer;
+    }
+    .topbar-btn svg { width: calc(1.15 * var(--fit)); height: calc(1.15 * var(--fit)); }
+    .count-badge {
+      min-width: 1.05rem; padding: 0 0.28rem;
+      font-size: 0.62rem; font-weight: 800; line-height: 1.05rem;
+      text-align: center; color: var(--gleam);
+      background: var(--violet); border-radius: 999px;
+    }
+
+    /* ---------- 2. the docked primary -------------------------------- */
+    .dock {
+      margin-top: auto;
+      padding-top: calc(1.1 * var(--fit));
+      display: flex; flex-direction: column; align-items: stretch;
+      gap: calc(0.55 * var(--fit));
+    }
+    .dock-note { text-align: center; font-size: 0.82rem; color: var(--text-faint); margin: 0; }
+    .btn {
+      position: relative;
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
+      padding: 0.72rem 1.35rem;
+      font-family: var(--sans); font-size: 0.95rem; font-weight: 700;
+      color: var(--gleam);
+      background-color: var(--violet);
+      border: none; border-radius: 0.95rem; cursor: pointer;
+      box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--violet) 70%, transparent);
+    }
+    .btn-block {
+      display: flex; width: 100%;
+      padding: calc(1.02 * var(--fit)) 1.2rem;
+      font-size: calc(0.98 * var(--fit));
+      border-radius: 1.05rem;
+    }
+    .btn-secondary {
+      color: var(--text); background-color: var(--ink-raised);
+      border: 1px solid var(--ink-hairline); box-shadow: none;
+    }
+    .btn-sm { padding: 0.5rem 0.95rem; font-size: 0.85rem; border-radius: 0.75rem; }
+
+    /* ---------- 6. state chips --------------------------------------- */
+    .tag {
+      display: inline-block; padding: 0.28rem 0.6rem;
+      border-radius: 0.5rem; font-size: 0.63rem; font-weight: 800;
+      letter-spacing: 0.07em; text-transform: uppercase;
+      white-space: nowrap; line-height: 1.25;
+    }
+    .tag-timed   { color: var(--on-delight); background: var(--delight); }
+    .tag-matched { color: var(--violet); background: var(--violet-wash); }
+    .tag-ended   { color: var(--text-faint); background: var(--field); }
+
+    /* ---------- 7. the labelled card --------------------------------- */
+    .stack-label {
+      display: block; font-size: 0.7rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.13em;
+      color: var(--text-faint); margin: 0 0 0.55rem;
+    }
+    .stack-group { display: flex; flex-direction: column; gap: 0.7rem; }
+    .stack-group + .stack-label { margin-top: 1.4rem; }
+    .stack-row {
+      display: flex; align-items: center; gap: 0.85rem;
+      padding: calc(0.95 * var(--fit)) 1.05rem;
+      border-radius: 0.95rem; background: var(--ink-raised); color: inherit;
+    }
+    .stack-row-main { flex: 1; min-width: 0; }
+    .stack-row-title { font-weight: 700; font-size: calc(0.96 * var(--fit)); }
+    .stack-row-sub {
+      font-size: 0.82rem; color: var(--text-faint); margin: 0.1rem 0 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .stack-row-go { flex: none; color: var(--text-faint); display: grid; place-items: center; }
+    .stack-row-go svg { width: 1rem; height: 1rem; }
+
+    /* ---------- 8. the tab bar, floating ----------------------------- */
+    .tabbar {
+      position: fixed; z-index: 3;
+      left: clamp(0.6rem, 3vw, 1.1rem); right: clamp(0.6rem, 3vw, 1.1rem);
+      bottom: calc(0.6 * var(--fit) + env(safe-area-inset-bottom, 0px));
+      display: flex; align-items: center;
+      padding: calc(0.62 * var(--fit)) 0.5rem;
+      border: none; border-radius: 1.6rem;
+      background: var(--bar);
+      box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--shade) 45%, transparent);
+    }
+    nav.tabbar a, .tabbar-more {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      gap: calc(0.32 * var(--fit)); padding: calc(0.15 * var(--fit)) 0;
+      color: var(--bar-quiet); background: none; border: none; cursor: pointer;
+      font-family: var(--sans);
+    }
+    nav.tabbar a.is-active { color: var(--bar-ink); }
+    .tabbar svg { width: calc(1.35 * var(--fit)); height: calc(1.35 * var(--fit)); }
+    .tabbar .tab-label { font-size: calc(0.62 * var(--fit)); letter-spacing: 0; font-weight: 600; }
+    .tab-dot { width: 0.3rem; height: 0.3rem; }
+    nav.tabbar a.is-live .tab-dot {
+      border-radius: 50%; background: var(--teal-crest);
+      box-shadow: 0 0 8px var(--teal-crest);
+      animation: breathe 2.6s ease-in-out infinite;
+    }
+
+    /* ---------- the live dot ----------------------------------------- */
+    .live-dot {
+      display: inline-block; width: 0.42rem; height: 0.42rem;
+      border-radius: 50%; background: var(--teal-crest);
+      box-shadow: 0 0 10px var(--teal-crest);
+      vertical-align: middle; margin-right: 0.35rem;
+      animation: breathe 2.6s ease-in-out infinite;
+    }
+    @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+    /* ---------- chips (the waiting screen's recap) -------------------- */
+    .pill {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      padding: 0.3rem 0.65rem;
+      font-size: 0.78rem; font-weight: 600; color: var(--text-muted);
+      background: var(--field); border-radius: 999px;
+    }
+    .pill svg { width: 0.85rem; height: 0.85rem; }
+    .pill-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+    /* ---------- the avatar ------------------------------------------- */
+    .avatar {
+      width: calc(2.6 * var(--fit)); height: calc(2.6 * var(--fit));
+      border-radius: 50%; background: var(--field);
+      object-fit: cover; flex: none;
+      display: grid; place-items: center;
+      font-weight: 700; color: var(--text-faint); font-size: 0.9rem;
+    }
+
+    /* numbers that must not reflow as they tick */
+    .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .fine { text-align: center; font-size: 0.75rem; color: var(--text-faint); margin: 0.7rem 0 0; }
+
+
+    /* ---------- design A: the door -----------------------------------
+       One purpose, nothing scrolls. The screen is the landing page's own
+       shape (.wiz-fit's promise: a step never scrolls) turned inward --
+       a statement, a docked primary, and everything else demoted to a
+       quiet line that is there only when there is something to say. */
+    .door { flex: 1; display: flex; flex-direction: column; justify-content: center;
+            text-align: center; gap: calc(0.55 * var(--fit)); padding-bottom: 1rem; }
+    .door-pulse { margin: 0; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
+    .door-h { margin: 0; font-size: calc(2.45 * var(--fit)); line-height: 1.12;
+              letter-spacing: -0.025em; font-weight: 700; }
+    .door-lede { margin: 0.2rem auto 0; max-width: 19rem; color: var(--text-muted);
+                 font-size: calc(0.98 * var(--fit)); }
+    .door-quiet { display: flex; flex-direction: column;
+                  margin-top: calc(1.1 * var(--fit)); border-top: 1px solid var(--ink-hairline); }
+    .quiet-line { display: flex; align-items: center; gap: 0.6rem;
+                  padding: calc(0.72 * var(--fit)) 0.15rem; font-size: 0.88rem;
+                  color: var(--text-muted); border-bottom: 1px solid var(--ink-hairline); }
+    .quiet-line .go { margin-left: auto; color: var(--text-faint); display: grid; }
+    .quiet-line .go svg { width: 0.9rem; height: 0.9rem; }
+    .qd { width: 0.42rem; height: 0.42rem; border-radius: 50%; background: var(--violet); flex: none; }
+    .dock-note a { color: var(--violet); font-weight: 600; }
+
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <main>
+    <div class="topbar">
+      <div class="topbar-side"></div>
+      <a class="topbar-brand" href="/"><span class="brand-logo"></span><span class="brand-word">Velvt</span></a>
+      <div class="topbar-side is-end">
+        <button class="topbar-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/></svg></button>
+      </div>
+    </div>
+    <div class="door">
+      <p class="door-pulse"><span class="live-dot"></span>9 people are searching right now</p>
+      <h1 class="door-h">Your search<br>is running.</h1>
+      <p class="door-lede">Two minutes in. Three of them fit what you asked for.</p>
+    </div>
+
+    <div class="dock">
+      <a class="btn btn-block" href="#">Back to your search</a>
+      <p class="dock-note">or <a href="#">start a new one</a></p>
+
+      <div class="door-quiet">
+        <a class="quiet-line" href="#"><span class="qd"></span>Nina replied 4 minutes ago<span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span></a>
+        <a class="quiet-line" href="#"><span class="qd"></span>1 new notification<span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span></a>
+      </div>
+      <p class="fine">Maastricht &middot; 18+</p>
+    </div>
+  </main>
+  <nav class="tabbar">
+    <a href="#" class="is-active is-live"><svg viewBox="0 0 21 21" fill="none" stroke="currentColor" stroke-width="2.286" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="6.2"/><path d="M13.6 13.6L18.5 18.5"/></svg><span class="tab-label">Search</span><span class="tab-dot"></span></a>
+    <a href="#"><svg viewBox="0 0 21 21" fill="none" stroke="currentColor" stroke-width="2.286" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3.5" width="14" height="10.5" rx="3.4"/><path d="M6.5 17.5v-3.5"/></svg><span class="tab-label">Chats</span><span class="tab-dot"></span></a>
+    <a href="#"><svg viewBox="0 0 21 21" fill="none" stroke="currentColor" stroke-width="2.286" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="7" r="3.6"/><path d="M3.8 18c0-3.4 3-5.4 6.7-5.4s6.7 2 6.7 5.4"/></svg><span class="tab-label">You</span><span class="tab-dot"></span></a>
+    <button class="tabbar-more" type="button"><svg viewBox="0 0 21 21" fill="none" stroke="currentColor" stroke-width="2.286" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="8"/><path d="M10.5 9.4v5.2"/><circle cx="10.5" cy="6.6" r="0.95" fill="currentColor" stroke="none"/></svg><span class="tab-label">Info</span><span class="tab-dot"></span></button>
+  </nav>
+</div>
+</body>
+</html>
