@@ -213,6 +213,16 @@
       rather than a bar that only sometimes exists. -#}
   <nav class="tabbar" aria-label="Primary">
     {% if current_user and not awaiting_verification %}
+      {#- Home: the overview screen the wordmark leads to. It was reachable
+          only from the mark at the top of the frame, which on a phone is
+          not where navigation lives. -#}
+      <a href="{{ url_for('index') }}"
+         class="{% if ep == 'index' %}is-active{% endif %}"
+         {% if ep == 'index' %}aria-current="page"{% endif %}>
+        {{ icon("tab.home") }}
+        <span class="tab-label">{{ t("tab.home") }}</span>
+        <span class="tab-dot"></span>
+      </a>
       {#- A search that is running is worn here: leaving the waiting screen
           is not leaving the search, and the tab is where you come back. -#}
       <a href="{{ url_for('live_search') }}"

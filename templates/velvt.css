@@ -4272,7 +4272,7 @@
            itself sized in --fit -- they shrink together, so the slack
            between them never closes and the bar never covers a step's
            last row */
-        padding: calc(1.5 * var(--fit)) 1.5rem calc(var(--tabbar-h) + 0.6 * var(--fit));
+        padding: calc(0.9 * var(--fit)) 1.5rem calc(var(--tabbar-h) + 0.6 * var(--fit));
         gap: 1rem;
       }
     }
@@ -4289,7 +4289,7 @@
     html[data-viewport="mobile"] .brand { margin-right: 0.6rem; }
     html[data-viewport="mobile"] nav a:not(.brand) { white-space: nowrap; }
     html[data-viewport="mobile"] main {
-      padding: calc(1.5 * var(--fit)) 1.5rem calc(var(--tabbar-h) + 0.6 * var(--fit));
+      padding: calc(0.9 * var(--fit)) 1.5rem calc(var(--tabbar-h) + 0.6 * var(--fit));
       gap: 1rem;
     }
 
@@ -4429,7 +4429,11 @@
       align-items: center;
       gap: 0.5rem;
       margin: 0 calc(-1 * clamp(1rem, 4vw, 2rem));
-      padding: 0.55rem clamp(0.5rem, 2vw, 1rem) 0.9rem;
+      /* The bar is a mark and a way back, not a header band: it was giving
+         up ~1.5rem of a phone screen to padding around a 2.25-unit logo.
+         Trimmed here and the mark trimmed with it, so the content below
+         starts higher on every screen. */
+      padding: 0.2rem clamp(0.5rem, 2vw, 1rem) 0.35rem;
     }
     .topbar-side {
       flex: 1 1 0;
@@ -4451,8 +4455,8 @@
     .topbar-btn {
       display: grid;
       place-items: center;
-      width: calc(2.4 * var(--fit));
-      height: calc(2.4 * var(--fit));
+      width: calc(2.1 * var(--fit));
+      height: calc(2.1 * var(--fit));
       margin: 0;
       padding: 0;
       color: var(--text);
@@ -4943,7 +4947,7 @@
       color: var(--text);
       text-decoration: none;
     }
-    .topbar-brand .brand-logo { height: calc(2.25 * var(--fit)); }
+    .topbar-brand .brand-logo { height: calc(1.75 * var(--fit)); }
     /* The mark is one hue with a lighter sweep across it, not a gradient
        into gold -- ch.02 already moved --brand-sheen for this; the app bar
        is where it is most visible. */
