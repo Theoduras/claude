@@ -65,20 +65,16 @@
          change in viewport height. */
       --fit: clamp(0.7rem, 2.4vh - 0.11rem, 1rem);
       --fit-tight: clamp(0.52rem, 4.267vh - 1.038rem, 1rem);
-    }
-    /* A desktop window is wider than it is a phone, and usually taller than
-       740px too -- but --fit's ceiling was 1rem everywhere, so a step sized
-       for a 740px phone just sat there unchanged while the rest of a 1000px
-       browser window went unused as empty ground around it. The formula
-       already scales past 1rem on its own past 740px of real height; only
-       the desktop ceiling needed raising to let it. Gated on the real
-       viewport (set in base.html), not a media query alone, so the
-       phone-preview iframe inside /admin/design keeps the phone's own
-       proportions rather than growing to match the admin's window. */
-    html[data-viewport="desktop"] {
-      --fit: clamp(0.7rem, 2.4vh - 0.11rem, 1.3rem);
-      --fit-tight: clamp(0.52rem, 4.267vh - 1.038rem, 1.3rem);
 
+      /* Everything from here down is the palette itself, and it belongs to
+         every viewport. It used to sit inside the desktop block below --
+         that block was opened to raise --fit's ceiling and quietly swallowed
+         the rest of :root with it -- so a phone had no --radius, no
+         --measure, no --card-pad, no --field, no --bar and no --tabbar-h.
+         Each one failed the way an undefined custom property does: not as
+         an error but as nothing, so every card on a phone was square, main
+         had no side padding, and the reserve for the fixed tab bar was zero,
+         which is why the bar sat over the last thing on the screen. */
       /* The bar is fixed, so main has to reserve its height by hand -- and
          every part of the bar is now sized in --fit, which makes that height
          one expression rather than a number someone has to remember to keep
@@ -135,6 +131,20 @@
 
       --gleam:       #FFFFFF;  /* the light side of this mode: inner glows, gleams */
       --shade:       #000000;  /* its dark side: shadows, scrims, wells */
+    }
+
+    /* A desktop window is wider than it is a phone, and usually taller than
+       740px too -- but --fit's ceiling was 1rem everywhere, so a step sized
+       for a 740px phone just sat there unchanged while the rest of a 1000px
+       browser window went unused as empty ground around it. The formula
+       already scales past 1rem on its own past 740px of real height; only
+       the desktop ceiling needed raising to let it. Gated on the real
+       viewport (set in base.html), not a media query alone, so the
+       phone-preview iframe inside /admin/design keeps the phone's own
+       proportions rather than growing to match the admin's window. */
+    html[data-viewport="desktop"] {
+      --fit: clamp(0.7rem, 2.4vh - 0.11rem, 1.3rem);
+      --fit-tight: clamp(0.52rem, 4.267vh - 1.038rem, 1.3rem);
     }
 
     /* ==================================================================
@@ -5800,43 +5810,176 @@
        Six doors into the app, over the same footage the landing page
        runs. Almost nothing here is new: the grid is .grid, the card is
        .profile-card (velvet panel, hover lift, and already answered for
-       in light), and the icon disc is .opt-icon with the same .opt-2/3/4
-       hues the option rows use -- so the tiles read as distinct choices
-       rather than one repeated swatch, exactly as they do in a list of
-       options. What is genuinely new is only that a card is a link. */
-    .home { display: flex; flex-direction: column; gap: 1.4rem; }
+       in light), and the icon disc is .opt-icon. What is genuinely new
+       is only that a card is a link -- and that the six of them are a
+       screen rather than a list.
+
+       They are one screen, not a column you scroll. Six doors that need
+       a swipe to see the last two are not an overview of what the app
+       contains, they are a menu with a fold in it -- so the grid is 2x3
+       and takes exactly the height between the app bar and the tab bar,
+       the same bargain .wiz-fit already makes for a step. Everything in
+       it is sized in --fit, so a shorter phone trims the whole screen
+       together rather than pushing the bottom row under the bar.
+
+       And it is a screen only while a screen is enough. Below 760px of
+       viewport the six cards come to about 110px each, which holds a disc
+       and a title and nothing else -- so the honest answer there is to let
+       the page scroll and each card be as tall as what it says, rather
+       than to clip six cards into a shape that no longer reads as one.
+       760 is measured: 780 fits with room and 740 was over by 12px. This
+       is the one thing on the screen that is stepped rather than fluid,
+       because a line of text is. */
+    @media (min-height: 760px) {
+      html[data-viewport="mobile"] .app-shell:has(.home) { height: 100dvh; }
+      html[data-viewport="mobile"] main:has(.home) {
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+      }
+      html[data-viewport="mobile"] .home { flex: 1 1 auto; min-height: 0; }
+      html[data-viewport="mobile"] .home-grid {
+        flex: 1 1 auto;
+        min-height: 0;
+        grid-template-rows: repeat(3, 1fr);
+      }
+    }
+
+    .home { display: flex; flex-direction: column; gap: calc(0.9 * var(--fit)); }
     .home-head { max-width: var(--measure); }
-    .home-head h1 { margin: 0 0 0.4rem; }
-    .home-lede { margin: 0; color: var(--text-muted); }
+    .home-head h1 {
+      margin: 0 0 calc(0.375 * var(--fit));
+      font-size: calc(1.875 * var(--fit));
+      line-height: 1.12;
+      letter-spacing: -0.015em;
+    }
+    .home-lede {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: calc(0.875 * var(--fit));
+      line-height: 1.5;
+    }
     /* Centred is the landing page's arrangement, where the line sits over
        two stacked buttons. Here it follows a left-set headline. */
-    .home-live { justify-content: flex-start; margin: 0.7rem 0 0; }
+    .home-live {
+      justify-content: flex-start;
+      margin: calc(0.625 * var(--fit)) 0 0;
+      font-size: calc(0.78 * var(--fit));
+    }
+
+    /* .grid's auto-fill is for a list of unknown length; this one is six,
+       always, and the rows are equal because the screen is the height. */
+    .home-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: calc(0.625 * var(--fit));
+    }
 
     .home-card {
       /* an <a>, so it has to give back the two things a link takes */
       text-decoration: none;
       color: inherit;
-      gap: 0.5rem;
+      gap: calc(0.375 * var(--fit));
+      padding: calc(0.81 * var(--fit)) calc(0.81 * var(--fit)) calc(0.75 * var(--fit));
+      overflow: hidden;
     }
-    .home-card .opt-icon { margin-bottom: 0.25rem; }
-    .home-card h2 { margin: 0; font-size: 1.05rem; }
+    .home-card .opt-icon {
+      width: calc(2 * var(--fit));
+      height: calc(2 * var(--fit));
+      margin-bottom: calc(0.06 * var(--fit));
+    }
+    .home-card .opt-icon svg { width: var(--fit); height: var(--fit); }
+    .home-card h2 {
+      margin: 0;
+      font-size: calc(0.94 * var(--fit));
+      line-height: 1.25;
+      letter-spacing: -0.015em;
+    }
+    /* Three lines, which is what every one of the six is written to, and
+       a ceiling rather than a habit: the note under it is the live half of
+       the card and must land whole, so the description is the part that
+       gives way. Without this the card just clipped, and what it clipped
+       was the note -- "Still needed: your age, your gender," cut mid-phrase
+       on the one card a brand-new member is there to read. */
     .home-card-body {
       margin: 0;
       color: var(--text-muted);
-      font-size: 0.86rem;
-      line-height: 1.45;
+      font-size: calc(0.72 * var(--fit));
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      overflow: hidden;
+      /* not shrinkable: a flex box squeezed below its clamped height cuts
+         the last line through the middle of the letters rather than ending
+         it, which reads as a rendering fault rather than as more text. The
+         clamp is the only thing that shortens this. */
+      flex: none;
+    }
+    /* A card is its own container, so the description can be told how many
+       lines it may have by the height it actually got rather than by the
+       height a 390x844 phone was drawn at. The row is 1fr of whatever the
+       grid was left, and what is left depends on the greeting above it --
+       "Welcome back, Jeffrey" is one line and "Welcome back, Alexandra
+       Whitmore" is two, which is 38px the six cards no longer have.
+
+       Lines rather than a shrinking box, because the description is the
+       part that gives way and a *box* that gives way cuts its last line
+       through the letters. The note is what this is protecting: it is the
+       only sentence on the grid about right now, and on the profile card
+       it is the one thing standing between a new member and their first
+       search.
+
+       Scoped to the fitted phone, and that is load bearing: `size`
+       containment means the card stops sizing itself from its contents,
+       which is only safe where something else states the height. Inside
+       the block above the row does (1fr of a grid that is the screen);
+       everywhere else the grid is ordinary flow, and a size container
+       there would collapse every card to nothing. Those are also the
+       places where the pressure this relieves does not exist. */
+    @media (min-height: 760px) {
+      html[data-viewport="mobile"] .home-card { container-type: size; }
+    }
+    /* The two heights are measured against the worst case rather than the
+       average one: a note is allowed two lines, so the step down happens
+       where a third line of description would start pushing a *two-line*
+       note past the card's floor. 176px is the padding, the 32px disc, the
+       title, four gaps and a two-line note plus three lines of body; 159px
+       is the same sum with two. Below that a card shows one line of
+       description, which is the trade this whole block exists to make. */
+    @container (max-height: 176px) {
+      .home-card:has(.home-card-note) .home-card-body { -webkit-line-clamp: 2; }
+    }
+    @container (max-height: 159px) {
+      .home-card:has(.home-card-note) .home-card-body { -webkit-line-clamp: 1; }
     }
     /* The live half of a card: whether a search is running, what the
        profile still needs, how much is unread. Set in the text colour
        rather than the muted one -- it is the sentence on the card that
-       is actually about right now. */
+       is actually about right now, and `margin-top: auto` puts it on the
+       card's floor so the six of them line up across the grid rather
+       than each sitting wherever its own body stopped. */
     .home-card-note {
-      margin: 0.15rem 0 0;
-      font-size: 0.82rem;
+      flex: none;
+      margin: auto 0 0;
+      padding-top: calc(0.25 * var(--fit));
+      font-size: calc(0.69 * var(--fit));
       font-weight: 600;
+      line-height: 1.3;
       color: var(--violet-crest);
+      /* the backstop: a member missing all five required fields names all
+         five here, and two lines of that is enough to send them to the
+         card. `flex: none` is what keeps those two lines from being the
+         thing the grid squeezes. */
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
     }
-    .home-foot { margin: 0; font-size: 0.85rem; color: var(--text-faint); }
+    .home-foot {
+      margin: 0;
+      font-size: calc(0.78 * var(--fit));
+      color: var(--text-faint);
+    }
 
     /* On desktop the film is a bottom-right corner box (ch. hero), which
        on the landing page has nothing over it. Here a full-width grid

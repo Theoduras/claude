@@ -14,7 +14,11 @@
 {# What the app contains, said once. Every card is a door, and the three
    that have something live to report say it on the card rather than making
    you open it to find out: whether a search is running, what the profile
-   still needs before one can, and how much is unread. #}
+   still needs before one can, and how much is unread.
+
+   Six doors, one hue. The option rows' .opt-2/3/4 palette said "these are
+   alternatives, pick one"; six places the app keeps is not that question,
+   and colouring them apart made the grid read as a legend. #}
 <div class="home">
   <div class="home-head">
     <h1>
@@ -35,30 +39,30 @@
       literal: check_i18n.py collects keys by regex, so a key assembled at
       render time would quietly escape being checked in either language. -#}
   {% set cards = [
-    {"slot": "home.search", "hue": "",
+    {"slot": "home.search",
      "href": url_for('live_search'),
      "title": t("home.search_title"),
      "body": t("home.search_body"),
      "note": t("home.search_running") if search_is_running() else ""},
-    {"slot": "home.chats", "hue": "opt-2",
+    {"slot": "home.chats",
      "href": url_for('chats'),
      "title": t("home.chats_title"),
      "body": t("home.chats_body"), "note": ""},
-    {"slot": "home.profile", "hue": "opt-3",
+    {"slot": "home.profile",
      "href": url_for('view_profile', user_id=current_user['id']),
      "title": t("home.profile_title"),
      "body": t("home.profile_body"),
      "note": "" if completeness.ready
              else t("home.profile_missing", items=completeness.missing | join(", ") | lower)},
-    {"slot": "home.notifications", "hue": "",
+    {"slot": "home.notifications",
      "href": url_for('notifications_inbox'),
      "title": t("home.notifications_title"),
      "body": t("home.notifications_body"), "note": ""},
-    {"slot": "home.settings", "hue": "opt-2",
+    {"slot": "home.settings",
      "href": url_for('settings'),
      "title": t("home.settings_title"),
      "body": t("home.settings_body"), "note": ""},
-    {"slot": "home.safety", "hue": "opt-4",
+    {"slot": "home.safety",
      "href": url_for('safety'),
      "title": t("home.safety_title"),
      "body": t("home.safety_body"), "note": ""}
@@ -66,7 +70,7 @@
 
   <div class="grid home-grid">
     {% for card in cards %}
-      <a class="profile-card home-card {{ card.hue }}" href="{{ card.href }}">
+      <a class="profile-card home-card" href="{{ card.href }}">
         <span class="opt-icon">{{ icon(card.slot) }}</span>
         <h2>{{ card.title }}</h2>
         <p class="home-card-body">{{ card.body }}</p>
