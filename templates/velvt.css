@@ -65,6 +65,19 @@
          change in viewport height. */
       --fit: clamp(0.7rem, 2.4vh - 0.11rem, 1rem);
       --fit-tight: clamp(0.52rem, 4.267vh - 1.038rem, 1rem);
+    }
+    /* A desktop window is wider than it is a phone, and usually taller than
+       740px too -- but --fit's ceiling was 1rem everywhere, so a step sized
+       for a 740px phone just sat there unchanged while the rest of a 1000px
+       browser window went unused as empty ground around it. The formula
+       already scales past 1rem on its own past 740px of real height; only
+       the desktop ceiling needed raising to let it. Gated on the real
+       viewport (set in base.html), not a media query alone, so the
+       phone-preview iframe inside /admin/design keeps the phone's own
+       proportions rather than growing to match the admin's window. */
+    html[data-viewport="desktop"] {
+      --fit: clamp(0.7rem, 2.4vh - 0.11rem, 1.3rem);
+      --fit-tight: clamp(0.52rem, 4.267vh - 1.038rem, 1.3rem);
 
       /* The bar is fixed, so main has to reserve its height by hand -- and
          every part of the bar is now sized in --fit, which makes that height
@@ -905,6 +918,13 @@
         width: 100%;
         max-width: 27rem;
       }
+    }
+    /* --fit's desktop ceiling now scales content past its phone-calibrated
+       size, and a step that grows taller without growing wider just gets
+       cramped -- the same 27rem box holding bigger type and a bigger photo
+       frame. Widen it to match, on the real desktop viewport only. */
+    html[data-viewport="desktop"] .wiz {
+      max-width: 31rem;
     }
     /* A screen where one part scrolls inside itself (the room's transcript,
        the decision screens') has to be bounded by the viewport first: main
