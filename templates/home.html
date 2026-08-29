@@ -2,14 +2,6 @@
 {% from "_icons.html" import icon %}
 {% block title %}{{ t("home.title") }}{% endblock %}
 
-{#- The same footage the landing page runs, from the same partial. `is-home`
-    is the difference: there the film has the screen to itself, here a grid
-    of cards sits over the top of it. -#}
-{% block backdrop %}
-  {%- set film_class = " is-home" -%}
-  {% include "_hero_film.html" %}
-{% endblock %}
-
 {% block content %}
 {# What the app contains, said once. Every card is a door, and the three
    that have something live to report say it on the card rather than making

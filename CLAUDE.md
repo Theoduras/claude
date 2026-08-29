@@ -428,13 +428,14 @@ wants before a first search is possible, the Notifications card the unread count
 those three are already cached on `g` for the render; `home_state()` adds one query, for
 the one that explains why a new member cannot search yet.
 
-**The film is the landing page's, from one partial.** `templates/_hero_film.html` holds
-the `.hero-film` layer, its three `data-*` sources and the script that attaches them —
-so the `prefers-reduced-motion` bargain (no bytes at all, not bytes then hidden) and the
-mobile/desktop source split cannot drift between the two screens. `film_class` is the
-only difference: `is-home` confines it to a top band behind the greeting on a phone,
-where six cards would otherwise have a photo peeking through every gap, and steps the
-desktop corner box back to a watermark.
+**There is no film behind this screen.** It ran the landing page's footage through
+`templates/_hero_film.html` for a while, masked to a band behind the greeting on a
+phone and to a corner watermark on desktop. What replaced it is per-card: each of the
+six now carries a character from the Character Screens canvas, set to the card's right
+edge and masked away before it reaches the text (`.home-card-art`). One picture per
+door beats one film behind all six — and it drops the heaviest asset in the app from a
+screen that is already six cards deep. `_hero_film.html` and its `film_class` hook are
+untouched; the landing page is the only caller now.
 
 **The verification gate still wins.** `index` is in `VERIFY_GATE_EXEMPT`, so without an
 explicit branch an unconfirmed account would get a screen of cards whose every link
