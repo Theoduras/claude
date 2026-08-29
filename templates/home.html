@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ t("home.title") }}{% endblock %}
+
+{% block content %}
+{# What the app contains, said once. Every card is a door, and the three
+   that have something live to report say it on the card rather than making
+   you open it to find out: whether a search is running, what the profile
+   still needs before one can, and how much is unread.
+
+   Six doors, one hue. The option rows' .opt-2/3/4 palette said "these are
+   alternatives, pick one"; six places the app keeps is not that question,
+   and colouring them apart made the grid read as a legend. #}
+<div class="home">
+  <div class="home-head">
+    <h1>
+      {% if name %}{{ t("home.greeting_named", name=name) }}
+      {% else %}{{ t("home.greeting") }}{% endif %}
+    </h1>
+    <p class="home-lede">{{ t("home.lede") }}</p>
+    {# The same true-at-every-tier line the landing page carries, and the
+       same rule: the pulsing dot belongs to the one tier with live
+       searchers behind it. See landing_pulse(). #}
+    <p class="landing-live home-live">
+      {% if pulse.live %}<span class="live-dot"></span>{% endif %}
+      {{ pulse.text }}
+    </p>
+  </div>
+
+  {#- Built as data and looped, but every t() key is written out as a
+      literal: check_i18n.py collects keys by regex, so a key assembled at
+      render time would quietly escape being checked in either language. -#}
+  {#- `art` is the one image each door wears, set to the right-hand edge of
+      the card and faded out before it reaches the text (.home-card-art).
+      It is decoration and nothing else: a card with no `art` is the same
+      card, so a missing file costs a picture rather than a door.
+
+      `art_w` is the exception the shapes force. Five of the six drawings
+      stand upright and are sized by the card's height; the pair at the
+      café table is the one landscape one, and at the shared 62% it is
+      boxed by width and lands about two-thirds their height. So the card
+      states the room it needs instead. -#}
+  {% set cards = [
+    {"slot": "home.search",
+     "href": url_for('live_search'),
+     "title": t("home.search_title"),
+     "body": t("home.search_body"),
+     "art": "chars/inspecting.webp",
+     "note": t("home.search_running") if search_is_running() else ""},
+    {"slot": "home.chats",
+     "href": url_for('chats'),
+     "title": t("home.chats_title"),
+     "body": t("home.chats_body"),
+     "art": "chars/in-conversation.webp",
+     "art_w": "85%", "note": ""},
+    {"slot": "home.profile",
+     "href": url_for('view_profile', user_id=current_user['id']),
+     "title": t("home.profile_title"),
+     "body": t("home.profile_body"),
+     "art": "chars/presenting.webp",
+     "note": "" if completeness.ready
+             else t("home.profile_missing", items=completeness.missing | join(", ") | lower)},
+    {"slot": "home.notifications",
+     "href": url_for('notifications_inbox'),
+     "title": t("home.notifications_title"),
+     "body": t("home.notifications_body"),
+     "art": "chars/delighted.webp", "note": ""},
+    {"slot": "home.settings",
+     "href": url_for('settings'),
+     "title": t("home.settings_title"),
+     "body": t("home.settings_body"),
+     "art": "chars/tuning.webp", "note": ""},
+    {"slot": "home.safety",
+     "href": url_for('safety'),
+     "title": t("home.safety_title"),
+     "body": t("home.safety_body"),
+     "art": "chars/protected.webp", "note": ""}
+  ] %}
+
+  <div class="grid home-grid">
+    {% for card in cards %}
+      <a class="profile-card home-card" href="{{ card.href }}">
+        {%- if card.art %}
+          <span class="home-card-art" aria-hidden="true"
+                style="background-image: url('{{ url_for('static', filename=card.art) }}')
+                       {%- if card.art_w %}; --art-w: {{ card.art_w }}{% endif %}"></span>
+        {%- endif %}
+        <span class="opt-icon">{{ icon(card.slot) }}</span>
+        <h2>{{ card.title }}</h2>
+        <p class="home-card-body">{{ card.body }}</p>
+        {% if card.note %}
+          <p class="home-card-note">{{ card.note }}</p>
+        {% elif card.slot == "home.notifications" %}
+          {#- The one note that is a number rather than a sentence, and it
+              is already counted for the badge in the nav. -#}
+          {% set unread = unread_notifications() %}
+          {% if unread %}
+            <p class="home-card-note">{{ t("home.notifications_unread", n=unread) }}</p>
+          {% endif %}
+        {% endif %}
+      </a>
+    {% endfor %}
+  </div>
+
+  <p class="home-foot">
+    <a href="{{ url_for('how_matching_works') }}">{{ t("home.how_it_works") }}</a>
+  </p>
+</div>
+{% endblock %}

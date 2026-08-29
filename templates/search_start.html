@@ -1,24 +1,556 @@
 {% extends "base.html" %}
-{% block title %}Live search — Velvet{% endblock %}
-{% block content %}
-<h1>What are you looking for?</h1>
-<p class="subtitle">Step 1 of 2 &middot; Choose the kind of connection, then set your filters.</p>
-
-<form method="post" action="{{ url_for('live_search') }}">
-  <div class="grid">
-    {% for rt in relationship_types %}
-      <label class="choice {% if existing and existing['relationship_type'] == rt %}choice-suggested{% endif %}">
-        <input type="radio" name="relationship_type" value="{{ rt }}"
-               {% if existing and existing['relationship_type'] == rt %}checked{% endif %} required>
-        <span>
-          <strong>{{ rt }}</strong>
-          {% if existing and existing['relationship_type'] == rt %}
-            <span class="muted" style="font-size: 0.8rem;">your last search</span>
-          {% endif %}
-        </span>
-      </label>
-    {% endfor %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ t("wiz.title") }}{% endblock %}
+{% block appbar %}
+  {#- ch.05: the wizard's Back *is* the app bar's chevron. It was a second
+      chevron at the foot of the step, beside Next, which put the two
+      directions of one flow at opposite weights in the same row. The
+      button stays a <button> and keeps its id, so the stepper below still
+      drives it; only where it is drawn has changed. -#}
+  <div class="topbar">
+    <div class="topbar-side">
+      <button type="button" class="topbar-btn is-hidden" id="wiz-back"
+              aria-label="{{ t('wiz.back_aria') }}">{{ icon("nav.back") }}</button>
+    </div>
+    <a class="topbar-brand" href="{{ url_for('index') }}">
+      <span class="brand-logo"></span><span class="brand-word">Velvt</span>
+    </a>
+    <div class="topbar-side is-end"></div>
   </div>
-  <button class="btn" type="submit" style="margin-top: 1rem;">Continue &rarr;</button>
+{% endblock %}
+{% block content %}
+{# Six questions, one visible at a time. Every step is in this one form and
+   the stepping happens in the browser, so answering a question never costs a
+   page load; the whole thing posts once at the end. Without JS all six steps
+   stay visible and the form still submits -- the flow degrades to a long
+   single page rather than breaking. #}
+<form method="post" action="{{ url_for('live_search') }}" id="wiz-form" class="wiz wiz-steady">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="wiz-progress" aria-hidden="true"><span id="wiz-bar"></span></div>
+
+  <p class="wiz-count" id="wiz-count" data-step-template="{{ t('wiz.step', n='{n}', total='{total}') }}">{{ t("wiz.step", n=1, total=5) }}</p>
+
+  <div class="wiz-body">
+  {# ---- 1. connection type ---------------------------------------------
+     Checkboxes, not radios: a searcher can want more than one kind of
+     connection, and searches_compatible() treats relationship_type as a
+     CSV now -- two searches pass this filter as soon as they share one
+     type. data-required just needs *a* checked input by that name, which
+     :checked already answers the same way for a group of checkboxes as it
+     does for radios. #}
+  <section class="wiz-step" data-step="1" data-required="relationship_type">
+    <h1 class="wiz-q">{{ t("wiz.q_relationship_1") }}<br>{{ t("wiz.q_relationship_2") }}</h1>
+    <p class="wiz-hint">{{ t("wiz.hint_multi") }}</p>
+    <div class="opt-list">
+      {% for rt in relationship_types %}
+        <label class="opt opt-{{ loop.index }}">
+          <input type="checkbox" name="relationship_type" value="{{ rt }}"
+                 class="visually-hidden"
+                 {% if rt in existing_relationship_types %}checked{% endif %}>
+          <span class="opt-icon">
+            {{ icon("rel." ~ rt) }}
+          </span>
+          <span class="opt-label">{{ opt_label(rt) }}</span>
+          <span class="opt-mark opt-mark-box"></span>
+        </label>
+      {% endfor %}
+    </div>
+    {#- Everyone is in the one city by construction (pinned_place()), so this
+        is a statement, not a filter -- and saying it here is what stops the
+        first question reading as though location were still to come. -#}
+    {% if single_city %}
+      <p class="pin-line">{{ icon("pill.location") }}{{ t("wiz.pin", city=single_city) }}</p>
+    {% endif %}
+  </section>
+
+  {# ---- 2. gender ---------------------------------------------------- #}
+  <section class="wiz-step" data-step="2" data-required="seeking">
+    <h1 class="wiz-q">{{ t("wiz.q_seeking_1") }}<br>{{ t("wiz.q_relationship_2") }}</h1>
+    <div class="opt-list">
+      {% for opt in seeking_options %}
+        <label class="opt opt-{{ loop.index }}">
+          <input type="radio" name="seeking" value="{{ opt }}" class="visually-hidden"
+                 {% if existing and existing['seeking'] == opt %}checked{% endif %}>
+          <span class="opt-icon">
+            {{ icon("seek." ~ opt) }}
+          </span>
+          <span class="opt-label">{{ opt_label(opt) }}</span>
+          <span class="opt-mark"></span>
+        </label>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ---- 3. age ------------------------------------------------------- #}
+  <section class="wiz-step" data-step="3">
+    <h1 class="wiz-q">{{ t("wiz.q_age_1") }}<br>{{ t("wiz.q_age_2") }}</h1>
+    <p class="wiz-hint">
+      {{ t("wiz.hint_age") }}
+    </p>
+    <div class="wiz-field">
+      <p class="wiz-readout" id="age-value"></p>
+      {# the same dual-thumb control the criteria screen uses #}
+      <div class="range-dual">
+        <div class="range-dual-track"></div>
+        <div class="range-dual-fill" id="age-fill"></div>
+        <input type="range" id="age_min" name="age_min"
+               min="{{ age_min_bound }}" max="{{ age_max_bound }}"
+               value="{{ existing['age_min'] if existing else age_min_bound }}"
+               aria-label="{{ t('wiz.age_min_aria') }}">
+        <input type="range" id="age_max" name="age_max"
+               min="{{ age_min_bound }}" max="{{ age_max_bound }}"
+               value="{{ existing['age_max'] if existing else age_max_bound }}"
+               aria-label="{{ t('wiz.age_max_aria') }}">
+      </div>
+    </div>
+  </section>
+
+  {# ---- 4. location -------------------------------------------------- #}
+  {# Skipped entirely while there is only one city: asking would be a step with
+     one possible answer, and the server pins it anyway. The stepper walks
+     .wiz-step in DOM order and sizes its progress bar from the count, so
+     omitting this section renumbers the wizard on its own. #}
+  {% if not single_city %}
+  <section class="wiz-step" data-step="4">
+    <h1 class="wiz-q">{{ t("wiz.q_location_1") }}<br>{{ t("wiz.q_location_2") }}</h1>
+    <p class="wiz-hint">
+      {{ t("wiz.hint_location") }}
+    </p>
+    <div class="wiz-field">
+      {% with loc_label = 'Location',
+              loc_value = (existing['location'] if existing and existing['location'] else me['location']),
+              loc_lat_id = 'location_lat', loc_lng_id = 'location_lng',
+              loc_lat_value = (existing['lat'] if existing and existing['lat'] is not none else ''),
+              loc_lng_value = (existing['lng'] if existing and existing['lng'] is not none else '') %}
+        {% include "_location_field.html" with context %}
+      {% endwith %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ---- 5. interests ------------------------------------------------- #}
+  {# The value the server reads is this hidden CSV; the chips below (and the
+     overlay) are just two ways of editing it, so it stays one field. #}
+  <section class="wiz-step" data-step="5">
+    <h1 class="wiz-q">{{ t("wiz.q_interests_1") }}<br>{{ t("wiz.q_interests_2") }}</h1>
+    <p class="wiz-hint">
+      Pick none for no preference, or up to {{ interest_max }} to only meet
+      people who share at least one.
+    </p>
+    <input type="hidden" id="interests" name="interests"
+           value="{{ existing['interests'] if existing else '' }}">
+    <div class="pillset" id="interest-pills">
+      {# anything already chosen that is not one of the common ones leads,
+         so a pick made in the overlay is still visible on the step #}
+      {% for opt in interest_chosen if opt not in interest_common %}
+        <button type="button" class="pill is-on" data-value="{{ opt }}"
+                aria-pressed="true">{{ opt }}</button>
+      {% endfor %}
+      {% for opt in interest_common %}
+        <button type="button" class="pill{% if opt in interest_chosen %} is-on{% endif %}"
+                data-value="{{ opt }}"
+                aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ opt }}</button>
+      {% endfor %}
+      <button type="button" class="pill pill-more" id="interest-more"
+              aria-haspopup="dialog">{{ t("wiz.more") }}</button>
+    </div>
+  </section>
+
+  {# ---- 6. body type ------------------------------------------------- #}
+  <section class="wiz-step" data-step="6">
+    <h1 class="wiz-q">{{ t("wiz.q_body_1") }}<br>{{ t("wiz.q_body_2") }}</h1>
+    <p class="wiz-hint">{{ t("wiz.hint_body") }}</p>
+    <div class="opt-list opt-list-2col">
+      {% for bt in body_types %}
+        <label class="opt opt-{{ loop.index }}">
+          <input type="checkbox" name="pref_body_types" value="{{ bt }}"
+                 class="visually-hidden"
+                 {% if bt in existing_body_types %}checked{% endif %}>
+          <span class="opt-icon">
+            {{ icon("body.type") }}
+          </span>
+          <span class="opt-label">{{ opt_label(bt) }}</span>
+          <span class="opt-mark opt-mark-box"></span>
+        </label>
+      {% endfor %}
+    </div>
+  </section>
+
+  </div>
+
+  {#- One button, full width, which is the whole foot of the step. The
+      label is carried on the element rather than in the script so the last
+      step can say "Start searching" in the reader's own language -- it used
+      to be an ::after in the stylesheet, in English, whatever the page
+      around it was set in. -#}
+  <div class="wiz-nav wiz-nav-block">
+    <button type="submit" class="btn btn-block wiz-next" id="wiz-next"
+            data-label-next="{{ t('wiz.next') }}"
+            data-label-final="{{ t('wiz.start') }}">{{ t("wiz.next") }}</button>
+    <button type="button" class="wiz-skip" id="wiz-skip">{{ t("wiz.skip") }}</button>
+  </div>
+  {# The full list, one tap from the step. A dialog rather than an expanding
+     panel so the step underneath keeps its promise of never scrolling. #}
+  <div class="sheet" id="interest-sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true"
+         aria-labelledby="interest-sheet-title">
+      <div class="sheet-head">
+        <h2 id="interest-sheet-title">{{ t("wiz.sheet_title") }}</h2>
+        <button type="button" class="sheet-x" data-close aria-label="{{ t('sheet.close') }}">
+          {{ icon("sheet.close.wide") }}
+        </button>
+      </div>
+      <div class="sheet-body">
+        <p class="sheet-count" id="interest-count"></p>
+        <div class="pillset" id="interest-all">
+          {% for opt in interest_all %}
+            <button type="button" class="pill{% if opt in interest_chosen %} is-on{% endif %}"
+                    data-value="{{ opt }}"
+                    aria-pressed="{{ 'true' if opt in interest_chosen else 'false' }}">{{ opt }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="sheet-add">
+        <input type="text" id="interest-custom" maxlength="30"
+               placeholder="{{ t('wiz.custom_ph') }}" aria-label="{{ t('wiz.custom_aria') }}">
+        <button type="button" class="btn btn-secondary" id="interest-add">{{ t("wiz.add") }}</button>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn btn-block" data-close>{{ t("wiz.done") }}</button>
+      </div>
+    </div>
+  </div>
 </form>
+
+<script nonce="{{ csp_nonce() }}">
+(function () {
+  var form = document.getElementById("wiz-form");
+  var steps = Array.prototype.slice.call(form.querySelectorAll(".wiz-step"));
+  var bar = document.getElementById("wiz-bar");
+  var count = document.getElementById("wiz-count");
+  var stepWord = count.getAttribute("data-step-template") || "Step {n} of {total}";
+  var back = document.getElementById("wiz-back");
+  var next = document.getElementById("wiz-next");
+  var skip = document.getElementById("wiz-skip");
+  if (!steps.length) return;
+
+  // Only now that the stepper is running does hiding steps become safe --
+  // with no JS the class is never added and all six stay on the page.
+  form.classList.add("wiz-js");
+
+  var at = 0;
+  var last = steps.length - 1;
+
+  function required(i) {
+    return steps[i].getAttribute("data-required");
+  }
+
+  function answered(i) {
+    var name = required(i);
+    if (!name) return true;
+    return !!form.querySelector('input[name="' + name + '"]:checked');
+  }
+
+  function render() {
+    steps.forEach(function (s, i) { s.classList.toggle("is-on", i === at); });
+    bar.style.width = ((at + 1) / steps.length * 100) + "%";
+    count.textContent = stepWord.replace("{n}", at + 1).replace("{total}", steps.length);
+    // visibility, not display: Back and Skip keep their space when hidden so
+    // Next never shifts by a pixel between steps.
+    back.classList.toggle("is-hidden", at === 0);
+    // A required step has to be answered before it will advance; the optional
+    // ones offer Skip instead, so the button never looks enabled-but-dead.
+    skip.classList.toggle("is-hidden", !!required(at) || at === last);
+    next.classList.toggle("is-final", at === last);
+    next.textContent = at === last
+      ? next.getAttribute("data-label-final")
+      : next.getAttribute("data-label-next");
+    // The submit only ever belongs to the last step. Everywhere else the
+    // click is intercepted below, but typing Enter in a text field would
+    // otherwise post a half-finished form.
+    next.type = at === last ? "submit" : "button";
+  }
+
+  function go(i) {
+    cancelAuto();
+    at = Math.max(0, Math.min(i, last));
+    render();
+    var card = steps[at];
+    card.classList.remove("wiz-in");
+    void card.offsetWidth;  // restart the transition
+    card.classList.add("wiz-in");
+    var focusable = card.querySelector("input:not([type=hidden]), select, textarea");
+    if (focusable && focusable.type === "text") focusable.focus();
+  }
+
+  next.addEventListener("click", function (ev) {
+    if (at === last) return;  // let it submit
+    ev.preventDefault();
+    if (!answered(at)) {
+      steps[at].classList.add("wiz-nudge");
+      setTimeout(function () { steps[at].classList.remove("wiz-nudge"); }, 400);
+      return;
+    }
+    go(at + 1);
+  });
+
+  back.addEventListener("click", function () { go(at - 1); });
+  skip.addEventListener("click", function () { go(at + 1); });
+
+  // ---- answering a step *is* the way forward ------------------------
+  //
+  // Only the single-choice step used to advance on its own; every other one
+  // wanted a tap on Next after the tap that answered it, which is two taps
+  // for one decision, five times over.
+  //
+  // The two kinds of step need different moments, because a multi-select
+  // has no single tap that means "done":
+  //
+  //   - one answer out of several (radio) advances almost at once. The
+  //     choice is complete the instant it is made.
+  //   - many answers, or a slider, advance once you *stop*. Each further
+  //     tap cancels the pending move and starts the wait again, so picking
+  //     three things is three taps and one wait, not a race.
+  //
+  // Next stays where it is. It is no longer the only way on -- it is the
+  // way on for someone who has answered nothing (interests and body type
+  // are both legitimately empty) or who does not want to wait.
+  var AUTO_PICK_MS = 200;     // a single choice: complete when tapped
+  var AUTO_SETTLE_MS = 1300;  // a multi-choice: complete when you stop
+  var autoTimer = null;
+
+  function cancelAuto() {
+    if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+  }
+
+  function scheduleAuto(delay) {
+    cancelAuto();
+    var from = at;
+    autoTimer = setTimeout(function () {
+      autoTimer = null;
+      // Everything that could have changed under the timer, re-checked at
+      // the moment it fires rather than assumed from when it was set: the
+      // step may have moved, the last box may have been unticked, the
+      // interest overlay may be open over the top of it.
+      if (at !== from || at === last) return;
+      if (!answered(from)) return;
+      if (sheet && !sheet.hidden) return;
+      go(from + 1);
+    }, delay);
+  }
+
+  // Click rather than change on purpose: a step can open with an option
+  // already selected (a saved search, or "Any age" as the default), and
+  // re-tapping that one fires no change event at all, leaving the tap
+  // looking broken. A label click also bubbles twice -- once for the label,
+  // once for the click the browser forwards to the input it wraps -- and
+  // that needs no guard here, because the second one only cancels the first
+  // timer and sets an identical one.
+  form.addEventListener("click", function (ev) {
+    var row = ev.target.closest ? ev.target.closest(".opt") : null;
+    if (!row || at === last) return;
+    var input = row.querySelector("input");
+    if (!input) return;
+    scheduleAuto(input.type === "radio" ? AUTO_PICK_MS : AUTO_SETTLE_MS);
+  });
+
+  // A slider settles rather than being answered: reschedule on every move
+  // so the step waits until the thumb has been still for a moment.
+  Array.prototype.forEach.call(
+    form.querySelectorAll('input[type="range"]'),
+    function (r) {
+      r.addEventListener("input", function () { scheduleAuto(AUTO_SETTLE_MS); });
+    }
+  );
+
+  // Enter anywhere in the form means "next", not "submit", until the end.
+  form.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Enter" || at === last) return;
+    ev.preventDefault();
+    next.click();
+  });
+
+  // ---- interests: two pill sets over one hidden CSV field ----
+  var interests = document.getElementById("interests");
+  var inlinePills = document.getElementById("interest-pills");
+  var allPills = document.getElementById("interest-all");
+  var sheet = document.getElementById("interest-sheet");
+
+  function chosenList() {
+    return interests.value.split(",")
+      .map(function (s) { return s.trim(); })
+      .filter(Boolean);
+  }
+
+  function paint() {
+    var on = chosenList();
+    var full = on.length >= MAX;
+    [inlinePills, allPills].forEach(function (set) {
+      set.classList.toggle("is-full", full);
+      set.querySelectorAll(".pill[data-value]").forEach(function (pill) {
+        var isOn = on.indexOf(pill.dataset.value) !== -1;
+        pill.classList.toggle("is-on", isOn);
+        pill.setAttribute("aria-pressed", isOn ? "true" : "false");
+        // at the cap the unpicked ones are inert rather than silently
+        // ignoring the tap
+        pill.disabled = full && !isOn;
+      });
+    });
+    countEl.textContent = on.length + " of " + MAX + " chosen"
+      + (full ? " — remove one to swap" : "");
+    countEl.classList.toggle("is-full", full);
+    customAdd.disabled = full;
+    customIn.disabled = full;
+    // a count on the More chip, so picks made in the overlay that have no
+    // inline chip of their own are still accounted for on the step
+    var hidden = on.filter(function (v) {
+      return !inlinePills.querySelector('.pill[data-value="' + CSS.escape(v) + '"]');
+    }).length;
+    moreBtn.textContent = hidden ? "+ More · " + hidden : "+ More";
+  }
+
+  function toggleInterest(value) {
+    var on = chosenList();
+    var i = on.indexOf(value);
+    if (i !== -1) {
+      on.splice(i, 1);
+    } else {
+      if (on.length >= MAX) return;   // server caps too, this is just the UI
+      on.push(value);
+    }
+    interests.value = on.join(", ");
+    paint();
+  }
+
+  // A written-in interest becomes a chip in both sets, so it can be toggled
+  // off again like any other rather than being stuck once added.
+  function addCustom() {
+    var value = customIn.value.replace(/[,]/g, " ").trim().replace(/\s+/g, " ");
+    if (!value) return;
+    var existingPill = allPills.querySelector('.pill[data-value="' + CSS.escape(value) + '"]')
+      || inlinePills.querySelector('.pill[data-value="' + CSS.escape(value) + '"]');
+    var already = chosenList().some(function (v) {
+      return v.toLowerCase() === value.toLowerCase();
+    });
+    if (!already) {
+      if (chosenList().length >= MAX) return;
+      if (!existingPill) {
+        [allPills, inlinePills].forEach(function (set) {
+          var pill = document.createElement("button");
+          pill.type = "button";
+          pill.className = "pill";
+          pill.dataset.value = value;
+          pill.textContent = value;
+          if (set === inlinePills) set.insertBefore(pill, inlinePills.firstChild);
+          else set.insertBefore(pill, set.firstChild);
+        });
+      }
+      toggleInterest(value);
+    }
+    customIn.value = "";
+  }
+
+  var moreBtn = document.getElementById("interest-more");
+  var countEl = document.getElementById("interest-count");
+  var customIn = document.getElementById("interest-custom");
+  var customAdd = document.getElementById("interest-add");
+  var MAX = {{ interest_max }};
+
+  customAdd.addEventListener("click", addCustom);
+  customIn.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Enter") return;
+    ev.preventDefault();
+    ev.stopPropagation();   // the form-level Enter handler means "next step"
+    addCustom();
+  });
+
+  [inlinePills, allPills].forEach(function (set) {
+    set.addEventListener("click", function (ev) {
+      var pill = ev.target.closest(".pill[data-value]");
+      if (!pill) return;
+      ev.preventDefault();
+      toggleInterest(pill.dataset.value);
+      // Interests are the other multi-choice step: picking on the step
+      // itself settles the same way the checkbox lists do. Picking inside
+      // the overlay does not -- that sheet is closed with Done, and moving
+      // the step on underneath an open dialog is the one thing the wait
+      // must not do.
+      if (set === inlinePills) scheduleAuto(AUTO_SETTLE_MS);
+    });
+  });
+
+  // main carries `position: relative; z-index: 1`, which makes it a stacking
+  // context -- so a sheet left inside it can never rise above the tab bar
+  // (a sibling of main at z-index 3), whatever z-index it asks for. Hoisting
+  // it to .app-shell escapes that context while still scoping the overlay to
+  // the app frame, so on a wide screen it covers the phone-width column
+  // rather than the whole browser window. Safe to detach from the form: the
+  // pills write to the hidden input through JS and are never submitted.
+  (document.querySelector(".app-shell") || document.body).appendChild(sheet);
+
+  function openSheet() {
+    sheet.hidden = false;
+    requestAnimationFrame(function () { sheet.classList.add("is-open"); });
+  }
+  function closeSheet() {
+    sheet.classList.remove("is-open");
+    setTimeout(function () {
+      sheet.hidden = true;
+      // Done means done: the step settles from here as if the last pill had
+      // just been tapped on the step itself.
+      scheduleAuto(AUTO_SETTLE_MS);
+    }, 200);
+  }
+  moreBtn.addEventListener("click", function () {
+    // "More" is a way of answering the step, not an answer to it, so it
+    // calls off any move the last pill had scheduled.
+    cancelAuto();
+    openSheet();
+  });
+  sheet.addEventListener("click", function (ev) {
+    if (ev.target.closest("[data-close]")) closeSheet();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && !sheet.hidden) closeSheet();
+  });
+
+  paint();
+
+  // ---- age slider (same dual-thumb behaviour as the criteria screen) ----
+  var minEl = document.getElementById("age_min");
+  var maxEl = document.getElementById("age_max");
+  var ageOut = document.getElementById("age-value");
+  var ageFill = document.getElementById("age-fill");
+  var ageLo = parseInt(minEl.min, 10), ageHi = parseInt(minEl.max, 10);
+
+  function pct(v) { return ((v - ageLo) / (ageHi - ageLo)) * 100; }
+
+  function syncAge(changed) {
+    var lo = parseInt(minEl.value, 10);
+    var hi = parseInt(maxEl.value, 10);
+    if (lo > hi) {
+      if (changed === "min") maxEl.value = lo; else minEl.value = hi;
+      lo = parseInt(minEl.value, 10);
+      hi = parseInt(maxEl.value, 10);
+    }
+    ageOut.textContent = (lo === ageLo && hi === ageHi)
+      ? "Any age"
+      : lo + " – " + hi + " years";
+    ageFill.style.left = pct(lo) + "%";
+    ageFill.style.width = (pct(hi) - pct(lo)) + "%";
+    // Whichever thumb is behind gets priority so overlapping handles can
+    // still be pulled apart.
+    minEl.style.zIndex = changed === "max" ? 2 : 3;
+    maxEl.style.zIndex = changed === "max" ? 3 : 2;
+  }
+
+  minEl.addEventListener("input", function () { syncAge("min"); });
+  maxEl.addEventListener("input", function () { syncAge("max"); });
+  syncAge();
+
+  go(0);
+})();
+</script>
 {% endblock %}

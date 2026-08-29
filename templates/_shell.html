@@ -1,0 +1,58 @@
+{#- ch.05 §1 -- the app bar.
+
+    One bar for every screen but the landing page: the wordmark, centred on
+    the frame, with an optional way back on the left and an optional action
+    on the right. The two flanks are equal-width whether or not either is
+    used, which is what keeps the mark centred on the *frame* rather than on
+    whatever is left over beside it.
+
+    A step inside a flow -- register, the search wizard, edit profile -- puts
+    a chevron in the left flank. Everything else leaves both flanks empty and
+    gets exactly the bar the design asks for: a wordmark over the content,
+    and the tab pill at the foot.
+
+    `back` takes a URL. Omit it and the chevron steps the history back
+    instead, which is what a home-screen web app has no chrome to offer. -#}
+{% from "_icons.html" import icon %}
+
+{% macro _back(back, back_label) %}
+  {% if back %}
+    <a class="topbar-btn" href="{{ back }}" aria-label="{{ back_label or 'Back' }}">{{ icon("nav.back") }}</a>
+  {% else %}
+    <button type="button" class="topbar-btn" data-back aria-label="{{ back_label or 'Back' }}">{{ icon("nav.back") }}</button>
+  {% endif %}
+{% endmacro %}
+
+{% macro appbar(back=False, back_label=None, title=None) %}
+  <div class="topbar">
+    <div class="topbar-side">{% if back is not sameas false %}{{ _back(back, back_label) }}{% endif %}</div>
+    {% if title %}
+      <span class="topbar-title">{{ title }}</span>
+    {% else %}
+      <a class="topbar-brand" href="{{ url_for('index') }}">
+        <span class="brand-logo"></span><span class="brand-word">Velvt</span>
+      </a>
+    {% endif %}
+    <div class="topbar-side is-end"></div>
+  </div>
+{% endmacro %}
+
+{#- The one screen with an action on the right: the profile's overflow menu.
+    Jinja cannot make a macro both callable-with-a-block and not, so the
+    open/close pair is its own name rather than a flag. -#}
+{% macro appbar_open(back=False, back_label=None, title=None) %}
+  <div class="topbar">
+    <div class="topbar-side">{% if back is not sameas false %}{{ _back(back, back_label) }}{% endif %}</div>
+    {% if title %}
+      <span class="topbar-title">{{ title }}</span>
+    {% else %}
+      <a class="topbar-brand" href="{{ url_for('index') }}">
+        <span class="brand-logo"></span><span class="brand-word">Velvt</span>
+      </a>
+    {% endif %}
+    <div class="topbar-side is-end">
+{% endmacro %}
+{% macro appbar_close() %}
+    </div>
+  </div>
+{% endmacro %}

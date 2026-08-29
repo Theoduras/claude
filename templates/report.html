@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Report — Velvt{% endblock %}
+{% block appbar %}{{ appbar(back=None, back_label=t("chat.report")) }}{% endblock %}
+{% block content %}
+{# ch.05: the same shape as a wizard step. Reasons are option rows, not
+   toggles -- a radio group is one answer out of several, and drawing each
+   one as its own on/off switch says the opposite. The block preference *is*
+   a switch, because it genuinely is one. #}
+<form method="post" action="{{ url_for('report_user', user_id=subject.id) }}"
+      class="wiz report-screen">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if match_id %}<input type="hidden" name="match_id" value="{{ match_id }}">{% endif %}
+
+  <div class="wiz-body wiz-scroll">
+    <h1 class="wiz-q">{{ t("report.heading", name=subject.name or t("common.member")) }}</h1>
+    <p class="wiz-hint">{{ t("report.lede", name=subject.name or t("common.member")) }}</p>
+
+    <fieldset class="bare-set">
+      <legend class="stack-label">{{ t("report.what") }}</legend>
+      <div class="opt-list">
+        {% for key, label in reasons %}
+          <label class="opt" for="reason-{{ key }}">
+            <input id="reason-{{ key }}" type="radio" name="reason" value="{{ key }}"
+                   class="visually-hidden" {% if loop.first %}required{% endif %}>
+            <span class="opt-label">{{ label }}</span>
+            <span class="opt-mark"></span>
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <span class="stack-label">{{ t("report.more") }}</span>
+    <textarea id="detail" name="detail" rows="4" maxlength="2000"
+              aria-label="{{ t('report.more') }}"
+              placeholder="{{ t('report.more_ph') }}"></textarea>
+
+    <label class="switch-row is-trailing" for="block">
+      <input id="block" name="block" type="checkbox" value="1" checked>
+      <span>
+        <strong>{{ t("report.block_head", name=subject.name or t("common.member")) }}</strong>
+        <span class="switch-row-sub">{{ t("report.block_sub") }}</span>
+      </span>
+    </label>
+
+    <p class="hint">{{ t("report.danger") }}</p>
+  </div>
+
+  <div class="wiz-nav wiz-nav-block">
+    <button class="btn btn-danger btn-block" type="submit">{{ t("report.send") }}</button>
+  </div>
+</form>
+{% endblock %}

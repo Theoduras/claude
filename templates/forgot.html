@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Reset password — Velvt{% endblock %}
+{% block appbar %}{{ appbar(back=url_for("login")) }}{% endblock %}
+{% block content %}
+{# ch.05: the same shell login and register use -- a top bar, the question,
+   one field, and the button docked at the foot. It was a .card in the middle
+   of the page, which on a phone put the only control halfway up the screen. #}
+<form method="post" action="{{ url_for('forgot_password') }}" class="wiz auth-screen wiz-fit">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="wiz-body">
+    <h1 class="wiz-q">Reset your password.</h1>
+    <p class="wiz-hint">
+      Enter the address you signed up with and we'll send you a link to choose a new one.
+    </p>
+
+    <div class="wiz-field">
+      <label for="email">{{ t("register.email") }}</label>
+      <input id="email" name="email" type="email" autocomplete="email" required autofocus>
+    </div>
+  </div>
+
+  <div class="wiz-nav wiz-nav-block">
+    <button class="btn btn-block" type="submit">Send reset link</button>
+    <p class="auth-alt">
+      <a href="{{ url_for('login') }}">Back to sign in</a>
+    </p>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Safety — Velvt{% endblock %}
+{% block content %}
+<div class="prose">
+  <p class="eyebrow">Safety</p>
+  <h1 style="margin-top: 0.5rem;">Looking after yourself on Velvt</h1>
+  <p class="subtitle" style="margin-bottom: 1.4rem;">
+    Most people here are exactly who they say they are. These are the habits that
+    keep the rest from mattering.
+  </p>
+
+  <h2 style="font-size: 1.1rem;">Before you meet</h2>
+  <ul>
+    <li>Meet somewhere public the first time, and get yourself there and back.</li>
+    <li>Tell a friend where you're going and when you expect to be home.</li>
+    <li>A short video call first tells you more than any number of messages.</li>
+    <li>Keep chatting on Velvt until you're comfortable. Someone pushing hard to
+        move to another app early is a pattern worth noticing.</li>
+  </ul>
+
+  <h2 style="font-size: 1.1rem;">Money is the red flag</h2>
+  <p>Nobody you have just met needs your money. Requests for a loan, a gift card,
+     a crypto investment, help with a customs fee, or a plane ticket are the most
+     common way people are defrauded on dating apps — and the story is always
+     urgent and always sympathetic. Reported losses to romance scams ran to over
+     a billion dollars in the US alone in the first nine months of 2025.</p>
+  <p>If money comes up, stop and
+     <a href="{{ url_for('live_search') }}">report them</a>. You will not be the
+     first, and reporting is what stops them reaching the next person.</p>
+
+  <h2 style="font-size: 1.1rem;">Other things worth reporting</h2>
+  <ul>
+    <li>Anyone who seems to be under 18</li>
+    <li>Sexual messages or images you didn't ask for</li>
+    <li>Threats, abuse, or someone who won't take no for an answer</li>
+    <li>Photos that clearly belong to someone else</li>
+  </ul>
+  <p>Every profile and every chat has a report button. Blocking is instant and
+     silent — they aren't told, and you'll never be matched again.</p>
+
+  <h2 style="font-size: 1.1rem;">If something has happened</h2>
+  <p>If you're in immediate danger, contact your local emergency services first —
+     <strong>112</strong> across the EU. Then tell us at
+     <a href="mailto:{{ support_email }}">{{ support_email }}</a> so we can act on
+     the account.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ t("resume.title") }}{% endblock %}
+{% block content %}
+{# Coming back to Search with a search already written down. Re-asking all
+   five questions to arrive at the answers already stored here is the whole
+   thing this screen exists to avoid -- so the criteria are shown as they
+   stand, resuming is the primary action, and starting over is the link
+   underneath for someone who wants different answers. #}
+<div class="wiz waiting">
+  <div class="wiz-body">
+    <p class="wiz-count">{{ t("resume.eyebrow") }}</p>
+    <h1 class="wiz-q">{{ t("resume.heading") }}</h1>
+    <p class="wiz-hint">
+      {{ t("resume.paused_hint") if paused else t("resume.stopped_hint") }}
+    </p>
+
+    <span class="waiting-recap-label">{{ t("waiting.filters_label") }}</span>
+    <div class="pillset">
+      {% for chip in chips %}
+        <span class="pill pill-chip{% if chip.off %} is-off{% endif %}"
+              title="{{ chip.label }}">{{ chip.label }}</span>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="wiz-nav">
+    <a class="wiz-skip" href="{{ url_for('live_search', new=1) }}">{{ t("resume.start_new") }}</a>
+    <form method="post" action="{{ url_for('search_resume') }}" class="wiz-nav-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary" type="submit">{{ t("resume.resume") }}</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

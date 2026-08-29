@@ -1,57 +1,714 @@
 {% extends "base.html" %}
-{% block title %}Chat — Velvet{% endblock %}
+{% block title %}{{ t("chat.title") }}{% endblock %}
 {% block content %}
 {% set left = profiles[0] %}
 {% set right = profiles[1] %}
-<div class="card">
-  <h1 style="font-size: 1.25rem;">
-    &#10084; {{ left['name'] }} &amp; {{ right['name'] }}
-  </h1>
-  <p class="subtitle">
-    Matched chatroom &middot;
-    <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">@{{ left['username'] }}</a>
-    and
-    <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">@{{ right['username'] }}</a>
-    &middot; <span class="muted" id="live-status">live</span>
-  </p>
+{% set other = right if left['user_id'] == me_id else left %}
+{# One bubble, used everywhere a message renders: the two static recap
+   logs and the live room. Ticks only ever go on a bubble I sent -- there
+   is nothing to report about a message I received. Painted client-side
+   from data-time/data-id so the same markup works for a poll-appended
+   bubble as for one Jinja rendered. #}
+{% macro bubble(msg, side, ticks, named=false) %}
+  <div class="bubble {{ side }}" data-id="{{ msg['id'] }}">
+    {#- Who spoke is only worth saying in the admin's pair-wise view, where
+        neither side is "yours". Between the two of you the side of the
+        column already says it, and a label on every bubble costs a whole
+        line of height per message. -#}
+    {#- .bubble is `white-space: pre-line`, which keeps newlines in the
+        markup as well as in the message. Every gap below is trimmed with
+        `-` for that reason: a newline between the body and the meta is a
+        real line break, and it was pushing the timestamp onto a line of
+        its own under every one-word message. -#}
+    {%- if named %}<span class="sender">{{ msg['sender_name'] }}</span>{% endif -%}
+    {{- msg['body'] -}}
+    <span class="bubble-meta">
+      {#- -#}<span class="bubble-time" data-time="{{ msg['created_at'].isoformat() }}"></span>
+      {%- if ticks %}<span class="bubble-ticks" data-id="{{ msg['id'] }}"></span>{% endif -%}
+    </span>
+  {#- -#}</div>
+{% endmacro %}
+{# Every phase of a match is a screen in the same column the search steps
+   and the waiting screen use: what is happening is stated in the middle,
+   and the answers sit in the nav row at the foot, at the same y each
+   time. Only the room's transcript scrolls. #}
+{% if is_participant and phase == 'reveal' %}
+  <div class="wiz match">
+    <div class="wiz-body">
+      <p class="wiz-count">{{ t("chat.match_found") }}</p>
 
-  <div class="chat-log" id="chat-log"
-       data-me="{{ me_id }}"
-       data-left="{{ left['user_id'] }}"
-       data-participant="{{ 1 if is_participant else 0 }}"
-       data-messages-url="{{ url_for('chat_messages', match_id=match['id']) }}"
-       data-send-url="{{ url_for('send_message', match_id=match['id']) }}">
-    {% for msg in messages %}
-      {% if is_participant %}
-        {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
-      {% else %}
-        {% set side = 'left' if msg['sender_id'] == left['user_id'] else 'right' %}
-      {% endif %}
-      <div class="bubble {{ side }}" data-id="{{ msg['id'] }}">
-        <span class="sender">{{ msg['sender_name'] }}</span>{{ msg['body'] }}
+      {# photos are still locked this early, so these are hatched stand-ins #}
+      <div class="pair">
+        <span class="ph"></span>
+        <span class="ph"></span>
       </div>
-    {% endfor %}
-    <p class="muted" id="empty-note" {% if messages %}hidden{% endif %} style="margin: 0;">
-      No messages yet — break the ice!
-    </p>
+
+      <h1 class="wiz-q">{{ t("chat.you_matched") }}<br>{{ other['name'] }}{% if other['age'] %}, {{ other['age'] }}{% endif %}</h1>
+      <p class="wiz-hint">
+        {{ t("chat.reveal_note") }}
+      </p>
+      <p class="match-line">
+        <span class="live-dot"></span>{{ other['name'] }} is already in the room
+      </p>
+
+      {% if reveal_chips %}
+        <p class="section-label">{{ reveal_heading }}</p>
+        <div class="pillset">
+          {% for chip in reveal_chips %}
+            <span class="pill is-static{% if not chip.shared %} is-faint{% endif %}">{{ chip.text }}</span>
+          {% endfor %}
+        </div>
+        <p class="match-note">
+          Ask {{ reveal_pronoun }} about <strong>{{ reveal_highlight }}</strong>.
+        </p>
+      {% else %}
+        <p class="match-note">{{ match_reason }}</p>
+      {% endif %}
+
+      <div class="ring" id="reveal-ring"
+           style="--deg: {{ (state.seconds_left / reveal_seconds * 360) | round | int }}deg;">
+        <div class="ring-inner">
+          <span class="ring-num" id="reveal-count">{{ state.seconds_left }}</span>
+          <span class="ring-unit">{{ t("chat.seconds") }}</span>
+        </div>
+      </div>
+      <p class="match-note is-aside">{{ t("chat.reveal_aside") }}</p>
+    </div>
+
+    {# Accepting is implicit — waiting is the yes. Leaving needs a button
+       and ends the match before the room ever opens; entering early needs
+       one too, since it opens the room for both sides. #}
+    <div class="wiz-nav">
+      <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="choice" value="unmatch">
+        <button class="wiz-skip wiz-skip-danger" type="submit">{{ t("chat.not_this_one") }}</button>
+      </form>
+      <form method="post" action="{{ url_for('match_skip_reveal', match_id=match['id']) }}"
+            class="wiz-nav-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="wiz-go" type="submit">{{ t("chat.yes_start") }}</button>
+      </form>
+    </div>
   </div>
 
-  {% if is_participant %}
-    <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
-      <input type="text" name="body" id="chat-input" placeholder="Type a message..."
-             autofocus required autocomplete="off">
-      <button class="btn" type="submit">Send</button>
-    </form>
-  {% else %}
-    <p class="hint" style="margin-top: 0.5rem;">
-      You're viewing this chatroom as admin — only the two matched members can write here.
-    </p>
-  {% endif %}
-</div>
+{% elif is_participant and phase == 'deciding' %}
+  <div class="wiz match wiz-fit">
+    <div class="wiz-body">
+      <p class="wiz-count">{{ t("chat.times_up") }}</p>
 
-<script>
+      {#- The same two hidden discs the reveal opens with. This is the other
+          end of that twenty seconds, and showing the pair again is what
+          says so -- the photos are still locked, and answering here is what
+          unlocks them. No countdown ring beside them, though: the decision
+          window is DECISION_GRACE_SECONDS, a day, and a ring drawn over a
+          day promises seconds. -#}
+      <div class="pair" aria-hidden="true">
+        <span class="ph"></span>
+        <span class="ph"></span>
+      </div>
+
+      <h1 class="wiz-q">{{ t("chat.continue_with") }}<br>{{ other['name'] }}?</h1>
+      <p class="wiz-hint">{{ t("chat.decide_lede") }}</p>
+      <p class="match-line">
+        <span class="live-dot"></span>
+        {% if state.their_decision %}{{ t("chat.they_decided", name=other['name']) }}
+        {% else %}{{ t("chat.they_havent", name=other['name']) }}{% endif %}
+      </p>
+
+      <div class="chat-log" id="chat-log-static" data-their-read-id="{{ their_read_id or 0 }}">
+        {% for msg in messages %}
+          {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
+          {{ bubble(msg, side, side == 'right', not is_participant) }}
+        {% endfor %}
+      </div>
+
+      {% if state.my_decision %}
+        <p class="match-note">
+          {%- set choice %}<strong>{{ t("chat.continue") if state.my_decision == "continue" else t("chat.unmatch") }}</strong>{% endset -%}
+          {{ t("chat.you_chose", choice=choice) | safe }}
+          {{ t("chat.waiting_for", name=other["name"]) }}
+        </p>
+        <div id="decision-status" data-state-url="{{ url_for('match_state', match_id=match['id']) }}" data-chat-url="{{ url_for('chat', match_id=match['id']) }}"></div>
+      {% endif %}
+    </div>
+
+    {% if not state.my_decision %}
+      <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
+            class="wiz-nav" id="decision-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="choice" id="decision-choice" value="">
+        <button class="wiz-skip wiz-skip-danger" type="submit" data-choice="unmatch">{{ t("chat.unmatch_word") }}</button>
+        <span class="wiz-nav-end">
+          <button class="wiz-go" type="submit" data-choice="continue">{{ t("chat.continue_match") }}</button>
+        </span>
+      </form>
+    {% endif %}
+  </div>
+
+{% elif is_participant and phase == 'ended' %}
+  <div class="wiz match wiz-fit">
+    <div class="wiz-body">
+      <p class="wiz-count">{{ t("chat.match_ended") }}</p>
+      <h1 class="wiz-q">{{ t("chat.over_1") }}<br>{{ t("chat.over_2") }}</h1>
+      <p class="wiz-hint">
+        {% if state.my_decision == 'unmatch' or state.their_decision == 'unmatch' %}
+          One of you chose to unmatch.
+        {% else %}
+          The decision window closed without an answer from both sides.
+        {% endif %}
+      </p>
+      <div class="chat-log" id="chat-log-static" data-their-read-id="{{ their_read_id or 0 }}">
+        {% for msg in messages %}
+          {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
+          {{ bubble(msg, side, side == 'right', not is_participant) }}
+        {% endfor %}
+      </div>
+    </div>
+    <div class="wiz-nav">
+      <a class="wiz-skip" href="{{ url_for('chats') }}">{{ t("chat.your_chats") }}</a>
+      <span class="wiz-nav-end">
+        <a class="wiz-go wiz-go-violet" href="{{ url_for('live_search') }}">{{ t("chat.search_again") }}</a>
+      </span>
+    </div>
+  </div>
+
+{% else %}
+  <div class="wiz room wiz-fit">
+    <div class="wiz-body">
+    {# 'timed' or 'active', and non-participant (admin) viewers of any phase #}
+    {% if is_participant %}
+      <div class="chat-head">
+        <a class="chat-back" href="{{ url_for('chats') }}" aria-label="{{ t('chat.back_aria') }}">&lsaquo;</a>
+        {% if other_photo_id %}
+          <img class="avatar" src="{{ url_for('photo', photo_id=other_photo_id) }}"
+               alt="{{ other['name'] }}">
+        {% else %}
+          {# photos stay locked until you both continue — hatch until then #}
+          <span class="avatar ph"></span>
+        {% endif %}
+        <div class="chat-head-main">
+          <a class="chat-head-name" href="{{ url_for('view_profile', user_id=other['user_id']) }}">
+            {{ other['name'] }}{% if other['age'] %}, {{ other['age'] }}{% endif %}
+          </a>
+          <p class="chat-head-live">
+            <span class="live-dot"></span>
+            <span id="live-status">{{ t("chat.live") }}</span>
+          </p>
+        </div>
+        {% if phase == 'active' %}
+          {# No "Matched" pill: being here already says so, and on a phone
+             it cost the name the width it needed. A match you both kept is
+             still one either of you can leave -- guarded behind the confirm
+             overlay like every other unmatch. #}
+          <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
+                class="room-leave" id="active-leave-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="choice" value="unmatch">
+            <button class="room-leave-btn" type="submit" data-choice="unmatch"
+                    aria-label="Unmatch {{ other['name'] }}">{{ t("chat.unmatch_word") }}</button>
+          </form>
+        {% endif %}
+        {# Always within reach while a conversation is live -- needing it is
+           exactly the moment you should not have to go looking. #}
+        <a class="chat-head-report"
+           href="{{ url_for('report_user', user_id=other['user_id'], match_id=match['id']) }}"
+           title="{{ t('chat.report_aria', name=other['name']) }}">{{ t("chat.report") }}</a>
+      </div>
+
+      {% if phase == 'timed' %}
+        {# The room's clock. It lives here rather than in the header so the
+           ring can carry it — one timer on the page, not two. #}
+        {#- ch.05: a banner across the top of the room rather than a ring
+            beside a paragraph. The clock governs everything below it, so it
+            reads as a condition on the conversation, not as a widget in it.
+            The ring stays in the markup, hidden: the poll drives it by id
+            and a countdown with no element to write to is a silent stall. -#}
+        <p class="chat-clock-strip">
+          <strong id="timed-countdown">{{ (state.seconds_left // 60) }}:{{ '%02d' % (state.seconds_left % 60) }}</strong>
+          <span>{{ t("chat.clock_note") }}</span>
+        </p>
+        <div class="ring ring-sm is-hidden-ring" id="timed-ring" aria-hidden="true"
+             style="--ring-color: var(--violet);
+                    --deg: {{ (state.seconds_left / timed_seconds * 360) | round | int }}deg;"></div>
+      {% endif %}
+    {% else %}
+      <div class="chat-head">
+        <a class="chat-back" href="{{ url_for('chats') }}" aria-label="{{ t('chat.back_aria') }}">&lsaquo;</a>
+        <span class="avatar ph"></span>
+        <div class="chat-head-main">
+          <span class="chat-head-name">{{ left['name'] }} &amp; {{ right['name'] }}</span>
+          <p class="chat-head-live">
+            <span class="live-dot"></span>
+            <a href="{{ url_for('view_profile', user_id=left['user_id']) }}">{{ left['name'] or t("common.member") }}</a>
+            &middot;
+            <a href="{{ url_for('view_profile', user_id=right['user_id']) }}">{{ right['name'] or t("common.member") }}</a>
+            &middot; <span id="live-status">{{ t("chat.live") }}</span>
+          </p>
+        </div>
+        <span class="tag{% if phase != 'active' %} tag-timed{% endif %}">
+          {% if phase == 'active' %}{{ t("chat.matched_tag") }}{% else %}{{ t("chat.timed_tag") }}{% endif %}
+        </span>
+      </div>
+    {% endif %}
+
+    <div class="chat-log" id="chat-log"
+         data-me="{{ me_id }}"
+         data-left="{{ left['user_id'] }}"
+         data-participant="{{ 1 if is_participant else 0 }}"
+         data-phase="{{ phase }}"
+         data-their-read-id="{{ their_read_id or 0 }}"
+         data-messages-url="{{ url_for('chat_messages', match_id=match['id']) }}"
+         data-send-url="{{ url_for('send_message', match_id=match['id']) }}"
+         data-state-url="{{ url_for('match_state', match_id=match['id']) if is_participant else '' }}">
+      {% for msg in messages %}
+        {% if is_participant %}
+          {% set side = 'right' if msg['sender_id'] == me_id else 'left' %}
+        {% else %}
+          {% set side = 'left' if msg['sender_id'] == left['user_id'] else 'right' %}
+        {% endif %}
+        {{ bubble(msg, side, is_participant and side == 'right', not is_participant) }}
+      {% endfor %}
+      <p class="muted" id="empty-note" {% if messages %}hidden{% endif %} style="margin: 0;">
+        {{ t("chat.no_messages") }}
+      </p>
+    </div>
+
+    {% if is_participant and phase == 'timed' %}
+      {# You can commit before the clock runs out — the room does not have
+         to expire first for a decision to count. #}
+      {# Both sides can commit before the clock runs out, so this strip has
+         to be live: without a poll it states whatever was true when the
+         page rendered, and the room only moves when the countdown expires
+         -- which is exactly the wait committing early is meant to skip. #}
+      <div id="decide-live"
+           data-state-url="{{ url_for('match_state', match_id=match['id']) }}"
+           data-other="{{ other['name'] }}">
+        {% if state.my_decision %}
+          <p class="match-line" style="margin: 0.8rem 0 0;">
+            <span class="live-dot"></span>
+            <span id="decide-mine">
+              {{ t("chat.you_chose_inline", choice=(t("chat.to_continue") if state.my_decision == "continue" else t("chat.to_unmatch")), name=other["name"]) }}
+            </span>
+          </p>
+        {% else %}
+          <form method="post" action="{{ url_for('match_decide', match_id=match['id']) }}"
+                class="room-decide" id="decision-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="choice" id="decision-choice" value="">
+            <p class="match-line">
+              <span class="live-dot"></span>
+              <span id="decide-theirs">
+                {% if state.their_decision %}
+                  {{ other['name'] }} has already decided
+                {% else %}
+                  {{ other['name'] }} hasn't decided yet
+                {% endif %}
+              </span>
+            </p>
+            <button class="wiz-skip wiz-skip-danger" type="submit" data-choice="unmatch">{{ t("chat.unmatch_word") }}</button>
+            <button class="wiz-go wiz-go-sm" type="submit" data-choice="continue">{{ t("chat.continue_word") }}</button>
+          </form>
+        {% endif %}
+      </div>
+    {% endif %}
+    </div>
+
+    {% if is_participant %}
+      <div class="wiz-nav">
+        <form class="chat-form" id="chat-form" method="post" action="{{ url_for('send_message', match_id=match['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="text" name="body" id="chat-input" placeholder="{{ t('chat.input_ph') }}"
+                 maxlength="{{ message_max_chars }}"
+                 autofocus required autocomplete="off">
+          {#- ch.05: a real glyph from the registry rather than an up-arrow
+              character, which rendered at whatever weight the system font
+              happened to draw it and could not be re-pointed from admin. -#}
+          <button class="chat-send" type="submit" aria-label="{{ t('chat.send') }}">{{ icon("chat.send") }}</button>
+        </form>
+      </div>
+    {% else %}
+      <div class="wiz-nav">
+        <p class="match-line" style="margin: 0;">
+          {{ t("chat.admin_view") }}
+        </p>
+      </div>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% if is_participant %}
+  {# Unmatch is the one action here that cannot be taken back, so it asks
+     twice: the tick is a deliberate second act, not a second button that
+     can be double-tapped through. #}
+  <div class="veil" id="unmatch-veil" hidden>
+    <div class="veil-scrim" data-cancel></div>
+    <div class="veil-card" role="alertdialog" aria-modal="true"
+         aria-labelledby="unmatch-title" aria-describedby="unmatch-body">
+      <p class="wiz-count">{{ t("chat.before_you_go") }}</p>
+      <h2 class="veil-q" id="unmatch-title">{{ t("chat.unmatch_word") }}<br>{{ other['name'] }}?</h2>
+      <p class="veil-sub" id="unmatch-body">
+        {{ t("chat.unmatch_body") }}
+      </p>
+
+      <label class="veil-check" for="unmatch-sure">
+        <input type="checkbox" id="unmatch-sure" class="visually-hidden">
+        <span class="opt-mark opt-mark-box" aria-hidden="true"></span>
+        <span>{{ t("chat.unmatch_yes") }}</span>
+      </label>
+
+      <div class="veil-nav">
+        <button type="button" class="btn btn-secondary btn-block" data-cancel>{{ t("chat.unmatch_no") }}</button>
+        <button type="button" class="btn btn-block btn-danger" id="unmatch-go" disabled>
+          {{ t("chat.unmatch_word") }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {# Both sides kept it: the room stops being borrowed and becomes theirs.
+     Worth a beat of ceremony before the page turns into the real thing. #}
+  <div class="veil veil-match" id="match-veil" hidden>
+    <div class="veil-scrim"></div>
+    <div class="veil-card">
+      <div class="matchpop-art" aria-hidden="true">
+        <span class="matchpop-ring"></span>
+        <span class="matchpop-ring matchpop-ring-2"></span>
+        <span class="matchpop-orb matchpop-orb-a"></span>
+        <span class="matchpop-orb matchpop-orb-b"></span>
+        <span class="matchpop-spark"></span>
+      </div>
+      <p class="wiz-count">{{ t("chat.mutual") }}</p>
+      <h2 class="veil-q">{{ t("chat.both_said_yes") | br }}</h2>
+      <p class="veil-sub">
+        {{ t("chat.room_yours") }}
+      </p>
+      <a class="btn btn-block" id="match-go"
+         href="{{ url_for('chat', match_id=match['id']) }}">{{ t("chat.open_chat") }}</a>
+    </div>
+  </div>
+{% endif %}
+
+<script nonce="{{ csp_nonce() }}">
 (function () {
+  var POLL_MS = 1500;
+  var RETRY_MS = 4000;
+  var TICK_MS = 100;
+
+  /* A countdown that runs off the local clock but is only ever *told* the
+     time by the server. Each poll re-anchors a deadline; between polls the
+     ticker renders from that deadline, so the display moves every frame
+     instead of jumping 1.5 seconds at a time (or freezing for RETRY_MS when
+     a poll fails). The server stays the authority — the ticker can only
+     count down toward an anchor it was given, never past zero, and
+     send_message() gates on the phase server-side regardless. */
+  function anchoredCountdown(opts) {
+    var deadline = Date.now() + opts.initialSeconds * 1000;
+    var total = opts.totalSeconds;
+    var stopped = false;
+
+    function remaining() {
+      return Math.max(0, (deadline - Date.now()) / 1000);
+    }
+
+    function render() {
+      if (stopped) return;
+      var left = remaining();
+      opts.render(left);
+      if (opts.ring) {
+        opts.ring.style.setProperty("--deg", (left / total * 360).toFixed(2) + "deg");
+      }
+      setTimeout(render, TICK_MS);
+    }
+
+    function poll() {
+      if (stopped) return;
+      fetch(opts.stateUrl, { headers: { "Accept": "application/json" } })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.phase !== opts.phase) {
+            stopped = true;
+            opts.onPhaseChange(data);
+            return;
+          }
+          // Re-anchor, but never let the clock run backwards. The server
+          // rounds seconds_left to a whole second, so a poll can legitimately
+          // report slightly more time than the ticker has already counted
+          // off; taking the earlier of the two keeps the display monotonic.
+          // A correction larger than RESYNC_S is a real disagreement (a
+          // suspended tab, a clock jump), and that one we take as given.
+          var RESYNC_S = 2;
+          var proposed = Date.now() + data.seconds_left * 1000;
+          if (proposed < deadline || Math.abs(proposed - deadline) > RESYNC_S * 1000) {
+            deadline = proposed;
+          }
+          setTimeout(poll, POLL_MS);
+        })
+        .catch(function () { setTimeout(poll, RETRY_MS); });
+    }
+
+    render();
+    poll();
+  }
+
+  /* Keep a log stuck to its last message.
+
+     The log takes whatever height the column has left, and that height is
+     not final at init: the composer, the decision strip and the serif
+     webfont all settle afterwards, and every one of them shortens the box
+     under a scroll position that was already at the bottom. So rather than
+     scrolling once, watch the box and re-pin whenever it resizes -- but
+     only while the reader is actually at the bottom, so scrolling back
+     through the conversation is never yanked forward. */
+  function pinToBottom(el) {
+    if (!el) return function () {};
+    var pinned = true;
+    function toBottom() { el.scrollTop = el.scrollHeight; }
+    el.addEventListener("scroll", function () {
+      pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    });
+    if (window.ResizeObserver) {
+      new ResizeObserver(function () { if (pinned) toBottom(); }).observe(el);
+    }
+    toBottom();
+    return function () { pinned = true; toBottom(); };
+  }
+
+  /* Timestamps render client-side from each bubble's data-time (its own
+     local zone, not the server's UTC), and ticks from a single
+     "their read pointer" number compared against each bubble's id --
+     single check once the message exists, double once that pointer has
+     passed it. Both are repainted rather than computed once, since a poll
+     can move the read pointer forward on a room that is just sitting open. */
+  function formatBubbleTime(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  }
+  function paintTimes(root) {
+    root.querySelectorAll(".bubble-time[data-time]").forEach(function (el) {
+      if (!el.textContent) el.textContent = formatBubbleTime(el.dataset.time);
+    });
+  }
+  function paintTicks(root, theirReadId) {
+    if (theirReadId == null || isNaN(theirReadId)) return;
+    root.querySelectorAll(".bubble-ticks[data-id]").forEach(function (el) {
+      var read = parseInt(el.dataset.id, 10) <= theirReadId;
+      el.textContent = read ? "✓✓" : "✓";
+      el.classList.toggle("is-read", read);
+    });
+  }
+
+  // The decision screens show the transcript as a recap, and what matters
+  // in a recap is how it ended -- open it at the bottom, as the room does.
+  var staticLog = document.getElementById("chat-log-static");
+  if (staticLog) {
+    paintTimes(staticLog);
+    paintTicks(staticLog, parseInt(staticLog.dataset.theirReadId, 10));
+  }
+  pinToBottom(staticLog);
+
+  // ---- reveal countdown: redirect to the chat once the server says so ----
+  var revealCount = document.getElementById("reveal-count");
+  if (revealCount) {
+    var chatUrl = "{{ url_for('chat', match_id=match['id']) }}";
+    anchoredCountdown({
+      stateUrl: "{{ url_for('match_state', match_id=match['id']) }}",
+      phase: "reveal",
+      {# seconds_left is None outside the timed phases, and this script is
+         rendered for every phase — an unguarded None is a syntax error. #}
+      initialSeconds: {{ state.seconds_left or 0 }},
+      totalSeconds: {{ reveal_seconds }},
+      ring: document.getElementById("reveal-ring"),
+      render: function (left) {
+        revealCount.textContent = Math.ceil(left);
+      },
+      onPhaseChange: function () { window.location.href = chatUrl; }
+    });
+  }
+
+  // ---- the two overlays: leaving, and landing ----
+  // Both live outside <main>, which is a stacking context (position:
+  // relative; z-index: 1) -- the same reason the wizard's sheet is hoisted.
+  var shell = document.querySelector(".app-shell") || document.body;
+  var unmatchVeil = document.getElementById("unmatch-veil");
+  var matchVeil = document.getElementById("match-veil");
+  if (unmatchVeil) shell.appendChild(unmatchVeil);
+  if (matchVeil) shell.appendChild(matchVeil);
+
+  function openVeil(v) {
+    v.hidden = false;
+    requestAnimationFrame(function () { v.classList.add("is-open"); });
+  }
+  function closeVeil(v) {
+    v.classList.remove("is-open");
+    setTimeout(function () { v.hidden = true; }, 220);
+  }
+
+  // Landing: hold the celebration for a beat, then go. The link is there
+  // for anyone who would rather not wait (and for reduced-motion, where
+  // the art does not animate and the beat would just be a stall).
+  var celebrated = false;
+  function celebrate(url) {
+    if (celebrated) return;
+    celebrated = true;
+    if (!matchVeil) { window.location.href = url; return; }
+    document.getElementById("match-go").href = url;
+    openVeil(matchVeil);
+    var quick = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setTimeout(function () { window.location.href = url; }, quick ? 900 : 2600);
+  }
+
+  // Leaving: every unmatch on the page routes through the tick-box, whichever
+  // screen it was pressed on -- there is no path that ends a match on one tap.
+  var pendingUnmatch = null;
+  if (unmatchVeil) {
+    var sure = document.getElementById("unmatch-sure");
+    var go = document.getElementById("unmatch-go");
+
+    sure.addEventListener("change", function () { go.disabled = !sure.checked; });
+    unmatchVeil.addEventListener("click", function (ev) {
+      if (ev.target.closest("[data-cancel]")) cancelUnmatch();
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && !unmatchVeil.hidden) cancelUnmatch();
+    });
+    go.addEventListener("click", function () {
+      if (!sure.checked || !pendingUnmatch) return;
+      var run = pendingUnmatch;
+      pendingUnmatch = null;
+      closeVeil(unmatchVeil);
+      run();
+    });
+  }
+
+  function cancelUnmatch() {
+    pendingUnmatch = null;
+    var sure = document.getElementById("unmatch-sure");
+    if (sure) { sure.checked = false; }
+    var go = document.getElementById("unmatch-go");
+    if (go) { go.disabled = true; }
+    closeVeil(unmatchVeil);
+  }
+
+  // Ask first; `run` is what happens only if they tick and confirm.
+  function confirmUnmatch(run) {
+    if (!unmatchVeil) { run(); return; }
+    pendingUnmatch = run;
+    openVeil(unmatchVeil);
+  }
+
+  function postDecision(action, choice) {
+    return fetch(action, {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-CSRF-Token": window.velvtCsrf()
+      },
+      body: "choice=" + encodeURIComponent(choice)
+    }).then(function (res) { return res.json(); });
+  }
+
+  // The active room's Unmatch: a plain form, upgraded to ask first.
+  var leaveForm = document.getElementById("active-leave-form");
+  if (leaveForm) {
+    leaveForm.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      confirmUnmatch(function () {
+        postDecision(leaveForm.action, "unmatch")
+          .then(function () { window.location.reload(); })
+          .catch(function () { window.location.reload(); });
+      });
+    });
+  }
+
+  // ---- deciding: submit choice, then poll until the other side answers ----
+  var decisionForm = document.getElementById("decision-form");
+  if (decisionForm) {
+    decisionForm.querySelectorAll("button[data-choice]").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        var choice = btn.dataset.choice;
+        document.getElementById("decision-choice").value = choice;
+
+        function send() {
+          postDecision(decisionForm.action, choice)
+            .then(function (data) {
+              // Deciding last: the pair resolves on this very request, so
+              // the celebration is owed here rather than on a later poll.
+              if (choice === "continue" && data && data.phase === "active") {
+                celebrate(data.chat_url || window.location.href);
+                return;
+              }
+              window.location.reload();
+            })
+            .catch(function () { window.location.reload(); });
+        }
+
+        if (choice === "unmatch") confirmUnmatch(send); else send();
+      });
+    });
+  }
+
+  // ---- timed: the decision strip, kept live while the clock runs ----
+  // Reloads the moment the pair resolves (both continued -> 'active', or
+  // either left -> 'ended') instead of waiting out the countdown, and
+  // otherwise just retitles the other side's line in place -- a reload
+  // here would throw away whatever is half-typed in the composer.
+  var decideLive = document.getElementById("decide-live");
+  if (decideLive) {
+    var otherName = decideLive.dataset.other;
+    (function pollDecide() {
+      fetch(decideLive.dataset.stateUrl, { headers: { "Accept": "application/json" } })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.phase === "active") {
+            celebrate(data.chat_url || window.location.href);
+            return;
+          }
+          if (data.phase === "ended") {
+            window.location.reload();
+            return;
+          }
+          var theirs = document.getElementById("decide-theirs");
+          if (theirs) {
+            theirs.textContent = data.their_decision
+              ? otherName + " has already decided"
+              : otherName + " hasn't decided yet";
+          }
+          setTimeout(pollDecide, POLL_MS);
+        })
+        .catch(function () { setTimeout(pollDecide, RETRY_MS); });
+    })();
+  }
+
+  var decisionStatus = document.getElementById("decision-status");
+  if (decisionStatus) {
+    (function pollDecision() {
+      fetch(decisionStatus.dataset.stateUrl, { headers: { "Accept": "application/json" } })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          // Deciding first: the wait ends when the other side answers, and
+          // the answer being "yes" is the moment worth marking.
+          if (data.phase === "active") {
+            celebrate(data.chat_url || decisionStatus.dataset.chatUrl);
+            return;
+          }
+          if (data.phase === "ended") {
+            window.location.reload();
+            return;
+          }
+          setTimeout(pollDecision, POLL_MS);
+        })
+        .catch(function () { setTimeout(pollDecision, RETRY_MS); });
+    })();
+  }
+
+  // ---- normal chat log (timed / active) ----
   var log = document.getElementById("chat-log");
+  if (!log) return;
+
   var emptyNote = document.getElementById("empty-note");
   var status = document.getElementById("live-status");
   var meId = parseInt(log.dataset.me, 10);
@@ -63,9 +720,11 @@
     lastId = Math.max(lastId, parseInt(b.dataset.id, 10));
   });
 
-  function scrollDown() {
-    log.scrollTop = log.scrollHeight;
-  }
+  var scrollDown = pinToBottom(log);
+  var theirReadId = parseInt(log.dataset.theirReadId, 10);
+
+  paintTimes(log);
+  paintTicks(log, theirReadId);
 
   function addMessage(msg) {
     if (log.querySelector('.bubble[data-id="' + msg.id + '"]')) return;
@@ -78,24 +737,42 @@
     var bubble = document.createElement("div");
     bubble.className = "bubble " + side;
     bubble.dataset.id = msg.id;
-    var sender = document.createElement("span");
-    sender.className = "sender";
-    sender.textContent = msg.sender_name;
-    bubble.appendChild(sender);
+    // Same rule the Jinja macro follows: the name is only worth a line in
+    // the admin's pair-wise view, where neither side is "yours".
+    if (!isParticipant) {
+      var sender = document.createElement("span");
+      sender.className = "sender";
+      sender.textContent = msg.sender_name;
+      bubble.appendChild(sender);
+    }
     bubble.appendChild(document.createTextNode(msg.body));
+
+    var meta = document.createElement("span");
+    meta.className = "bubble-meta";
+    var time = document.createElement("span");
+    time.className = "bubble-time";
+    time.dataset.time = msg.created_at;
+    time.textContent = formatBubbleTime(msg.created_at);
+    meta.appendChild(time);
+    if (isParticipant && side === "right") {
+      var ticks = document.createElement("span");
+      ticks.className = "bubble-ticks";
+      ticks.dataset.id = msg.id;
+      meta.appendChild(ticks);
+    }
+    bubble.appendChild(meta);
+
     log.insertBefore(bubble, emptyNote);
     emptyNote.hidden = true;
     lastId = Math.max(lastId, msg.id);
     scrollDown();
+    paintTicks(log, theirReadId);
   }
 
   // Short-poll loop. The app runs across many stateless instances, so the
   // one that stores a message is usually not the one serving this browser
   // — there is no open request for it to release. Polling on a tick is what
   // works in that setting; POLL_MS is the delivery latency.
-  var POLL_MS = 1500;
-  var RETRY_MS = 4000;
-
   function listen() {
     fetch(log.dataset.messagesUrl + "?after=" + lastId, {
       headers: { "Accept": "application/json" }
@@ -106,6 +783,14 @@
       })
       .then(function (data) {
         data.messages.forEach(addMessage);
+        // Polling this endpoint is what tells the server "I'm looking at
+        // this room", so the response also carries the other side's
+        // freshly-advanced read pointer -- repaint even when no new
+        // message arrived, since it can move on its own between polls.
+        if (typeof data.their_read_id === "number") {
+          theirReadId = data.their_read_id;
+          paintTicks(log, theirReadId);
+        }
         status.textContent = "live";
         setTimeout(listen, POLL_MS);
       })
@@ -117,6 +802,26 @@
 
   listen();
   scrollDown();
+
+  // ---- server-anchored countdown for the timed phase ----
+  var countdownEl = document.getElementById("timed-countdown");
+  if (countdownEl && log.dataset.stateUrl) {
+    anchoredCountdown({
+      stateUrl: log.dataset.stateUrl,
+      phase: "timed",
+      initialSeconds: {{ state.seconds_left or 0 }},
+      totalSeconds: {{ timed_seconds }},
+      ring: document.getElementById("timed-ring"),
+      render: function (left) {
+        var s = Math.ceil(left);
+        var mins = Math.floor(s / 60);
+        var secs = s % 60;
+        countdownEl.textContent = mins + ":" + (secs < 10 ? "0" : "") + secs;
+        countdownEl.classList.toggle("countdown-low", s <= 30);
+      },
+      onPhaseChange: function () { window.location.reload(); }
+    });
+  }
 
   var form = document.getElementById("chat-form");
   if (form) {
@@ -131,7 +836,8 @@
         method: "POST",
         headers: {
           "Accept": "application/json",
-          "Content-Type": "application/x-www-form-urlencoded"
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-CSRF-Token": window.velvtCsrf()
         },
         body: "body=" + encodeURIComponent(body)
       })

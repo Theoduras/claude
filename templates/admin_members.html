@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Members — Velvt admin{% endblock %}
+{% block content %}
+<div class="admin-page">
+  <h1 class="settings-title">Members</h1>
+
+  {# Real and demo are counted apart on purpose. A single total that folded
+     the seeded demo members in would be the same overstatement the landing
+     page refuses to make -- and the gap between the two numbers is the one
+     thing this page exists to show. #}
+  {#- ch.05: one card, a row per figure, the number right-aligned. It was
+      four tiles in a 2x2 grid with the count above its label, which put the
+      four numbers on two different lines and made a comparison between them
+      -- the one thing this block is for -- something you had to do by eye
+      across a corner. -#}
+  <div class="admin-tally">
+    <div class="admin-tally-item is-headline">
+      <span class="admin-tally-label">Registered and active</span>
+      <span class="admin-tally-n">{{ totals.real_active }}</span>
+    </div>
+    <div class="admin-tally-item">
+      <span class="admin-tally-label">Joined today</span>
+      <span class="admin-tally-n">{{ totals.today }}</span>
+    </div>
+    <div class="admin-tally-item">
+      <span class="admin-tally-label">Joined this week</span>
+      <span class="admin-tally-n">{{ totals.week }}</span>
+    </div>
+    <div class="admin-tally-item is-muted">
+      <span class="admin-tally-label">Demo accounts</span>
+      <span class="admin-tally-n">{{ totals.demo }}</span>
+    </div>
+  </div>
+
+  <p class="hint" style="margin: 0 0 1.2rem;">
+    {{ totals.real_all }} real account{{ '' if totals.real_all == 1 else 's' }} in total —
+    {{ totals.real_active }} active,
+    {{ totals.suspended }} suspended,
+    {{ totals.banned }} banned,
+    {{ totals.pending_deletion }} pending deletion,
+    {{ totals.deleted }} deleted.
+    {% if totals.real_active < floor %}
+      The landing page shows no member count below {{ floor }}, so it is
+      currently saying <em>“Be among the first in Maastricht”</em> rather than
+      a number.
+    {% else %}
+      The landing page is showing this count to logged-out visitors.
+    {% endif %}
+  </p>
+
+  <form method="get" action="{{ url_for('admin_members') }}" class="admin-filter">
+    <input type="search" name="q" value="{{ query }}" placeholder="name or email">
+    <input type="hidden" name="show" value="{{ show }}">
+    <button class="btn btn-secondary btn-small" type="submit">Search</button>
+  </form>
+
+  <p class="hint" style="margin-bottom: 1.2rem;">
+    {% for key, label in [('real', 'Real'), ('demo', 'Demo'), ('all', 'All')] %}
+      {%- if not loop.first %}&nbsp;·&nbsp;{% endif -%}
+      <a href="{{ url_for('admin_members', show=key, q=query) }}"
+         {% if show == key %}style="font-weight:700"{% endif %}>{{ label }}</a>
+    {%- endfor %}
+  </p>
+
+  {% if not members %}
+    <p class="subtitle">Nobody matches that.</p>
+  {% endif %}
+
+  {% for m in members %}
+    <article class="admin-member">
+      <div class="admin-member-head">
+        <h2>
+          {# A member with no profile row yet still gets a link: their profile
+             page is where you find out how far they got. #}
+          <a href="{{ url_for('view_profile', user_id=m.id) }}">{{ m.name or m.email or "Member" }}</a>
+          {% if m.age %}<span class="hint">{{ m.age }}</span>{% endif %}
+        </h2>
+        <span class="admin-badges">
+          {% if m.is_bot %}<span class="tag">demo</span>{% endif %}
+          {% if m.status != 'active' %}<span class="tag">{{ m.status }}</span>{% endif %}
+          {% if m.searching %}<span class="tag is-live">searching</span>{% endif %}
+        </span>
+      </div>
+      <p class="hint admin-member-meta">
+        {% if m.email %}{{ m.email }}{% else %}no address on file{% endif %}
+        {%- if not m.email_verified_at and not m.is_bot %} · <strong>email unconfirmed</strong>{% endif %}
+        · joined {{ m.created_at.strftime('%Y-%m-%d') }}
+        {%- if m.last_seen_at %} · last seen {{ m.last_seen_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}
+        · {{ m.photos }} photo{{ '' if m.photos == 1 else 's' }}
+        {%- if not m.name %} · <strong>no profile yet</strong>{% endif %}
+      </p>
+      {#- A <div>, not the <p> this was: a <form> is not phrasing content, so
+          the browser closed the paragraph before the first one and the flex
+          row never formed. -#}
+      {% if not m.is_bot and m.status != 'deleted' %}
+      <div class="admin-member-actions">
+        {%- set who = m.name or m.email or ('member #' ~ m.id) %}
+        <form method="post" action="{{ url_for('admin_force_password_reset', user_id=m.id) }}"
+              data-confirm="Force a password reset for {{ who }}? They'll be emailed a link and signed out everywhere.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-secondary btn-small" type="submit">Force password reset</button>
+        </form>
+        {#- Deleting is the one irreversible thing on this screen, so it is
+            asked twice -- and the second question names what is actually
+            about to happen rather than repeating the first. -#}
+        <form method="post" action="{{ url_for('admin_delete_account', user_id=m.id) }}"
+              data-confirm="Delete {{ who }}?"
+              data-confirm-again="Last chance: {{ who }}'s profile, photos and searches are destroyed for good, and their side of every conversation is left unattributed. This cannot be undone. Delete?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-secondary btn-small is-danger" type="submit"
+                  aria-label="Delete {{ who }}" title="Delete account">
+            {{ icon("admin.delete") }}
+          </button>
+        </form>
+      </div>
+      {% endif %}
+    </article>
+  {% endfor %}
+
+  {% if members | length == 500 %}
+    <p class="hint">Showing the 500 most recent. Narrow it with the search above.</p>
+  {% endif %}
+</div>
+
+{#- The confirmations, in a nonce'd <script> rather than an onsubmit= on the
+    form. The app's CSP is `script-src 'self' 'nonce-...'` with no
+    'unsafe-inline', so an inline handler attribute is refused by the browser
+    and never runs -- which is a silent failure in the one direction that
+    matters: the guard disappears and the button underneath still works. -#}
+<script nonce="{{ csp_nonce() }}">
+(function () {
+  document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+    form.addEventListener("submit", function (e) {
+      if (!window.confirm(form.dataset.confirm)) { e.preventDefault(); return; }
+      var again = form.dataset.confirmAgain;
+      if (again && !window.confirm(again)) { e.preventDefault(); }
+    });
+  });
+})();
+</script>
+{% endblock %}

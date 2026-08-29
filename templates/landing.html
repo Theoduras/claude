@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ t("landing.title") }}{% endblock %}
+
+{% block backdrop %}{% include "_hero_film.html" %}{% endblock %}
+
+{#- The landing page carries the wordmark inside its own hero, above the
+    headline, so the app bar would draw a second one directly above it. -#}
+{% block appbar %}{% endblock %}
+{#- ...and no tab bar either. The landing page is the one screen with
+    nothing to navigate between: it has two buttons, and both of them are
+    the point. -#}
+{% block shell_class %} is-bare{% endblock %}
+{% block content %}
+{# The same column every other screen uses. The hero is the wizard's body,
+   the two buttons are its nav -- and .wiz-fit keeps the pair inside the
+   fold instead of letting the page scroll past the promise. #}
+<div class="wiz landing wiz-fit">
+  <div class="wiz-body">
+    <div class="landing-head">
+      {# decorative: the nav already carries the name, so this is hidden from
+         screen readers rather than read out a second time. Comes first in
+         the markup so it sits above the headline when the column is
+         stacked on a phone; the desktop row puts it back on the copy's
+         right with `order`, rather than the reverse. #}
+      <div class="landing-logo" aria-hidden="true"></div>
+      <div class="landing-copy">
+        <h1>{{ t("landing.headline") | br }}</h1>
+        <p class="landing-lede">
+          {{ t("landing.lede") }}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="wiz-nav wiz-nav-block landing-actions">
+    {# The strongest true thing we can say about how busy it is -- see
+       landing_pulse(). The pulsing dot is reserved for the tier that has
+       actual live searchers behind it; the quieter tiers are still facts,
+       but they are not "someone is here right now" and must not look it. #}
+    <p class="landing-live">
+      {% if pulse.live %}<span class="live-dot"></span>{% endif %}
+      {{ pulse.text }}
+    </p>
+    <a class="btn btn-block" href="{{ url_for('register') }}">{{ t("landing.cta_start") }}</a>
+    <a class="btn btn-secondary btn-block" href="{{ url_for('login') }}">{{ t("landing.cta_signin") }}</a>
+    <p class="landing-fine">{{ t("landing.fine") }}</p>
+  </div>
+</div>
+{% endblock %}

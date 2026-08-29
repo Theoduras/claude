@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Choose a new password — Velvt{% endblock %}
+{% block appbar %}{{ appbar(back=url_for("login")) }}{% endblock %}
+{% block content %}
+<form method="post" action="{{ url_for('reset_password', token=token) }}" class="wiz auth-screen wiz-fit">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="wiz-body">
+    <h1 class="wiz-q">Choose a new password.</h1>
+    <p class="wiz-hint">Setting this signs you out everywhere else.</p>
+
+    <div class="wiz-field">
+      <label for="password">New password</label>
+      <input id="password" name="password" type="password" autocomplete="new-password"
+             minlength="8" required autofocus>
+      <p class="hint">At least 8 characters. Longer beats complicated.</p>
+
+      <label for="confirm">{{ t("register.confirm") }}</label>
+      <input id="confirm" name="confirm" type="password" autocomplete="new-password"
+             minlength="8" required>
+    </div>
+  </div>
+
+  <div class="wiz-nav wiz-nav-block">
+    <button class="btn btn-block" type="submit">Set password</button>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,88 @@
+name: Demo profiles
+
+# Reaches a Cloud SQL database over the Auth Proxy to count, add or remove the
+# demo members from seed_demo.py.
+#
+# Manual only, and deliberately so. This used to run on any push to main that
+# touched this file or seed_demo.py -- which meant a deploy could write demo
+# rows into a database holding real members, as a side effect of a change
+# nobody read as "seed production". Which database to seed is the whole
+# question this workflow asks, so it has to be answered by a person. It did
+# happen, twice, before that was fixed, which is why `purge` exists at all.
+#
+# `action` defaults to report because `database` defaults to velvet, which is
+# production: the pair of defaults has to be the harmless one. report writes
+# nothing at all, so a dispatch nobody thought hard about is a no-op.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'report = count only; purge = delete demo members; seed = add them'
+        type: choice
+        default: report
+        options: [report, purge, seed]
+      database:
+        description: 'Which database'
+        type: choice
+        default: velvet
+        options: [velvet, velvet_dev]
+
+env:
+  PROJECT: velvet-app-505108
+  INSTANCE_CONN: velvet-app-505108:europe-west4:velvet-db-eu
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/733528989325/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: '733528989325-compute@developer.gserviceaccount.com'
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run over the Cloud SQL Auth Proxy
+        run: |
+          set -euo pipefail
+
+          curl -sSL -o cloud-sql-proxy \
+            https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy "$INSTANCE_CONN" &
+
+          # Wait for the proxy to accept connections rather than racing it.
+          for _ in $(seq 1 30); do
+            if (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          DB_PASS="$(gcloud secrets versions access latest \
+            --secret=velvet-db-pass --project="$PROJECT")"
+          echo "::add-mask::$DB_PASS"
+
+          python -m pip install -q -r requirements.txt
+
+          # One flag per action, rather than passing the input through: an
+          # empty or unexpected `action` has to land on the harmless one, not
+          # on whatever seed_demo.py does with an argument it does not know.
+          case "${{ inputs.action || 'report' }}" in
+            purge) FLAG=--purge ;;
+            seed)  FLAG=--reset ;;
+            *)     FLAG=--report ;;
+          esac
+          echo "Running seed_demo.py $FLAG against ${{ inputs.database || 'velvet' }}"
+
+          # token_urlsafe by construction, so it is safe in a URL.
+          DATABASE_URL="postgresql://velvet_app:${DB_PASS}@127.0.0.1:5432/${{ inputs.database || 'velvet' }}" \
+            python seed_demo.py "$FLAG"

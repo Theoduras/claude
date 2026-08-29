@@ -1,78 +1,401 @@
 {% extends "base.html" %}
-{% block title %}Searching… — Velvet{% endblock %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ t("waiting.title") }}{% endblock %}
 {% block content %}
-<div class="card narrow" style="text-align: center;">
-  <div class="pulse-heart"></div>
-  <p class="eyebrow" style="margin-bottom: 0.6rem;">Searching</p>
-  <h1>Feeling for a match</h1>
-  <p class="subtitle" style="margin-inline: auto;" id="status-line">
-    Looking for someone who fits — and who's looking for you.
-  </p>
+{# Same column shape as the wizard this screen follows on from: a fixed
+   header, the content centred in the space between, and the action pinned
+   to the foot. The chips used to be pure confirmation; now each one is a
+   button that opens the sheet below with what changing it would buy --
+   verified counts, not guesses, straight from the matching engine. #}
+<div class="wiz waiting">
 
-  <dl style="text-align: left; margin-bottom: 1.25rem;">
-    <dt>Looking for</dt>
-    <dd>{{ search['seeking'] or 'Anyone' }}, age {{ search['age_min'] }}–{{ search['age_max'] }}</dd>
-    {% if search['relationship_type'] %}
-      <dt>Connection</dt><dd>{{ search['relationship_type'] }}</dd>
-    {% endif %}
-    <dt>Where</dt>
-    <dd>
-      {% if search['location'] %}{{ search['location'] }}{% else %}Anywhere{% endif %}
-      {% if search['location'] %}
-        &middot; {% if search['radius_km'] >= radius_max %}any distance{% else %}within {{ search['radius_km'] }} km{% endif %}
-      {% endif %}
-    </dd>
-    {% if search['interests'] %}
-      <dt>Interests</dt><dd>{{ search['interests'] }}</dd>
-    {% endif %}
-  </dl>
-
-  <p class="muted" style="font-size: 0.85rem;">
-    {{ waiting }} {{ 'person' if waiting == 1 else 'people' }} searching right now.
-  </p>
-
-  {% set hints = [] %}
-  {% if blockers.if_any_distance %}
-    {% set _ = hints.append(('widen your radius', blockers.if_any_distance)) %}
-  {% endif %}
-  {% if blockers.if_any_age %}
-    {% set _ = hints.append(('widen your age range', blockers.if_any_age)) %}
-  {% endif %}
-  {% if blockers.if_any_connection %}
-    {% set _ = hints.append(('accept another kind of connection', blockers.if_any_connection)) %}
-  {% endif %}
-  {% if blockers.if_any_gender %}
-    {% set _ = hints.append(('broaden who you are looking for', blockers.if_any_gender)) %}
-  {% endif %}
-
-  {% if hints or blockers.if_all_relaxed %}
-    <div class="flash" style="text-align: left;">
-      Nobody fits every filter yet.
-      {% if hints %}
-        You would match:
-        <ul style="margin: 0.4rem 0 0; padding-left: 1.2rem;">
-          {% for label, count in hints %}
-            <li>{{ count }} {{ 'person' if count == 1 else 'people' }} if you {{ label }}</li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        Your filters are quite narrow — {{ blockers.if_all_relaxed }}
-        {{ 'person' if blockers.if_all_relaxed == 1 else 'people' }} would fit if you
-        opened up the distance, age range and connection type.
-      {% endif %}
-      <a href="{{ url_for('search_criteria', relationship_type=search['relationship_type']) }}">Adjust your filters</a>
+  <div class="wiz-body">
+    {# Three rings and a core, all CSS -- see the note in velvt.css. Decorative
+       and wholly redundant with the heading below it, so it is hidden from
+       assistive tech rather than described. #}
+    <div class="search-anim" id="search-anim" aria-hidden="true">
+      <span class="search-ping"></span>
+      <span class="search-ping"></span>
+      <span class="search-ping"></span>
+      <div class="pulse-heart"></div>
     </div>
-  {% endif %}
 
-  <form method="post" action="{{ url_for('search_cancel') }}">
-    <button class="btn btn-secondary" type="submit">Stop searching</button>
-  </form>
+    <p class="wiz-count">{{ t("waiting.eyebrow") }}</p>
+    <h1 class="wiz-q">{{ t("waiting.heading_1") }}<br>{{ t("waiting.heading_2") }}</h1>
+    <p class="wiz-hint" id="status-line">
+      {{ t("waiting.phrase_1") }}
+    </p>
+
+    <p class="waiting-meta">
+      <span id="elapsed">0:00</span>
+      <span aria-hidden="true">·</span>
+      <span id="waiting-count">{{ state.waiting }} searching</span>
+      <span id="waiting-fits-wrap"{% if not state.fits %} hidden{% endif %}>
+        <span aria-hidden="true">·</span>
+        <span class="waiting-fits" id="waiting-fits">{{ t("waiting.fits_n", n=state.fits) }}</span>
+      </span>
+    </p>
+
+    {# Folded shut. A full filter set is sixteen pills -- five rows on a
+       phone, taller than the animation and the question together -- and it
+       pushed "Stop searching" under the tab bar. It is reference material
+       once the search is running, so it earns a line, not a third of the
+       screen. A real <details> so it works without JS and keyboard and
+       screen readers get the disclosure semantics for free. #}
+    {#- Open, not folded. The chips *are* this screen -- the one thing there
+        is to do while waiting is change one -- and they were behind a
+        summary that had to be tapped first. The <details> stays (the script
+        and #chip-count still address it) but it is always open and its
+        summary is not drawn. -#}
+    <details class="filters-fold" id="filters-fold" open>
+      <summary>
+        <span class="filters-fold-label">{{ t("waiting.filters_label") }}</span>
+        <span class="filters-fold-count" id="chip-count">{{ state.chips | length }}</span>
+      </summary>
+      <span class="waiting-recap-label">{{ t("waiting.filters_label") }}</span>
+      <div class="pillset" id="chip-row">
+        {% for chip in state.chips %}
+          <button type="button" class="pill pill-chip{% if chip.off %} is-off{% endif %}"
+                  data-key="{{ chip.key }}"
+                  title="{{ chip.label }}">{{ chip.label }}</button>
+        {% endfor %}
+      </div>
+      <p class="waiting-recap-hint">{{ t("waiting.tap_chip") }}</p>
+    </details>
+
+    {# One slot for both, not two. They are mutually correlated -- the wider
+       offer only ever appears when nothing fits, which is exactly when the
+       "nobody fits" line is up -- so reserving their shared height means
+       neither can shove the nav row down when it arrives. #}
+    <div class="waiting-fix">
+      <p class="waiting-none" id="waiting-none"{% if state.fits %} hidden{% endif %}>
+        {{ t("waiting.none_open") }}
+      </p>
+
+      <button type="button" class="btn btn-secondary btn-block waiting-wider"
+              id="wider-btn"{% if not state.relax_all.offer %} hidden{% endif %}>
+        {{ t("waiting.wider_n", n=state.relax_all.count) }}
+      </button>
+    </div>
+  </div>
+
+  <div class="wiz-nav">
+    {#- new=1: /search now returns you *here* while a search is running, so
+        the way to the wizard has to say it wants the wizard. -#}
+    <a class="wiz-skip" href="{{ url_for('live_search', new=1) }}">{{ t("waiting.change") }}</a>
+    <form method="post" action="{{ url_for('search_cancel') }}" class="wiz-nav-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-secondary wiz-stop" type="submit">{{ t("waiting.stop") }}</button>
+    </form>
+  </div>
 </div>
 
-<script>
+{# One sheet, repopulated on every tap rather than one per chip -- the same
+   overlay the wizard's interest picker uses (see search_start.html). #}
+<div class="sheet sheet-outer" id="filter-sheet" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="filter-sheet-title">
+    <div class="sheet-head">
+      <div>
+        <p class="sheet-eyebrow">{{ t("waiting.change_what") }}</p>
+        <h2 id="filter-sheet-title">{{ t("waiting.filter_aria") }}</h2>
+      </div>
+      <button type="button" class="sheet-x" data-close aria-label="{{ t('sheet.close') }}">
+        {{ icon("sheet.close.wide") }}
+      </button>
+    </div>
+    <div class="sheet-body">
+      <div class="sheet-opt-list" id="filter-sheet-options"></div>
+    </div>
+    {# Only meaningful for the multi-value filters, which stay open while you
+       pick: a single-value one closes itself on the tap that answers it.
+       Same foot/button pattern as the wizard's interest picker. #}
+    <div class="sheet-foot">
+      <button type="button" class="btn btn-block" data-close>{{ t("wiz.done") }}</button>
+    </div>
+  </div>
+</div>
+
+<script nonce="{{ csp_nonce() }}">
 (function () {
   var statusLine = document.getElementById("status-line");
   var statusUrl = "{{ url_for('search_status') }}";
+  var chipsUrl = "{{ url_for('search_chips_get') }}";
+
+  // The searching animation used to be injected here: a script element
+  // pointing at unpkg.com, which the CSP blocks, so it never ran. It is
+  // pure CSS now and needs no JavaScript at all -- prefers-reduced-motion
+  // is handled in the stylesheet where the animation lives.
+
+  // One honest number, so a screen that is otherwise motionless reads as
+  // running rather than stuck. Counts from page load, which is when this
+  // search actually started (the wizard POST redirects straight here).
+  var elapsedEl = document.getElementById("elapsed");
+  var startedAt = Date.now();
+  var elapsedTimer = setInterval(function () {
+    var s = Math.floor((Date.now() - startedAt) / 1000);
+    elapsedEl.textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  }, 1000);
+
+  // The pairing attempt below only starts returning a match once the search
+  // has run for a few seconds (MIN_SEARCH_SECONDS server-side). Cycling the
+  // line gives that wait something to show rather than one frozen sentence.
+  {# Rendered by Jinja rather than held as literals, so the cycling line
+     speaks the reader's language like everything else on the screen. #}
+  var PHRASES = [
+    {{ t("waiting.phrase_1") | tojson }},
+    {{ t("waiting.phrase_2") | tojson }},
+    {{ t("waiting.phrase_3") | tojson }},
+    {{ t("waiting.phrase_4") | tojson }}
+  ];
+  // The catalogue writes counts as "{n} searching"; the browser fills the
+  // same slot the server does, so one string serves both.
+  function fmt(template, n) { return String(template).replace("{n}", n); }
+  var phrase = 0;
+  var connected = true;  // paused while reconnecting, so it can say so
+  // A filter change has something specific to say, and the idle cycle would
+  // wipe it within 2.6s. say() holds the line for a moment before the cycle
+  // is allowed to resume.
+  var holdUntil = 0;
+  function say(text, ms) {
+    statusLine.textContent = text;
+    holdUntil = Date.now() + (ms || 4000);
+  }
+  var cycle = setInterval(function () {
+    if (!connected || Date.now() < holdUntil) return;
+    phrase = (phrase + 1) % PHRASES.length;
+    statusLine.textContent = PHRASES[phrase];
+  }, 2600);
+
+  // ---- filter chips: tap one, see (and apply) verified alternatives ----
+  var chipRow = document.getElementById("chip-row");
+  var chipCountEl = document.getElementById("chip-count");
+  var waitingCountEl = document.getElementById("waiting-count");
+  var waitingFitsWrap = document.getElementById("waiting-fits-wrap");
+  var waitingFitsEl = document.getElementById("waiting-fits");
+  var waitingNoneEl = document.getElementById("waiting-none");
+  var widerBtn = document.getElementById("wider-btn");
+  var sheet = document.getElementById("filter-sheet");
+  var sheetTitle = document.getElementById("filter-sheet-title");
+  var sheetOptions = document.getElementById("filter-sheet-options");
+
+  // main carries `position: relative; z-index: 1`, a stacking context the
+  // tab bar's z-index cannot outrank from inside -- see the same note in
+  // search_start.html. Hoisting to .app-shell escapes it while still
+  // scoping the overlay to the app frame on a wide screen.
+  (document.querySelector(".app-shell") || document.body).appendChild(sheet);
+
+  // A chip key is either a plain filter ("age") or "<group>:<value>" for the
+  // three that hold a CSV. Those three are multiple-choice questions, so the
+  // sheet belongs to the group, not to the one pill you happened to tap --
+  // keying it to the pill meant toggling that pill deleted the thing the
+  // sheet was keyed to, and it shut after a single change.
+  var MULTI = { relationship: 1, interest: 1, body: 1 };
+  function groupOf(key) {
+    var i = key.indexOf(":");
+    return i === -1 ? key : key.slice(0, i);
+  }
+  function isMulti(key) { return !!MULTI[groupOf(key)]; }
+
+  {# The sheet's heading per filter group. Rendered by Jinja rather than
+     held in the script as literals, so it translates with everything else. #}
+  var TITLES = {
+    gender: {{ t("sheet.gender") | tojson }},
+    age: {{ t("sheet.age") | tojson }},
+    location: {{ t("sheet.location") | tojson }},
+    relationship: {{ t("sheet.relationship") | tojson }},
+    interest: {{ t("sheet.interest") | tojson }},
+    body: {{ t("sheet.body") | tojson }}
+  };
+  function titleFor(key) {
+    return TITLES[groupOf(key)] || {{ t("waiting.filter_aria") | tojson }};
+  }
+
+  var state = null;  // last state payload, so a tap can render without a round-trip
+
+  function renderState(data) {
+    state = data;
+
+    // Only the pills are rebuilt -- never the <details> around them. Whether
+    // the fold is open is the reader's choice, and a refresh landing every
+    // few seconds must not close it under them.
+    chipRow.innerHTML = "";
+    data.chips.forEach(function (chip) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pill pill-chip" + (chip.off ? " is-off" : "");
+      btn.dataset.key = chip.key;
+      btn.title = chip.label;   // the full text, for a chip cut to one line
+      btn.textContent = chip.label;
+      chipRow.appendChild(btn);
+    });
+
+    chipCountEl.textContent = data.chips.length;
+    waitingCountEl.textContent = fmt({{ t("waiting.searching_n") | tojson }}, data.waiting);
+    if (data.fits) {
+      waitingFitsWrap.hidden = false;
+      waitingFitsEl.textContent = fmt({{ t("waiting.fits_n") | tojson }}, data.fits);
+    } else {
+      waitingFitsWrap.hidden = true;
+    }
+    waitingNoneEl.hidden = !!data.fits;
+
+    if (data.relax_all.offer) {
+      var wasHidden = widerBtn.hidden;
+      widerBtn.hidden = false;
+      widerBtn.textContent = fmt({{ t("waiting.wider_n") | tojson }}, data.relax_all.count);
+      if (wasHidden) {
+        widerBtn.classList.remove("wiz-in");
+        // restart the entrance animation on the newly-shown button
+        void widerBtn.offsetWidth;
+        widerBtn.classList.add("wiz-in");
+      }
+    } else {
+      widerBtn.hidden = true;
+    }
+
+    // Refresh an open sheet in place rather than leaving stale counts up.
+    // Resolved by group: for a multi-value filter the pill you opened it
+    // from may have just been toggled away, and any other pill in the same
+    // group carries the same option list, so the sheet survives the change
+    // that made it. Only a group with nothing left at all -- every
+    // connection type switched off, say -- has no options to show, and
+    // that is the end of the question rather than a state to sit in.
+    if (!sheet.hidden && sheet.dataset.group) {
+      var g = sheet.dataset.group;
+      var chip = data.chips.find(function (c) { return c.key === sheet.dataset.key; })
+              || data.chips.find(function (c) { return groupOf(c.key) === g; });
+      if (chip) openSheetFor(chip); else closeSheet();
+    }
+  }
+
+  function openSheetFor(chip) {
+    sheet.dataset.key = chip.key;
+    sheet.dataset.group = groupOf(chip.key);
+    sheet.classList.toggle("is-multi", isMulti(chip.key));
+    sheetTitle.textContent = titleFor(chip.key);
+    sheetOptions.innerHTML = "";
+    chip.options.forEach(function (opt) {
+      var row = document.createElement("button");
+      row.type = "button";
+      row.className = "sheet-opt" + (opt.current ? " is-current" : "");
+      row.dataset.value = opt.value;
+
+      var label = document.createElement("span");
+      label.className = "sheet-opt-label";
+      label.textContent = opt.label;
+      row.appendChild(label);
+
+      var count = document.createElement("span");
+      count.className = "sheet-opt-count" + (opt.count ? "" : " is-zero");
+      count.textContent = opt.count ? fmt({{ t("waiting.fits_n") | tojson }}, opt.count)
+                                  : {{ t("waiting.none_yet") | tojson }};
+      row.appendChild(count);
+
+      row.addEventListener("click", function () { applyChip(chip.key, opt.value); });
+      sheetOptions.appendChild(row);
+    });
+    openSheet();
+  }
+
+  // The sheet rises from the bottom over the pill row it edits, leaving it
+  // half-covered and a long chip cut mid-word. Fold the pills away while the
+  // sheet is up -- it states the same thing, in more detail -- and give the
+  // fold back exactly as it was found when the sheet closes.
+  var fold = document.getElementById("filters-fold");
+  var foldWasOpen = false;
+  function openSheet() {
+    if (fold) { foldWasOpen = fold.open; fold.open = false; }
+    sheet.hidden = false;
+    requestAnimationFrame(function () { sheet.classList.add("is-open"); });
+  }
+  function closeSheet() {
+    sheet.classList.remove("is-open");
+    delete sheet.dataset.key;
+    delete sheet.dataset.group;
+    if (fold && foldWasOpen) fold.open = true;
+    setTimeout(function () { sheet.hidden = true; }, 200);
+  }
+
+  chipRow.addEventListener("click", function (ev) {
+    var btn = ev.target.closest(".pill-chip");
+    if (!btn || !state) return;
+    var chip = state.chips.find(function (c) { return c.key === btn.dataset.key; });
+    if (chip) openSheetFor(chip);
+  });
+
+  sheet.addEventListener("click", function (ev) {
+    if (ev.target.closest("[data-close]")) closeSheet();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && !sheet.hidden) closeSheet();
+  });
+
+  function applyChip(key, value) {
+    var body = new URLSearchParams();
+    body.set("key", key);
+    body.set("value", value);
+    say("Updating your filters…");
+    fetch(chipsUrl, {
+      method: "POST",
+      headers: { "Accept": "application/json", "X-CSRF-Token": window.velvtCsrf() },
+      body: body,
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        // A single-value filter is answered by one tap, so the sheet has
+        // done its job and gets out of the way. A multi-value one is a
+        // list you are still working through -- closing it after each
+        // toggle is what made picking three connection types take three
+        // visits. renderState() below re-renders its rows in place with
+        // fresh counts, which is the feedback a multi-select wants.
+        if (!isMulti(key)) closeSheet();
+
+        // The server already re-ran the pairing attempt with the new
+        // filters, so a match is known now -- go, rather than idling here
+        // until the status poll happens to notice.
+        if (data.status === "matched" && data.chat_url) {
+          clearInterval(cycle);
+          clearInterval(elapsedTimer);
+          say("It's a match! Opening your chat…", 60000);
+          window.location.href = data.chat_url;
+          return;
+        }
+
+        renderState(data);
+        // Say what the change actually bought, in the same terms the
+        // sheet just quoted -- otherwise a tap that changes no visible
+        // number reads as a tap that did nothing.
+        if (!data.fits) {
+          say("Filters updated — still nobody fitting. Searching…");
+        } else if (!data.ripe) {
+          say("Filters updated — " + data.fits + " fitting. Pairing shortly…");
+        } else {
+          say("Filters updated — " + data.fits + " fitting. Pairing…");
+        }
+      })
+      .catch(function () {
+        say("Couldn't apply that — trying again in a moment.");
+        setTimeout(refreshChips, 1500);
+      });
+  }
+
+  widerBtn.addEventListener("click", function () { applyChip("all", ""); });
+
+  // Refreshes the chips/counts independently of the match poll below, so
+  // they track the pool as it moves rather than only redrawing after a tap.
+  var CHIP_REFRESH_EVERY = 4;  // ticks of the poll loop below (~6s at 1.5s/poll)
+  var pollTick = 0;
+  function refreshChips() {
+    fetch(chipsUrl, { headers: { "Accept": "application/json" } })
+      .then(function (res) { return res.json(); })
+      .then(function (data) { if (!data.error) renderState(data); })
+      .catch(function () {});
+  }
 
   // Short-poll loop — see the note in chat.html. Each poll also re-runs
   // the pairing attempt server-side, so a partner who starts searching
@@ -88,22 +411,31 @@
       })
       .then(function (data) {
         if (data.status === "matched" && data.chat_url) {
+          clearInterval(cycle);
+          clearInterval(elapsedTimer);
           statusLine.textContent = "It's a match! Opening your chat…";
           window.location.href = data.chat_url;
           return;
         }
         if (data.status === "none" || data.status === "cancelled") {
+          clearInterval(cycle);
+          clearInterval(elapsedTimer);
           window.location.href = "{{ url_for('live_search') }}";
           return;
         }
+        connected = true;
+        pollTick += 1;
+        if (pollTick % CHIP_REFRESH_EVERY === 0) refreshChips();
         setTimeout(listen, POLL_MS);
       })
       .catch(function () {
+        connected = false;
         statusLine.textContent = "Reconnecting…";
         setTimeout(listen, RETRY_MS);
       });
   }
 
+  renderState({{ state | tojson }});
   listen();
 })();
 </script>

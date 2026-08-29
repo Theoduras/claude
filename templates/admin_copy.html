@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Copy — Velvt admin{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">Admin</p>
+  <h1 style="margin-top: 0.5rem;">Words</h1>
+  <p class="hint" style="margin-bottom: 1.2rem;">
+    Every string in the app, per language. Overrides only — clearing a box
+    puts the shipped wording back, so a later edit to
+    <code>translations.py</code> still reaches the site unless someone has
+    deliberately rewritten that one string.
+    {{ overridden }} of {{ total }} rewritten in this language.
+  </p>
+
+  <form method="get" class="cp-bar">
+    <div class="cp-langs">
+      {% for code, label in languages %}
+      <a class="dsg-chip {% if code == lang %}is-on{% endif %}"
+         href="{{ url_for('admin_copy', lang=code, q=q) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <input type="hidden" name="lang" value="{{ lang }}">
+    <input type="search" name="q" value="{{ q }}" placeholder="Filter by key or text"
+           autocomplete="off">
+    <button class="btn btn-small" type="submit">Filter</button>
+    {% if q %}<a class="hint" href="{{ url_for('admin_copy', lang=lang) }}">clear</a>{% endif %}
+  </form>
+
+  {% if rows %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="lang" value="{{ lang }}">
+    <input type="hidden" name="q" value="{{ q }}">
+
+    {% for row in rows %}
+    <div class="cp-row {% if row.overridden %}is-changed{% endif %}">
+      <label for="cp{{ loop.index }}" class="cp-key">{{ row.key }}</label>
+      <textarea id="cp{{ loop.index }}" name="copy:{{ row.key }}" rows="2"
+                maxlength="2000" spellcheck="false">{{ row.current }}</textarea>
+      {% if row.overridden %}
+      <p class="hint cp-was">Shipped: {{ row.shipped }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <button class="btn" type="submit">Save</button>
+  </form>
+  {% else %}
+  <p class="hint">Nothing matches “{{ q }}”.</p>
+  {% endif %}
+</div>
+
+<style>
+  .cp-bar { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;
+            margin-bottom: 1.2rem; }
+  .cp-bar input[type="search"] { margin: 0; min-width: 14rem; }
+  .cp-langs { display: flex; gap: 0.4rem; }
+  .dsg-chip { border: 1px solid var(--ink-hairline); background: var(--ink-raised);
+              color: var(--text-muted); border-radius: var(--radius-sm);
+              padding: 0.25rem 0.7rem; font-size: 0.8rem; text-decoration: none;
+              display: inline-block; }
+  .dsg-chip.is-on { background: var(--violet); color: var(--gleam); border-color: transparent; }
+  .cp-row { padding: 0.5rem 0; border-top: 1px solid var(--ink-hairline); }
+  .cp-key { font-family: var(--mono); font-size: 0.74rem; color: var(--text-faint);
+            display: block; margin-bottom: 0.2rem; }
+  .cp-row.is-changed .cp-key { color: var(--champagne); }
+  .cp-row textarea { margin: 0; width: 100%; font-size: 0.9rem; }
+  .cp-was { margin: 0.25rem 0 0; }
+</style>
+{% endblock %}

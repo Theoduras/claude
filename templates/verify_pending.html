@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ t("verify.title") }}{% endblock %}
+{% block content %}
+{# ch.05: the settings shape -- a title, then a labelled panel per thing you
+   might have come here to do. It arrived as a .card holding two sections
+   divided by inline-styled hairlines, which is what every screen looked like
+   before the shell landed. #}
+<div class="settings">
+  <h1 class="settings-title">{{ t("verify.title") }}</h1>
+  <p class="wiz-hint">{{ t("verify.lead", email=email) }}</p>
+  <p class="hint">{{ t("verify.why") }}</p>
+
+  <section class="set-group">
+    <h2 class="stack-label">{{ t("verify.no_mail") }}</h2>
+    <p class="hint" style="margin: 0 0 0.9rem;">{{ t("verify.check_spam") }}</p>
+    <form method="post" action="{{ url_for('resend_verification') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-secondary btn-block" type="submit">{{ t("verify.resend") }}</button>
+    </form>
+  </section>
+
+  {#- The way out of a typo. Without it the only route to a wrong address
+      runs through that same wrong address. -#}
+  <section class="set-group">
+    <h2 class="stack-label">{{ t("verify.wrong_address") }}</h2>
+    <p class="hint" style="margin: 0 0 0.9rem;">{{ t("verify.change_lead") }}</p>
+    <form method="post" action="{{ url_for('change_email') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="verify-email">{{ t("verify.change_label") }}</label>
+      <input type="email" id="verify-email" name="email" value="{{ email }}"
+             required autocomplete="email" inputmode="email">
+      <button class="btn btn-block" type="submit">{{ t("verify.change_submit") }}</button>
+    </form>
+  </section>
+
+  <p class="hint">{{ t("verify.signed_in_as", who=current_user['email'] or t("common.member")) }}</p>
+</div>
+{% endblock %}

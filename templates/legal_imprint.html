@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Imprint — Velvt{% endblock %}
+{% block content %}
+<div class="prose">
+  <p class="eyebrow">Impressum</p>
+  <h1 style="margin-top: 0.5rem;">Imprint</h1>
+
+  <div style="border: 1px solid var(--ink-hairline); padding: 1rem; margin: 1rem 0;">
+    <p class="hint" style="margin: 0;">
+      <strong>Must be filled in before launch.</strong> Germany (DDG §5) and Austria
+      (ECG §5) require a real imprint naming the operator, and the DSA requires a
+      published point of contact. None of this can be invented — it needs the
+      actual registered details of whoever operates Velvt.
+    </p>
+  </div>
+
+  <h2 style="font-size: 1.1rem;">Operator</h2>
+  <p class="hint">
+    Legal name of the operating company or sole trader<br>
+    Street address<br>
+    Postal code and city<br>
+    Country
+  </p>
+
+  <h2 style="font-size: 1.1rem;">Contact</h2>
+  <p><a href="mailto:{{ support_email }}">{{ support_email }}</a></p>
+
+  <h2 style="font-size: 1.1rem;">Register and VAT</h2>
+  <p class="hint">Commercial register and number, VAT identification number.</p>
+
+  <h2 style="font-size: 1.1rem;">Responsible for content</h2>
+  <p class="hint">Name and address of the person responsible.</p>
+
+  <h2 style="font-size: 1.1rem;">Point of contact (Digital Services Act)</h2>
+  <p>For authorities and for users:
+     <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+     Reports about specific content go through the report button on any profile
+     or chat — see <a href="{{ url_for('safety') }}">safety</a>.</p>
+</div>
+{% endblock %}

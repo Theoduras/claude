@@ -1,25 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Sign in — Velvet{% endblock %}
+{% block title %}{{ t("login.title") }}{% endblock %}
+{% block appbar %}{{ appbar(back=url_for("index")) }}{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <p class="eyebrow">Velvet</p>
-  <h1 style="margin-top: 0.5rem;">Something softer<br>than swiping.</h1>
-  <p class="subtitle" style="margin-bottom: 1.6rem;">
-    Sign in and search — we pair you the moment someone is looking for you too.
-  </p>
+{# A step, not a panel: the form itself is the column, so the fields sit
+   under the question and the submit lands where Next does. #}
+<form method="post" action="{{ url_for('login') }}" class="wiz auth-screen wiz-fit">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="wiz-body">
+    <h1 class="wiz-q">{{ t("login.heading") | br }}</h1>
+    <p class="wiz-hint">
+      {{ t("landing.lede") }}
+    </p>
 
-  <form method="post" action="{{ url_for('login') }}">
-    <label for="username">Username</label>
-    <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+    <div class="wiz-field">
+      <label for="email">{{ t("login.email") }}</label>
+      <input id="email" name="email" type="email" autocomplete="email"
+             inputmode="email" required autofocus>
 
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <label for="password">{{ t("login.password") }}</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <p class="field-aside">
+        <a href="{{ url_for('forgot_password') }}">{{ t("login.forgot") }}</a>
+      </p>
+    </div>
 
-    <button class="btn btn-block" type="submit">Sign in</button>
-  </form>
+    <label class="switch-row" for="remember">
+      <input id="remember" name="remember" type="checkbox" value="1" checked>
+      <span>{{ t("login.remember") }}</span>
+    </label>
+    <p class="hint">{{ t("login.remember_hint") }}</p>
+  </div>
 
-  <p class="hint" style="margin: 1.1rem 0 0; text-align: center;">
-    New to Velvet? <a href="{{ url_for('register') }}">Create an account</a>
-  </p>
-</div>
+  <div class="wiz-nav wiz-nav-block">
+    <button class="btn btn-block" type="submit">{{ t("login.submit") }}</button>
+    <p class="auth-alt">
+      {{ t("login.no_account") }} <a href="{{ url_for('register') }}">{{ t("login.create") }}</a>
+    </p>
+  </div>
+</form>
 {% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Slow down — Velvt{% endblock %}
+{% block content %}
+<div class="notice">
+  <span class="notice-disc">{{ icon("notice.slow") }}</span>
+  <h1>Slow down a moment</h1>
+  <p>
+    That's a lot of tries in a short space of time, so we've paused this one.
+    Give it a minute or two and it will work again.
+  </p>
+  <a class="btn" href="{{ url_for('index') }}">Back to safety</a>
+  <p class="notice-aside">
+    If you think this is wrong, write to
+    <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Questions — Velvt{% endblock %}
+{% block content %}
+{# The questions support would otherwise answer one at a time. Written as
+   answers, not as marketing: someone reading this is trying to find
+   something out. #}
+<div class="prose">
+  <p class="eyebrow">Questions</p>
+  <h1 style="margin-top: 0.5rem;">How Velvt works</h1>
+  <p class="subtitle" style="margin-bottom: 1.4rem;">
+    If the answer isn't here, <a href="mailto:{{ support_email }}">write to us</a> —
+    a person reads that address.
+  </p>
+
+  <h2 style="font-size: 1.1rem;">Matching</h2>
+
+  <details class="faq-item" open>
+    <summary>Why is there no one to swipe through?</summary>
+    <p>There deliberately isn't a stack of profiles. You start a search saying what
+       you're looking for, and you're paired with someone whose search matches yours
+       — while you're both actually there. <a href="{{ url_for('how_matching_works') }}">How
+       a match works</a> walks through it.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>How long does a match last?</summary>
+    <p>You get {{ reveal_seconds }} seconds to see who it is, then {{ chat_minutes }}
+       minutes to talk. After that you both choose whether to continue. If you both
+       say yes the chat stays open for good and photos unlock. If either of you
+       doesn't, it ends there.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>What happens if the other person doesn't answer?</summary>
+    <p>Nothing you have to manage. If a decision isn't made, the match closes on its
+       own and neither of you is left with it sitting in a list.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>Why is nobody matching my search?</summary>
+    <p>You're only paired with someone searching at the same time, so it depends on
+       who is looking right now. The waiting screen shows each of your filters as a
+       tag you can tap to change, with a real count of how many people that change
+       would reach. If nothing fits for a while, it offers to drop the optional
+       filters in one go.</p>
+  </details>
+
+  <h2 style="font-size: 1.1rem;">Your profile</h2>
+
+  <details class="faq-item">
+    <summary>What do I need before I can search?</summary>
+    <p>A name, your age, your gender, who you're looking for, and one photo. Everything
+       else is optional and makes you easier to match — the strength meter on your
+       profile shows what's left.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>Who can see my photos?</summary>
+    <p>Only you, until a match becomes permanent — that is, until you have both chosen
+       to continue. Nobody browsing can see them, because there is no browsing.</p>
+  </details>
+
+  <h2 style="font-size: 1.1rem;">Safety and privacy</h2>
+
+  <details class="faq-item">
+    <summary>How do I report or block someone?</summary>
+    <p>Every chat and every profile has a report link, and reporting lets you block at
+       the same time. Blocking is instant and silent: they aren't told, and the two of
+       you are never matched again. See <a href="{{ url_for('safety') }}">staying
+       safe</a>.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>Someone asked me for money.</summary>
+    <p>Report them, and don't send anything. This is the most common way people are
+       defrauded on dating apps and the story is always urgent and always sympathetic.
+       Nobody you have just met needs your money.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>Can I get my data, or delete my account?</summary>
+    <p>Both, from <a href="{{ url_for('settings') }}">settings</a>, without asking
+       anyone. Export downloads everything we hold about you. Deletion is scheduled
+       rather than instant so you can change your mind, and after that your profile
+       and photos are destroyed — messages the other person still has stay in their
+       conversation, no longer attached to you.</p>
+  </details>
+
+  <details class="faq-item">
+    <summary>I've forgotten my password.</summary>
+    <p>Use the <a href="{{ url_for('forgot_password') }}">reset link</a> on the sign-in
+       page. Resetting signs you out everywhere else, which is the point of it.</p>
+  </details>
+</div>
+{% endblock %}

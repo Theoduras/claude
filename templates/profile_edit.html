@@ -1,13 +1,53 @@
 {% extends "base.html" %}
-{% block title %}Edit profile — Velvet{% endblock %}
+{% block title %}{{ t("edit.title") }}{% endblock %}
+{#- ch.05: the chevron belongs to the app bar. The screen had its own head
+    row with a back arrow and a title, which under the app bar meant two
+    header rows stacked, one of them naming the screen and the other
+    wearing the mark. -#}
+{% block appbar %}{{ appbar(back=url_for("view_profile", user_id=current_user["id"]),
+                            back_label=t("edit.back")) }}{% endblock %}
 {% block content %}
-<div class="card">
-  <h1>Your profile</h1>
-  <p class="subtitle">Tell others who you are and what you're looking for.</p>
+{# The wizard's column with a document in the middle: the compact bar is
+   the pinned head, the fields scroll under it, and Save sits where Next
+   sits on a step so it never scrolls out of reach. #}
+<div class="wiz edit-screen wiz-fit">
+  <h1 class="settings-title">{{ t("edit.heading") }}</h1>
 
-  <form method="post" action="{{ url_for('edit_profile') }}">
-    {% include "_profile_fields.html" %}
-    <button class="btn" type="submit">Save profile</button>
-  </form>
+  <div class="wiz-body wiz-scroll">
+    <form id="profile-form" method="post" action="{{ url_for('edit_profile') }}"
+          enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% set allow_photos = true %}
+      {% include "_profile_fields.html" %}
+
+      {% if strength_pct is defined %}
+        <div class="field-group">
+          <div class="strength-head">
+            <span class="eyebrow">{{ t("edit.strength") }}</span>
+            <span class="strength-value">{{ strength_pct }}%</span>
+          </div>
+          <div class="strength-bar">
+            <div class="strength-fill" style="width: {{ strength_pct }}%;"></div>
+          </div>
+          {% if blocking %}
+            {# Stated here rather than only at the moment the search is
+               refused: finding out what was required by being turned away
+               is the version of this that annoys people. #}
+            <p class="strength-blocking">
+              Still needed before you can search:
+              {{ blocking | join(', ') | lower }}.
+            </p>
+          {% elif strength_hint %}
+            <p class="hint" style="margin-top: 0.6rem;">{{ strength_hint }}</p>
+          {% endif %}
+        </div>
+      {% endif %}
+    </form>
+  </div>
+
+  {# outside the scroller, so it submits the form by id rather than by nesting #}
+  <div class="wiz-nav wiz-nav-block">
+    <button class="btn btn-block" type="submit" form="profile-form">{{ t("edit.save_changes") }}</button>
+  </div>
 </div>
 {% endblock %}

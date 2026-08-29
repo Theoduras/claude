@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ t("intro.title") }}{% endblock %}
+{% block content %}
+{# The differentiator, said out loud. Same column as the search steps it
+   precedes, so it reads as the step before them rather than a leaflet. #}
+<form method="post" action="{{ url_for('how_matching_works') }}"
+      class="wiz intro-screen">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="wiz-body">
+    <p class="wiz-count">{{ t("intro.eyebrow") }}</p>
+    <h1 class="wiz-q">{{ t("intro.heading") | br }}</h1>
+    <p class="wiz-hint">
+      {{ t("intro.lede") }}
+    </p>
+
+    <ol class="intro-steps">
+      <li>
+        <span class="intro-step-n">1</span>
+        <div>
+          <h2>{{ t("intro.step1_h", n=reveal_seconds) }}</h2>
+          <p>{{ t("intro.step1_p") }}</p>
+        </div>
+      </li>
+      <li>
+        <span class="intro-step-n">2</span>
+        <div>
+          <h2>{{ t("intro.step2_h", n=chat_minutes) }}</h2>
+          <p>{{ t("intro.step2_p") }}</p>
+        </div>
+      </li>
+      <li>
+        <span class="intro-step-n">3</span>
+        <div>
+          <h2>{{ t("intro.step3_h") }}</h2>
+          <p>{{ t("intro.step3_p") }}</p>
+        </div>
+      </li>
+    </ol>
+
+    <p class="wiz-hint">
+      {%- set safety_link %}<a href="{{ url_for('safety') }}">{{ t("intro.safety_link") }}</a>{% endset -%}
+      {{ t("intro.safety", link=safety_link) | safe }}
+    </p>
+  </div>
+
+  <div class="wiz-nav wiz-nav-block">
+    <button class="wiz-go wiz-go-violet btn-block" type="submit">
+      {% if first_time %}{{ t("intro.got_it") }}{% else %}{{ t("intro.back") }}{% endif %}
+    </button>
+  </div>
+</form>
+{% endblock %}
