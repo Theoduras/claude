@@ -2385,6 +2385,36 @@
     .admin-member-head h2 { font-size: 1.02rem; margin: 0; }
     .admin-member-meta { margin: 0.2rem 0 0; word-break: break-word; }
     .admin-badges { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    /* The row of things you can do to this member. Right-aligned, away from
+       the name and the meta line that both start at the left edge -- so the
+       reading and the acting are two columns rather than one pile, and the
+       trash can never sits directly under a name it does not belong to. */
+    .admin-member-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.6rem;
+    }
+    .admin-member-actions form { margin: 0; }
+    /* One height for both, stated once: the icon button has no text to set
+       its own, and a trash can half a step shorter than the button beside it
+       is the kind of thing you see without being able to name. */
+    .admin-member-actions .btn-small { height: 2.2rem; }
+    /* icon-only: square, so it does not read as a button missing its label */
+    .admin-member-actions .btn-small.is-danger {
+      width: 2.2rem;
+      padding: 0;
+      color: var(--danger);
+      border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+    }
+    .admin-member-actions .btn-small.is-danger:hover {
+      color: var(--danger);
+      border-color: var(--danger);
+      background: color-mix(in srgb, var(--danger) 14%, transparent);
+    }
+    .admin-member-actions .btn-small.is-danger svg { width: 1.05rem; height: 1.05rem; }
     .tag.is-live { color: var(--teal-crest); border-color: color-mix(in srgb, var(--teal-crest) 50%, transparent); }
 
     /* ---------- searching state -------------------------------------- */
@@ -2766,6 +2796,105 @@
       overflow: hidden;
       clip-path: inset(50%);
     }
+    /* the way into the lightbox. Bottom-right, where it clears both arrows
+       and the bars, and above the tap zones so it is not swallowed by them */
+    .pro-zoom {
+      position: absolute;
+      right: 0.6rem;
+      bottom: 0.6rem;
+      z-index: 3;
+      display: grid;
+      place-items: center;
+      width: 2.1rem;
+      height: 2.1rem;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: var(--gleam);
+      background: color-mix(in srgb, var(--ink) 55%, transparent);
+      backdrop-filter: blur(6px);
+      cursor: pointer;
+      transition: background 0.18s ease;
+    }
+    .pro-zoom:hover { background: color-mix(in srgb, var(--ink) 78%, transparent); }
+    .pro-zoom svg { width: 1.05rem; height: 1.05rem; }
+
+    /* ---------- the lightbox ------------------------------------------
+       The card crops to 3/4; this is the photo whole. Fixed and opaque
+       rather than a panel on the page, because the one thing being asked
+       for here is the picture without the app around it. */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(1rem, 4vw, 2.5rem);
+    }
+    .lightbox.is-open { display: flex; }
+    .lightbox-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(4, 2, 8, 0.92);
+    }
+    .lightbox-figure {
+      position: relative;
+      margin: 0;
+      max-width: 100%;
+      max-height: 100%;
+      display: flex;
+    }
+    /* contain, not cover: the crop is the thing this screen exists to undo */
+    .lightbox-img {
+      max-width: 100%;
+      /* the padding above, counted twice, so a tall photo still clears the
+         frame's own edges instead of running under the close button */
+      max-height: calc(100vh - 2 * clamp(1rem, 4vw, 2.5rem));
+      object-fit: contain;
+      border-radius: 0.6rem;
+    }
+    .lightbox-x,
+    .lightbox-arrow {
+      position: absolute;
+      z-index: 2;
+      display: grid;
+      place-items: center;
+      width: 2.6rem;
+      height: 2.6rem;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: var(--gleam);
+      background: color-mix(in srgb, var(--ink) 62%, transparent);
+      backdrop-filter: blur(6px);
+      cursor: pointer;
+      transition: opacity 0.18s ease, background 0.18s ease;
+    }
+    .lightbox-x:hover,
+    .lightbox-arrow:hover { background: color-mix(in srgb, var(--ink) 85%, transparent); }
+    .lightbox-x { top: 0.9rem; right: 0.9rem; }
+    .lightbox-x svg { width: 1.3rem; height: 1.3rem; }
+    .lightbox-arrow { top: 50%; margin-top: -1.3rem; }
+    .lightbox-arrow.is-prev { left: 0.9rem; }
+    .lightbox-arrow.is-next { right: 0.9rem; }
+    .lightbox-arrow svg { width: 1.35rem; height: 1.35rem; }
+    .lightbox-arrow.is-spent { opacity: 0; pointer-events: none; }
+    .lightbox-count {
+      position: absolute;
+      left: 50%;
+      bottom: 1rem;
+      transform: translateX(-50%);
+      margin: 0;
+      z-index: 2;
+      font-size: 0.8rem;
+      letter-spacing: 0.04em;
+      color: var(--gleam);
+      opacity: 0.75;
+    }
+    /* the page behind must not scroll under the overlay -- on a phone that
+       reads as the photo sliding around rather than as the page moving */
+    body.has-lightbox { overflow: hidden; }
 
     /* ---------- the cards ---------------------------------------------
        One part, repeated: the same raised ground, radius and hairline an

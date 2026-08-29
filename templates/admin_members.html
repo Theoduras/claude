@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Members — Velvt admin{% endblock %}
 {% block content %}
 <div class="admin-page">
@@ -89,19 +90,30 @@
         · {{ m.photos }} photo{{ '' if m.photos == 1 else 's' }}
         {%- if not m.name %} · <strong>no profile yet</strong>{% endif %}
       </p>
+      {#- A <div>, not the <p> this was: a <form> is not phrasing content, so
+          the browser closed the paragraph before the first one and the flex
+          row never formed. -#}
       {% if not m.is_bot and m.status != 'deleted' %}
-      <p class="admin-member-actions" style="margin: 0.5rem 0 0; display: flex; gap: 0.6rem;">
+      <div class="admin-member-actions">
+        {%- set who = m.name or m.email or ('member #' ~ m.id) %}
         <form method="post" action="{{ url_for('admin_force_password_reset', user_id=m.id) }}"
-              onsubmit="return confirm('Force a password reset for ' + {{ (m.name or m.email or 'this member') | tojson }} + '? They will be emailed a link and signed out everywhere.');">
+              data-confirm="Force a password reset for {{ who }}? They'll be emailed a link and signed out everywhere.">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-secondary btn-small" type="submit">Force password reset</button>
         </form>
+        {#- Deleting is the one irreversible thing on this screen, so it is
+            asked twice -- and the second question names what is actually
+            about to happen rather than repeating the first. -#}
         <form method="post" action="{{ url_for('admin_delete_account', user_id=m.id) }}"
-              onsubmit="return confirm('Permanently delete ' + {{ (m.name or m.email or 'this member') | tojson }} + '? This cannot be undone.');">
+              data-confirm="Delete {{ who }}?"
+              data-confirm-again="Last chance: {{ who }}'s profile, photos and searches are destroyed for good, and their side of every conversation is left unattributed. This cannot be undone. Delete?">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn btn-secondary btn-small" type="submit">Delete account</button>
+          <button class="btn btn-secondary btn-small is-danger" type="submit"
+                  aria-label="Delete {{ who }}" title="Delete account">
+            {{ icon("admin.delete") }}
+          </button>
         </form>
-      </p>
+      </div>
       {% endif %}
     </article>
   {% endfor %}
@@ -110,4 +122,21 @@
     <p class="hint">Showing the 500 most recent. Narrow it with the search above.</p>
   {% endif %}
 </div>
+
+{#- The confirmations, in a nonce'd <script> rather than an onsubmit= on the
+    form. The app's CSP is `script-src 'self' 'nonce-...'` with no
+    'unsafe-inline', so an inline handler attribute is refused by the browser
+    and never runs -- which is a silent failure in the one direction that
+    matters: the guard disappears and the button underneath still works. -#}
+<script nonce="{{ csp_nonce() }}">
+(function () {
+  document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+    form.addEventListener("submit", function (e) {
+      if (!window.confirm(form.dataset.confirm)) { e.preventDefault(); return; }
+      var again = form.dataset.confirmAgain;
+      if (again && !window.confirm(again)) { e.preventDefault(); }
+    });
+  });
+})();
+</script>
 {% endblock %}

@@ -301,6 +301,16 @@
     </div>
   </div>
   </div>
+
+  {#- Anything that covers the whole screen goes here, outside .app-shell.
+      `main` is `position: relative; z-index: 1`, which makes it a stacking
+      context: a z-index of 80 on an element *inside* it still loses to the
+      tab bar's 3, because that 3 is compared against main's 1 and not
+      against anything within it. An overlay rendered in {% block content %}
+      therefore paints under the bar it is supposed to cover, and nothing
+      about the CSS looks wrong. -#}
+  {% block overlay %}{% endblock %}
+
   {#- Not while an address is unconfirmed: /notifications/feed is behind the
       gate, so the poll would spend a request every 45s to be redirected. -#}
   {%- if current_user and not awaiting_verification %}

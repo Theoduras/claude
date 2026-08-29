@@ -91,7 +91,8 @@
     <button type="button" class="photo-removed-undo" id="photo-removed-undo">{{ t("form.undo") }}</button>
   </p>
   <p class="hint" style="margin-top: 0;">
-    Tap a photo to make it the main one, drag to reorder. Only visible to
+    The first photo is your main one. Drag to reorder, or tap a photo to
+    move it to the front. Only visible to
     someone else once you've both chosen to continue a match. JPEG, PNG or
     WebP, up to {{ photo_max_mb }} MB each, {{ photo_max_per_user }} total.
     Large photos are resized on your phone before they're uploaded, so a
@@ -287,10 +288,15 @@
       .map(function (t) { return t.dataset.key; })
       .join(",");
 
-    var main = kept.filter(function (t) { return t.classList.contains("is-main"); })[0];
-    // The main photo can be the one you just removed; hand the lead to
-    // whatever is now first rather than submitting a dead id.
-    if (!main && kept.length) { main = kept[0]; main.classList.add("is-main"); }
+    // The main photo *is* the first one, always. It used to be a flag of its
+    // own, which meant the strip could show the lead on the third tile while
+    // every list in the app -- all of them ORDER BY is_primary DESC first --
+    // drew that same photo at the front. Two answers to "which is the main
+    // one?", and the screen you set it on was the one that was wrong. Tying
+    // it to position leaves one: reordering re-elects, and tapping a tile to
+    // promote it moves it to the front rather than flagging it in place.
+    var main = kept[0];
+    tiles().forEach(function (t) { t.classList.toggle("is-main", t === main); });
     primaryField.value = main ? keyOf(main) : "";
 
     addSlot.hidden = kept.length >= max;
@@ -361,8 +367,10 @@
       // was a reorder, not a request to change the main photo.
       if (Date.now() - dragEndedAt < 250) return;
       if (tile.classList.contains("is-removed")) return;
-      live().forEach(function (t) { t.classList.remove("is-main"); });
-      tile.classList.add("is-main");
+      // Promote by moving, not by flagging: main is the first tile, so this
+      // is the same edit a drag to the front would have made by hand.
+      var first = live()[0];
+      if (first && first !== tile) strip.insertBefore(tile, first);
       sync();
     });
     tile.querySelector("[data-remove]").addEventListener("click", function () {
