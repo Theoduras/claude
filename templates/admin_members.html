@@ -89,6 +89,20 @@
         · {{ m.photos }} photo{{ '' if m.photos == 1 else 's' }}
         {%- if not m.name %} · <strong>no profile yet</strong>{% endif %}
       </p>
+      {% if not m.is_bot and m.status != 'deleted' %}
+      <p class="admin-member-actions" style="margin: 0.5rem 0 0; display: flex; gap: 0.6rem;">
+        <form method="post" action="{{ url_for('admin_force_password_reset', user_id=m.id) }}"
+              onsubmit="return confirm('Force a password reset for ' + {{ (m.name or m.email or 'this member') | tojson }} + '? They will be emailed a link and signed out everywhere.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-secondary btn-small" type="submit">Force password reset</button>
+        </form>
+        <form method="post" action="{{ url_for('admin_delete_account', user_id=m.id) }}"
+              onsubmit="return confirm('Permanently delete ' + {{ (m.name or m.email or 'this member') | tojson }} + '? This cannot be undone.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-secondary btn-small" type="submit">Delete account</button>
+        </form>
+      </p>
+      {% endif %}
     </article>
   {% endfor %}
 
