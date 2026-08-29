@@ -38,39 +38,53 @@
   {#- Built as data and looped, but every t() key is written out as a
       literal: check_i18n.py collects keys by regex, so a key assembled at
       render time would quietly escape being checked in either language. -#}
+  {#- `art` is the one image each door wears, set to the right-hand edge of
+      the card and faded out before it reaches the text (.home-card-art).
+      It is decoration and nothing else: a card with no `art` is the same
+      card, so a missing file costs a picture rather than a door. -#}
   {% set cards = [
     {"slot": "home.search",
      "href": url_for('live_search'),
      "title": t("home.search_title"),
      "body": t("home.search_body"),
+     "art": "chars/inspecting.webp",
      "note": t("home.search_running") if search_is_running() else ""},
     {"slot": "home.chats",
      "href": url_for('chats'),
      "title": t("home.chats_title"),
-     "body": t("home.chats_body"), "note": ""},
+     "body": t("home.chats_body"),
+     "art": "chars/in-conversation.webp", "note": ""},
     {"slot": "home.profile",
      "href": url_for('view_profile', user_id=current_user['id']),
      "title": t("home.profile_title"),
      "body": t("home.profile_body"),
+     "art": "chars/presenting.webp",
      "note": "" if completeness.ready
              else t("home.profile_missing", items=completeness.missing | join(", ") | lower)},
     {"slot": "home.notifications",
      "href": url_for('notifications_inbox'),
      "title": t("home.notifications_title"),
-     "body": t("home.notifications_body"), "note": ""},
+     "body": t("home.notifications_body"),
+     "art": "chars/delighted.webp", "note": ""},
     {"slot": "home.settings",
      "href": url_for('settings'),
      "title": t("home.settings_title"),
-     "body": t("home.settings_body"), "note": ""},
+     "body": t("home.settings_body"),
+     "art": "chars/tuning.webp", "note": ""},
     {"slot": "home.safety",
      "href": url_for('safety'),
      "title": t("home.safety_title"),
-     "body": t("home.safety_body"), "note": ""}
+     "body": t("home.safety_body"),
+     "art": "chars/protected.webp", "note": ""}
   ] %}
 
   <div class="grid home-grid">
     {% for card in cards %}
       <a class="profile-card home-card" href="{{ card.href }}">
+        {%- if card.art %}
+          <span class="home-card-art" aria-hidden="true"
+                style="background-image: url('{{ url_for('static', filename=card.art) }}')"></span>
+        {%- endif %}
         <span class="opt-icon">{{ icon(card.slot) }}</span>
         <h2>{{ card.title }}</h2>
         <p class="home-card-body">{{ card.body }}</p>
