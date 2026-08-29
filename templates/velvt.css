@@ -6001,7 +6001,12 @@
     .home-card-art {
       position: absolute;
       inset: 0 0 0 auto;
-      width: 62%;
+      /* The default suits an upright figure, which five of the six are.
+         A landscape drawing is boxed by this width and runs out of size
+         well before it reaches the card's height -- so the card that
+         carries one says how much room it needs, rather than the rule
+         guessing a width that fits both shapes and flatters neither. */
+      width: var(--art-w, 62%);
       z-index: 0;
       pointer-events: none;
       background-repeat: no-repeat;

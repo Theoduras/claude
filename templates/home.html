@@ -33,7 +33,13 @@
   {#- `art` is the one image each door wears, set to the right-hand edge of
       the card and faded out before it reaches the text (.home-card-art).
       It is decoration and nothing else: a card with no `art` is the same
-      card, so a missing file costs a picture rather than a door. -#}
+      card, so a missing file costs a picture rather than a door.
+
+      `art_w` is the exception the shapes force. Five of the six drawings
+      stand upright and are sized by the card's height; the pair at the
+      café table is the one landscape one, and at the shared 62% it is
+      boxed by width and lands about two-thirds their height. So the card
+      states the room it needs instead. -#}
   {% set cards = [
     {"slot": "home.search",
      "href": url_for('live_search'),
@@ -45,7 +51,8 @@
      "href": url_for('chats'),
      "title": t("home.chats_title"),
      "body": t("home.chats_body"),
-     "art": "chars/in-conversation.webp", "note": ""},
+     "art": "chars/in-conversation.webp",
+     "art_w": "85%", "note": ""},
     {"slot": "home.profile",
      "href": url_for('view_profile', user_id=current_user['id']),
      "title": t("home.profile_title"),
@@ -75,7 +82,8 @@
       <a class="profile-card home-card" href="{{ card.href }}">
         {%- if card.art %}
           <span class="home-card-art" aria-hidden="true"
-                style="background-image: url('{{ url_for('static', filename=card.art) }}')"></span>
+                style="background-image: url('{{ url_for('static', filename=card.art) }}')
+                       {%- if card.art_w %}; --art-w: {{ card.art_w }}{% endif %}"></span>
         {%- endif %}
         <span class="opt-icon">{{ icon(card.slot) }}</span>
         <h2>{{ card.title }}</h2>
