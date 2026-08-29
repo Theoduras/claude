@@ -4440,6 +4440,49 @@ def change_password():
     return redirect(url_for("settings"))
 
 
+@app.route("/settings/email", methods=["POST"])
+@login_required
+@rate_limited("change_email", limit=5, window_seconds=3600, by="user")
+def change_email_settings():
+    """Change the address from inside the app, not behind the gate.
+
+    Confirmation is not skipped just because someone is already signed in --
+    a typo here would otherwise leave a confirmed-looking account that
+    nobody can actually reach, so this takes the same path a fresh signup
+    does: the row moves to the new address unconfirmed, and the app holds
+    the account (via awaiting_verification()) until the link is followed.
+    """
+    me = current_user()
+    if not check_password_hash(me["password_hash"], request.form.get("password", "")):
+        flash(t("msg.confirm_password_email"))
+        return redirect(url_for("settings"))
+
+    address = request.form.get("email", "").strip()
+    if not valid_email(address):
+        flash(t("msg.email_required"))
+        return redirect(url_for("settings"))
+    if address.lower() == (me["email"] or "").lower():
+        flash(t("msg.email_unchanged"))
+        return redirect(url_for("settings"))
+
+    db = get_db()
+    try:
+        db.execute(
+            "UPDATE users SET email = ?, email_verified_at = NULL WHERE id = ?",
+            (address, me["id"]),
+        )
+        db.commit()
+    except psycopg.errors.UniqueViolation:
+        db.rollback()
+        flash(t("msg.email_unavailable"))
+        return redirect(url_for("settings"))
+
+    security_event("email", "changed", user_id=me["id"], detail="from settings")
+    send_verification_email(me["id"], address)
+    flash(t("msg.email_changed"))
+    return redirect(url_for("settings"))
+
+
 @app.route("/settings/sessions/<int:session_id>/revoke", methods=["POST"])
 @login_required
 def revoke_session(session_id):
@@ -4647,40 +4690,51 @@ def purge_due_deletions():
     ).fetchall()
 
     for row in due:
-        uid = row["id"]
-        # Everything that is only ever about them.
-        # notifications carry the other person's name in their text, and a
-        # push subscription is a live address for a device. Neither survives.
-        for table in ("photos", "searches", "sessions", "email_tokens", "consents",
-                      "legal_acceptances", "notifications", "notification_prefs",
-                      "push_subscriptions"):
-            db.execute(f"DELETE FROM {table} WHERE user_id = ?", (uid,))
-        db.execute("DELETE FROM profiles WHERE user_id = ?", (uid,))
-        db.execute(
-            "DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?", (uid, uid)
-        )
-        # Their side of any conversation stays readable to the other person,
-        # but is no longer attributed to a real account.
-        db.execute("UPDATE messages SET sender_id = NULL WHERE sender_id = ?", (uid,))
-        db.execute(
-            """
-            UPDATE matches SET status = 'ended', ended_at = COALESCE(ended_at, NOW())
-            WHERE user_a = ? OR user_b = ?
-            """,
-            (uid, uid),
-        )
-        db.execute(
-            """
-            UPDATE users
-            SET username = ?, email = NULL, dob = NULL, email_verified_at = NULL,
-                age_verified_at = NULL, password_hash = ?, status = 'deleted',
-                deletion_requested_at = NULL
-            WHERE id = ?
-            """,
-            (f"deleted_{uid}", secrets.token_hex(32), uid),
-        )
-    db.commit()
+        anonymize_user(row["id"])
     return len(due)
+
+
+def anonymize_user(uid):
+    """Destroy everything identifying about one account, leaving a tombstone.
+
+    The one piece of logic behind both `purge_due_deletions()` (the grace
+    period lapsing on its own) and an admin's immediate "delete account" --
+    a member should not get a gentler erasure than the schedule promises
+    everyone else just because an admin pressed the button sooner.
+    """
+    db = get_db()
+    # Everything that is only ever about them.
+    # notifications carry the other person's name in their text, and a
+    # push subscription is a live address for a device. Neither survives.
+    for table in ("photos", "searches", "sessions", "email_tokens", "consents",
+                  "legal_acceptances", "notifications", "notification_prefs",
+                  "push_subscriptions"):
+        db.execute(f"DELETE FROM {table} WHERE user_id = ?", (uid,))
+    db.execute("DELETE FROM profiles WHERE user_id = ?", (uid,))
+    db.execute(
+        "DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?", (uid, uid)
+    )
+    # Their side of any conversation stays readable to the other person,
+    # but is no longer attributed to a real account.
+    db.execute("UPDATE messages SET sender_id = NULL WHERE sender_id = ?", (uid,))
+    db.execute(
+        """
+        UPDATE matches SET status = 'ended', ended_at = COALESCE(ended_at, NOW())
+        WHERE user_a = ? OR user_b = ?
+        """,
+        (uid, uid),
+    )
+    db.execute(
+        """
+        UPDATE users
+        SET username = ?, email = NULL, dob = NULL, email_verified_at = NULL,
+            age_verified_at = NULL, password_hash = ?, status = 'deleted',
+            deletion_requested_at = NULL
+        WHERE id = ?
+        """,
+        (f"deleted_{uid}", secrets.token_hex(32), uid),
+    )
+    db.commit()
 
 
 def purge_expired_data():
@@ -5982,6 +6036,85 @@ def admin_reinstate(user_id):
     log_admin_action(current_uid(), user_id, "reinstate")
     flash(t("msg.account_reinstated_admin"))
     return redirect(url_for("admin_reports"))
+
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+@admin_required
+def admin_delete_account(user_id):
+    """Delete a member's account immediately, skipping the grace period.
+
+    Uses the same anonymize_user() a lapsed grace period runs -- an admin
+    acting sooner should not leave more behind than the schedule would have.
+    An admin can't be deleted through this button, self included: it would
+    either lock out the one account that can undo it, or (for another admin)
+    is not this screen's job.
+    """
+    db = get_db()
+    target = db.execute(
+        "SELECT id, is_bot, is_admin, status FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if target is None or target["is_bot"]:
+        flash("No such account.")
+        return redirect(url_for("admin_members"))
+    if target["is_admin"]:
+        flash("Admin accounts can't be deleted here.")
+        return redirect(url_for("admin_members"))
+    if target["status"] == "deleted":
+        flash("That account is already deleted.")
+        return redirect(url_for("admin_members"))
+
+    security_event("admin_action", "delete_account", user_id=current_uid(),
+                    detail=f"user {user_id}")
+    anonymize_user(user_id)
+    log_admin_action(current_uid(), user_id, "delete_account")
+    flash("Account deleted.")
+    return redirect(url_for("admin_members"))
+
+
+@app.route("/admin/users/<int:user_id>/force-password-reset", methods=["POST"])
+@admin_required
+def admin_force_password_reset(user_id):
+    """Invalidate a member's password and mail them a reset link.
+
+    Setting the hash to an unguessable random value (rather than merely
+    flagging the account) means the old password stops working the moment
+    this runs, everywhere -- there is no window where "forced" only means
+    "we asked nicely." Every existing session is revoked for the same
+    reason a real password reset revokes them: whoever had the old
+    password is out until they set a new one.
+    """
+    db = get_db()
+    target = db.execute(
+        "SELECT id, email, is_bot FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if target is None or target["is_bot"]:
+        flash("No such account.")
+        return redirect(url_for("admin_members"))
+    if not target["email"]:
+        flash("That account has no email address to send a reset link to.")
+        return redirect(url_for("admin_members"))
+
+    db.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (generate_password_hash(secrets.token_urlsafe(32)), user_id),
+    )
+    db.commit()
+    revoke_user_sessions(user_id)
+
+    token = issue_email_token(user_id, "reset", RESET_TOKEN_HOURS)
+    link = app_url(url_for("reset_password", token=token))
+    send_email(
+        target["email"],
+        "Your Velvt password was reset",
+        f"""<p>An administrator has reset your Velvt password for security reasons.</p>
+            <p><a href="{link}">Choose a new password</a> to sign back in.</p>
+            <p>The link works once and expires in {RESET_TOKEN_HOURS} hour(s).</p>""",
+    )
+    security_event("admin_action", "force_password_reset", user_id=current_uid(),
+                    detail=f"user {user_id}")
+    log_admin_action(current_uid(), user_id, "force_password_reset")
+    flash("Password reset. They've been emailed a link and signed out everywhere.")
+    return redirect(url_for("admin_members"))
 
 
 @app.route("/admin/profiles/new", methods=["GET", "POST"])

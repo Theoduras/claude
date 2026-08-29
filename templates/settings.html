@@ -35,6 +35,18 @@
       <button class="btn btn-secondary" type="submit">Resend confirmation email</button>
     </form>
     {% endif %}
+
+    <form method="post" action="{{ url_for('change_email_settings') }}" style="margin-top: 0.8rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="email">New email address</label>
+      <input id="email" name="email" type="email" autocomplete="email" required>
+      <label for="email-password">Current password</label>
+      <input id="email-password" name="password" type="password" autocomplete="current-password" required>
+      <p class="hint" style="margin: 0.3rem 0 0.6rem;">
+        You'll need to confirm the new address before you can keep using the app.
+      </p>
+      <button class="btn btn-secondary" type="submit">Change email address</button>
+    </form>
   </section>
 
   <section class="set-group">
